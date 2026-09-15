@@ -13,6 +13,7 @@ from app.core.models import Base
 # иначе Alembic autogenerate их не увидит.
 import app.modules.users.models  # noqa
 import app.modules.users.audit  # noqa
+import app.modules.clients.models  # noqa
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
