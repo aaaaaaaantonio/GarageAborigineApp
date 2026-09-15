@@ -1,5 +1,8 @@
 import uuid
 
+from sqlalchemy import select
+
+from app.modules.users.audit import AuditLog
 from app.modules.users.models import User
 from app.core.enums import UserRole
 from app.modules.users.schemas import UserCreate
@@ -18,3 +21,9 @@ async def test_create_user_writes_audit_row(session):
 
     assert created.id is not None
     assert created.role == UserRole.MECHANIC
+
+    row = (
+        await session.execute(select(AuditLog).where(AuditLog.entity_id == created.id))
+    ).scalar_one()
+    assert row.action == "create"
+    assert row.entity_type == "user"

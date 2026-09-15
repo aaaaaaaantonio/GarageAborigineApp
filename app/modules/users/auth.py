@@ -2,7 +2,6 @@ import uuid
 from collections.abc import Callable
 
 from fastapi import Depends, Header, HTTPException, status
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_session

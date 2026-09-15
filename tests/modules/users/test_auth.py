@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime, timezone
 
 import pytest
 from fastapi import FastAPI, Depends
@@ -46,3 +47,23 @@ async def test_require_role_allows_correct_role(app_with_protected_route, sessio
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.get("/admin-only", headers={"X-User-Id": str(admin.id)})
     assert resp.status_code == 200
+
+
+async def test_require_role_rejects_unknown_user(app_with_protected_route, session):
+    transport = ASGITransport(app=app_with_protected_route)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.get("/admin-only", headers={"X-User-Id": str(uuid.uuid4())})
+    assert resp.status_code == 401
+
+
+async def test_require_role_rejects_soft_deleted_user(app_with_protected_route, session):
+    admin = User(role=UserRole.ADMIN, full_name="Уволенный Админ", branch_id=uuid.uuid4())
+    session.add(admin)
+    await session.flush()
+    admin.deleted_at = datetime.now(timezone.utc)
+    await session.flush()
+
+    transport = ASGITransport(app=app_with_protected_route)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.get("/admin-only", headers={"X-User-Id": str(admin.id)})
+    assert resp.status_code == 401
