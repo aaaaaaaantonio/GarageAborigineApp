@@ -5,6 +5,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from app.core.config import settings
 from app.core.models import Base
+import app.modules.users.models  # noqa
+import app.modules.users.audit  # noqa
 
 
 @pytest_asyncio.fixture(scope="session")
