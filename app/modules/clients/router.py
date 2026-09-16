@@ -1,3 +1,5 @@
+import uuid
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,7 +27,7 @@ async def create_client(
 
 @router.get("/{client_id}", response_model=ClientOut)
 async def get_client(
-    client_id,
+    client_id: uuid.UUID,
     session: AsyncSession = Depends(get_session),
     acting_user: User = Depends(require_role(UserRole.ADMIN, UserRole.MASTER)),
 ):
