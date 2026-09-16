@@ -1,0 +1,59 @@
+import uuid
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.plate import normalize_plate
+from app.modules.users.audit import record_audit
+from app.modules.users.models import User
+from app.modules.vehicles.models import Vehicle, VehicleOwnership
+from app.modules.vehicles.repository import VehicleRepository
+from app.modules.vehicles.schemas import OwnershipCreate, VehicleCreate
+
+
+class VehicleService:
+    def __init__(self, session: AsyncSession):
+        self.session = session
+        self.repo = VehicleRepository(session)
+
+    async def create_vehicle(self, data: VehicleCreate, acting_user: User) -> Vehicle:
+        payload = data.model_dump()
+        payload["plate_number"] = normalize_plate(payload["plate_number"])
+        vehicle = Vehicle(**payload)
+        await self.repo.create(vehicle)
+        await record_audit(
+            self.session,
+            user=acting_user,
+            entity_type="vehicle",
+            entity_id=vehicle.id,
+            action="create",
+            new_value={"vin": vehicle.vin},
+        )
+        return vehicle
+
+    async def get(self, vehicle_id: uuid.UUID) -> Vehicle | None:
+        return await self.repo.get(vehicle_id)
+
+    async def attach_owner(
+        self, vehicle_id: uuid.UUID, data: OwnershipCreate, acting_user: User
+    ) -> VehicleOwnership:
+        ownership = VehicleOwnership(vehicle_id=vehicle_id, **data.model_dump())
+        await self.repo.add_ownership(ownership)
+        await record_audit(
+            self.session,
+            user=acting_user,
+            entity_type="vehicle_ownership",
+            entity_id=ownership.id,
+            action="create",
+            new_value={"vehicle_id": str(vehicle_id), "client_id": str(data.client_id)},
+        )
+        return ownership
+
+    async def get_owners(self, vehicle_id: uuid.UUID) -> list[VehicleOwnership]:
+        return await self.repo.list_owners(vehicle_id)
+
+    async def update_mileage(self, vehicle_id: uuid.UUID, mileage: int) -> Vehicle:
+        vehicle = await self.repo.get(vehicle_id)
+        assert vehicle is not None
+        vehicle.mileage_current = mileage
+        await self.session.flush()
+        return vehicle
