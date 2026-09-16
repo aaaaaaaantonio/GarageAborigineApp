@@ -6,7 +6,7 @@ from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.config import settings
-from app.core.enums import ApprovedVia, VisitStatus, WorkCategory, WorkItemStatus
+from app.core.enums import ApprovedVia, PartAvailability, VisitStatus, WorkCategory, WorkItemStatus
 from app.core.models import Base, SoftDeleteMixin, TimestampMixin, UUIDPkMixin
 
 
@@ -65,3 +65,15 @@ class VisitStatusLog(Base, UUIDPkMixin):
     changed_by_user_id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     changed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     reason: Mapped[str | None] = mapped_column(String, nullable=True)
+
+
+class VisitPartItem(Base, UUIDPkMixin):
+    __tablename__ = "visit_part_items"
+
+    visit_id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("visits.id"), nullable=False)
+    work_item_id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("visit_work_items.id"), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    article_number: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    quantity: Mapped[int] = mapped_column(nullable=False, default=1)
+    unit_price: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
+    availability_status: Mapped[PartAvailability] = mapped_column(nullable=False)

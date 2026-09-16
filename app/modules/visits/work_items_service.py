@@ -30,6 +30,10 @@ class WorkItemService:
         )
         self.session.add(item)
         await self.session.flush()
+
+        from app.modules.visits.service import VisitService
+
+        await VisitService(self.session).recalculate_total(visit_id)
         await record_audit(
             self.session,
             user=acting_user,

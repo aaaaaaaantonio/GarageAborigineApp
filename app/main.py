@@ -6,6 +6,7 @@ from app.modules.vehicles.router import router as vehicles_router
 from app.modules.catalog.router import router as catalog_router
 from app.modules.visits.router import router as visits_router
 from app.modules.visits.work_items_router import router as work_items_router
+from app.modules.visits.part_items_router import router as part_items_router
 
 app = FastAPI(title="CRM Backend")
 
@@ -15,6 +16,7 @@ app.include_router(vehicles_router)
 app.include_router(catalog_router)
 app.include_router(visits_router)
 app.include_router(work_items_router)
+app.include_router(part_items_router)
 
 
 @app.get("/health")

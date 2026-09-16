@@ -1,3 +1,5 @@
+import uuid
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,7 +16,7 @@ from app.modules.users.models import User
 from app.modules.users.repository import UserRepository
 from app.modules.vehicles.service import VehicleService
 from app.modules.visits.fsm import ALLOWED_TRANSITIONS
-from app.modules.visits.models import Visit, VisitStatusLog, VisitWorkItem
+from app.modules.visits.models import Visit, VisitPartItem, VisitStatusLog, VisitWorkItem
 from app.modules.visits.repository import VisitRepository
 from app.modules.visits.schemas import VisitCreate
 
@@ -95,5 +97,23 @@ class VisitService:
                 reason=reason,
             )
         )
+        await self.session.flush()
+        return visit
+
+    async def recalculate_total(self, visit_id: uuid.UUID) -> Visit:
+        visit = await self.repo.get(visit_id)
+        assert visit is not None
+
+        work_result = await self.session.execute(
+            select(VisitWorkItem).where(VisitWorkItem.visit_id == visit_id)
+        )
+        work_total = sum(float(i.norm_hours) * float(i.hourly_rate) for i in work_result.scalars())
+
+        part_result = await self.session.execute(
+            select(VisitPartItem).where(VisitPartItem.visit_id == visit_id)
+        )
+        part_total = sum(float(p.quantity) * float(p.unit_price) for p in part_result.scalars())
+
+        visit.total_amount = work_total + part_total - float(visit.discount)
         await self.session.flush()
         return visit
