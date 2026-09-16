@@ -15,6 +15,7 @@ import app.modules.users.models  # noqa
 import app.modules.users.audit  # noqa
 import app.modules.clients.models  # noqa
 import app.modules.vehicles.models  # noqa
+import app.modules.catalog.models  # noqa
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

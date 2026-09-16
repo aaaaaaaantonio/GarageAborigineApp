@@ -9,6 +9,7 @@ import app.modules.users.models  # noqa
 import app.modules.users.audit  # noqa
 import app.modules.clients.models  # noqa
 import app.modules.vehicles.models  # noqa
+import app.modules.catalog.models  # noqa
 
 
 @pytest_asyncio.fixture(scope="session")
