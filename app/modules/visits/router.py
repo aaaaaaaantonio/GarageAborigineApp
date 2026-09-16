@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_session
 from app.core.enums import UserRole
-from app.core.exceptions import MileageRollbackNotConfirmed
+from app.core.exceptions import InvalidAssignedMaster, MileageRollbackNotConfirmed
 from app.modules.users.auth import require_role
 from app.modules.users.models import User
 from app.modules.visits.schemas import VisitCreate, VisitOut
@@ -27,6 +27,8 @@ async def create_visit(
         raise HTTPException(
             409, "Пробег меньше последнего зафиксированного, требуется mileage_manually_confirmed=true"
         )
+    except InvalidAssignedMaster:
+        raise HTTPException(422, "assigned_master_id должен ссылаться на активного пользователя с ролью MASTER")
     await session.commit()
     return visit
 
