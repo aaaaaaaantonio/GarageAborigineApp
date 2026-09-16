@@ -1,0 +1,35 @@
+import uuid
+
+from pydantic import BaseModel, model_validator
+
+from app.core.enums import WorkCategory, WorkItemStatus
+
+
+class WorkItemCreate(BaseModel):
+    catalog_item_id: uuid.UUID | None = None
+    free_text_name: str | None = None
+    category: WorkCategory
+    norm_hours: float
+    hourly_rate: float
+    assigned_mechanic_id: uuid.UUID | None = None
+    is_extra_work: bool = False
+    comment: str | None = None
+
+    @model_validator(mode="after")
+    def check_name_source(self):
+        if bool(self.catalog_item_id) == bool(self.free_text_name):
+            raise ValueError("Укажите ровно одно: catalog_item_id или free_text_name")
+        return self
+
+
+class WorkItemStatusChange(BaseModel):
+    new_status: WorkItemStatus
+
+
+class WorkItemOut(BaseModel):
+    id: uuid.UUID
+    status: WorkItemStatus
+    approved_by_client: bool
+
+    class Config:
+        from_attributes = True

@@ -5,3 +5,11 @@ class MileageRollbackNotConfirmed(Exception):
 
 class InvalidAssignedMaster(Exception):
     """assigned_master_id не ссылается на активного пользователя с ролью MASTER."""
+
+
+class NotAssignedMechanic(Exception):
+    """Механик пытается изменить статус работы, назначенной не на него."""
+
+
+class MissingWorkNameSource(Exception):
+    """Ни catalog_item_id, ни free_text_name не указаны."""

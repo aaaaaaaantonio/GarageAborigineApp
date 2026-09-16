@@ -6,7 +6,7 @@ from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.config import settings
-from app.core.enums import VisitStatus
+from app.core.enums import ApprovedVia, VisitStatus, WorkCategory, WorkItemStatus
 from app.core.models import Base, SoftDeleteMixin, TimestampMixin, UUIDPkMixin
 
 
@@ -31,3 +31,26 @@ class Visit(Base, UUIDPkMixin, TimestampMixin, SoftDeleteMixin):
     discount: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False, default=0)
     cancelled_reason: Mapped[str | None] = mapped_column(String, nullable=True)
     document_url: Mapped[str | None] = mapped_column(String, nullable=True)
+
+
+class VisitWorkItem(Base, UUIDPkMixin):
+    __tablename__ = "visit_work_items"
+
+    visit_id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("visits.id"), nullable=False)
+    catalog_item_id: Mapped[uuid.UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("work_catalog.id"), nullable=True
+    )
+    free_text_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    category: Mapped[WorkCategory] = mapped_column(nullable=False)
+    norm_hours: Mapped[float] = mapped_column(Numeric(5, 2), nullable=False)
+    hourly_rate: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
+    status: Mapped[WorkItemStatus] = mapped_column(nullable=False)
+    assigned_mechanic_id: Mapped[uuid.UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    comment: Mapped[str | None] = mapped_column(String, nullable=True)
+    is_extra_work: Mapped[bool] = mapped_column(Boolean, default=False)
+    approved_by_client: Mapped[bool] = mapped_column(Boolean, default=False)
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    approved_via: Mapped[ApprovedVia | None] = mapped_column(nullable=True)
+    progress_photos: Mapped[list | None] = mapped_column(JSON, nullable=True)
