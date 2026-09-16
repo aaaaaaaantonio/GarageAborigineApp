@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import String, ForeignKey, Numeric, Boolean, JSON, DateTime
+from sqlalchemy import String, ForeignKey, Numeric, Boolean, JSON, DateTime, func
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -54,3 +54,14 @@ class VisitWorkItem(Base, UUIDPkMixin):
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     approved_via: Mapped[ApprovedVia | None] = mapped_column(nullable=True)
     progress_photos: Mapped[list | None] = mapped_column(JSON, nullable=True)
+
+
+class VisitStatusLog(Base, UUIDPkMixin):
+    __tablename__ = "visit_status_log"
+
+    visit_id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("visits.id"), nullable=False)
+    from_status: Mapped[VisitStatus | None] = mapped_column(nullable=True)
+    to_status: Mapped[VisitStatus] = mapped_column(nullable=False)
+    changed_by_user_id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    changed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    reason: Mapped[str | None] = mapped_column(String, nullable=True)

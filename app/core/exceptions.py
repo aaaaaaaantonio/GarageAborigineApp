@@ -13,3 +13,15 @@ class NotAssignedMechanic(Exception):
 
 class MissingWorkNameSource(Exception):
     """Ни catalog_item_id, ни free_text_name не указаны."""
+
+
+class InvalidTransition(Exception):
+    """Переход между статусами заезда не разрешён FSM."""
+
+
+class CancelReasonRequired(Exception):
+    """Отмена заезда требует непустой причины."""
+
+
+class NotAllWorkItemsReady(Exception):
+    """Переход в 'Готов' требует, чтобы все работы были в статусе 'ready'."""

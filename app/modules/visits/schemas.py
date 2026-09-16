@@ -15,6 +15,11 @@ class VisitCreate(BaseModel):
     intake_photos: list[str] | None = None
 
 
+class VisitStatusChange(BaseModel):
+    new_status: VisitStatus
+    reason: str | None = None
+
+
 class VisitOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

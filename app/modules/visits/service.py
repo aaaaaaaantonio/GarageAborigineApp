@@ -1,12 +1,20 @@
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.enums import UserRole, VisitStatus
-from app.core.exceptions import InvalidAssignedMaster, MileageRollbackNotConfirmed
+from app.core.enums import UserRole, VisitStatus, WorkItemStatus
+from app.core.exceptions import (
+    CancelReasonRequired,
+    InvalidAssignedMaster,
+    InvalidTransition,
+    MileageRollbackNotConfirmed,
+    NotAllWorkItemsReady,
+)
 from app.modules.users.audit import record_audit
 from app.modules.users.models import User
 from app.modules.users.repository import UserRepository
 from app.modules.vehicles.service import VehicleService
-from app.modules.visits.models import Visit
+from app.modules.visits.fsm import ALLOWED_TRANSITIONS
+from app.modules.visits.models import Visit, VisitStatusLog, VisitWorkItem
 from app.modules.visits.repository import VisitRepository
 from app.modules.visits.schemas import VisitCreate
 
@@ -52,3 +60,40 @@ class VisitService:
 
     async def get(self, visit_id) -> Visit | None:
         return await self.repo.get(visit_id)
+
+    async def change_status(
+        self, visit_id, new_status: VisitStatus, acting_user: User, reason: str | None = None
+    ) -> Visit:
+        visit = await self.repo.get(visit_id)
+        assert visit is not None
+
+        if new_status not in ALLOWED_TRANSITIONS[visit.status]:
+            raise InvalidTransition()
+
+        if new_status == VisitStatus.CANCELLED and not reason:
+            raise CancelReasonRequired()
+
+        if new_status == VisitStatus.READY:
+            result = await self.session.execute(
+                select(VisitWorkItem).where(VisitWorkItem.visit_id == visit_id)
+            )
+            items = list(result.scalars())
+            if any(i.status != WorkItemStatus.READY for i in items):
+                raise NotAllWorkItemsReady()
+
+        old_status = visit.status
+        visit.status = new_status
+        if new_status == VisitStatus.CANCELLED:
+            visit.cancelled_reason = reason
+
+        self.session.add(
+            VisitStatusLog(
+                visit_id=visit.id,
+                from_status=old_status,
+                to_status=new_status,
+                changed_by_user_id=acting_user.id,
+                reason=reason,
+            )
+        )
+        await self.session.flush()
+        return visit

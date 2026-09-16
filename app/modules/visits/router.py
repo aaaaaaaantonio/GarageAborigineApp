@@ -5,10 +5,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_session
 from app.core.enums import UserRole
-from app.core.exceptions import InvalidAssignedMaster, MileageRollbackNotConfirmed
+from app.core.exceptions import (
+    CancelReasonRequired,
+    InvalidAssignedMaster,
+    InvalidTransition,
+    MileageRollbackNotConfirmed,
+    NotAllWorkItemsReady,
+)
 from app.modules.users.auth import require_role
 from app.modules.users.models import User
-from app.modules.visits.schemas import VisitCreate, VisitOut
+from app.modules.visits.schemas import VisitCreate, VisitOut, VisitStatusChange
 from app.modules.visits.service import VisitService
 
 router = APIRouter(prefix="/visits", tags=["visits"])
@@ -43,4 +49,24 @@ async def get_visit(
     visit = await service.get(visit_id)
     if visit is None:
         raise HTTPException(404, "Visit not found")
+    return visit
+
+
+@router.patch("/{visit_id}/status", response_model=VisitOut)
+async def change_status(
+    visit_id: uuid.UUID,
+    data: VisitStatusChange,
+    session: AsyncSession = Depends(get_session),
+    acting_user: User = Depends(require_role(UserRole.ADMIN, UserRole.MASTER)),
+):
+    service = VisitService(session)
+    try:
+        visit = await service.change_status(visit_id, data.new_status, acting_user, data.reason)
+    except InvalidTransition:
+        raise HTTPException(409, "Переход между статусами не разрешён")
+    except CancelReasonRequired:
+        raise HTTPException(422, "Причина отмены обязательна")
+    except NotAllWorkItemsReady:
+        raise HTTPException(409, "Не все работы в статусе 'готово'")
+    await session.commit()
     return visit
