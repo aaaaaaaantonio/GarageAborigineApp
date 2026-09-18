@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_session
@@ -12,7 +12,7 @@ router = APIRouter(prefix="/search", tags=["search"])
 
 @router.get("")
 async def search(
-    q: str,
+    q: str = Query(..., min_length=1),
     session: AsyncSession = Depends(get_session),
     acting_user: User = Depends(require_role(UserRole.ADMIN, UserRole.MASTER, UserRole.MECHANIC)),
 ):
