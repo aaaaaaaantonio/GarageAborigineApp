@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.enums import ConsentMethod
-from app.core.exceptions import DraftExpired, DraftNotFound
+from app.core.exceptions import DraftAlreadyUsed, DraftExpired, DraftNotFound
 from app.modules.clients.models import Client
 from app.modules.clients.service import ClientService
 from app.modules.consent.models import Consent, ConsentDraft
@@ -39,8 +39,10 @@ class ConsentService:
             raise DraftExpired()
         return draft
 
-    async def confirm(self, token: str, data: ConsentConfirm) -> Client:
+    async def confirm(self, token: str, data: ConsentConfirm, ip_address: str | None = None) -> Client:
         draft = await self.get_valid_draft(token)
+        if draft.converted_client_id is not None:
+            raise DraftAlreadyUsed()
 
         client = await self.client_service.create_client(
             ClientCreate(full_name=data.full_name, phone=data.phone, client_type=data.client_type),
@@ -55,7 +57,7 @@ class ConsentService:
                 consent_date=datetime.now(timezone.utc),
                 consent_text_version=CONSENT_TEXT_VERSION,
                 consent_method=ConsentMethod.QR_ONSITE,
-                ip_address=data.ip_address,
+                ip_address=ip_address,
             )
         )
         return client

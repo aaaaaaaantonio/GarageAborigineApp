@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from app.core.exceptions import DraftExpired
+from app.core.exceptions import DraftAlreadyUsed, DraftExpired
 from app.modules.consent.models import ConsentDraft
 from app.modules.consent.schemas import ConsentConfirm, ConsentPaperRegister
 from app.modules.consent.service import ConsentService
@@ -14,7 +14,7 @@ async def test_confirm_converts_draft_to_client_with_consent(session):
     draft = await service.create_draft()
 
     client = await service.confirm(
-        draft.token, ConsentConfirm(full_name="Иван", phone="79991234567", ip_address="127.0.0.1")
+        draft.token, ConsentConfirm(full_name="Иван", phone="79991234567"), ip_address="127.0.0.1"
     )
     assert client.id is not None
 
@@ -26,6 +26,16 @@ async def test_expired_draft_rejected(session):
     await session.flush()
 
     with pytest.raises(DraftExpired):
+        await service.confirm(draft.token, ConsentConfirm(full_name="Иван", phone="79991234567"))
+
+
+async def test_confirm_rejects_already_used_draft(session):
+    service = ConsentService(session)
+    draft = await service.create_draft()
+
+    await service.confirm(draft.token, ConsentConfirm(full_name="Иван", phone="79991234567"))
+
+    with pytest.raises(DraftAlreadyUsed):
         await service.confirm(draft.token, ConsentConfirm(full_name="Иван", phone="79991234567"))
 
 

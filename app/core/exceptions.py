@@ -33,3 +33,7 @@ class DraftNotFound(Exception):
 
 class DraftExpired(Exception):
     """Токен черновика согласия истёк (TTL 10-15 минут)."""
+
+
+class DraftAlreadyUsed(Exception):
+    """Черновик согласия уже был подтверждён ранее (повторное использование токена)."""

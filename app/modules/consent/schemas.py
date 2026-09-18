@@ -14,7 +14,6 @@ class ConsentConfirm(BaseModel):
     full_name: str
     phone: str
     client_type: ClientType = ClientType.INDIVIDUAL
-    ip_address: str | None = None
 
 
 class ConsentPaperRegister(BaseModel):

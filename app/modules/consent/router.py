@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_session
 from app.core.enums import UserRole
-from app.core.exceptions import DraftExpired, DraftNotFound
+from app.core.exceptions import DraftAlreadyUsed, DraftExpired, DraftNotFound
 from app.modules.consent.schemas import ConsentConfirm, ConsentDraftOut, ConsentPaperRegister
 from app.modules.consent.service import ConsentService
 from app.modules.users.auth import require_role
@@ -37,14 +37,16 @@ async def get_draft(token: str, session: AsyncSession = Depends(get_session)):
 
 @router.post("/confirm")
 async def confirm(token: str, data: ConsentConfirm, request: Request, session: AsyncSession = Depends(get_session)):
-    data.ip_address = data.ip_address or (request.client.host if request.client else None)
+    ip_address = request.client.host if request.client else None
     service = ConsentService(session)
     try:
-        client = await service.confirm(token, data)
+        client = await service.confirm(token, data, ip_address)
     except DraftNotFound:
         raise HTTPException(404, "Черновик не найден")
     except DraftExpired:
         raise HTTPException(410, "Срок действия ссылки истёк")
+    except DraftAlreadyUsed:
+        raise HTTPException(409, "Черновик уже был подтверждён")
     await session.commit()
     return {"client_id": str(client.id)}
 
