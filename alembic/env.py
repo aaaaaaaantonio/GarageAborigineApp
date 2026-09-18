@@ -18,6 +18,7 @@ import app.modules.vehicles.models  # noqa
 import app.modules.catalog.models  # noqa
 import app.modules.visits.models  # noqa
 import app.modules.consent.models  # noqa
+import app.modules.search.models  # noqa
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
