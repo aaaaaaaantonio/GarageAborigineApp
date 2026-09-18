@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head><meta charset="utf-8"><title>Заказ-наряд №{{ visit.id }}</title>
+<style>
+  body { font-family: sans-serif; font-size: 12px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+  th, td { border: 1px solid #333; padding: 4px 8px; text-align: left; }
+  .total { font-weight: bold; margin-top: 16px; }
+  .signature { margin-top: 48px; }
+</style>
+</head>
+<body>
+  <h1>Заказ-наряд №{{ visit.id }}</h1>
+  <p>Клиент: {{ client.full_name }}, тел. {{ client.phone_display }}</p>
+  <p>Авто: {{ vehicle.make }} {{ vehicle.model }}, VIN {{ vehicle.vin }}, гос.номер {{ vehicle.plate_number }}</p>
+  <p>Пробег на момент приёма: {{ visit.mileage_at_intake }} км</p>
+
+  <h2>Работы</h2>
+  <table>
+    <tr><th>Наименование</th><th>Категория</th><th>Н/ч</th><th>Ставка</th><th>Сумма</th></tr>
+    {% for item in work_items %}
+    <tr>
+      <td>{{ item.free_text_name or item.catalog_item_name }}</td>
+      <td>{{ item.category }}</td>
+      <td>{{ item.norm_hours }}</td>
+      <td>{{ item.hourly_rate }}</td>
+      <td>{{ item.norm_hours * item.hourly_rate }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+
+  <h2>Запчасти</h2>
+  <table>
+    <tr><th>Наименование</th><th>Артикул</th><th>Кол-во</th><th>Цена</th><th>Сумма</th></tr>
+    {% for part in part_items %}
+    <tr>
+      <td>{{ part.name }}</td>
+      <td>{{ part.article_number or "" }}</td>
+      <td>{{ part.quantity }}</td>
+      <td>{{ part.unit_price }}</td>
+      <td>{{ part.quantity * part.unit_price }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+
+  <p class="total">Скидка: {{ visit.discount }} руб. Итого: {{ visit.total_amount }} руб.</p>
+
+  <div class="signature">
+    <p>Подпись клиента: _______________________</p>
+    <p>(на MVP — согласование фиксируется статусом в CRM, юридической силы подпись не имеет)</p>
+  </div>
+</body>
+</html>
