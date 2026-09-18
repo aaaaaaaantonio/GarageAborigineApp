@@ -25,3 +25,11 @@ class CancelReasonRequired(Exception):
 
 class NotAllWorkItemsReady(Exception):
     """Переход в 'Готов' требует, чтобы все работы были в статусе 'ready'."""
+
+
+class DraftNotFound(Exception):
+    """Черновик согласия по токену не найден."""
+
+
+class DraftExpired(Exception):
+    """Токен черновика согласия истёк (TTL 10-15 минут)."""

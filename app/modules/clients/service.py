@@ -13,7 +13,7 @@ class ClientService:
         self.session = session
         self.repo = ClientRepository(session)
 
-    async def create_client(self, data: ClientCreate, acting_user: User) -> Client:
+    async def create_client(self, data: ClientCreate, acting_user: User | None = None) -> Client:
         client = Client(
             full_name=data.full_name,
             phone_normalized=normalize_phone(data.phone),
@@ -24,14 +24,15 @@ class ClientService:
             telegram_username=data.telegram_username,
         )
         await self.repo.create(client)
-        await record_audit(
-            self.session,
-            user=acting_user,
-            entity_type="client",
-            entity_id=client.id,
-            action="create",
-            new_value={"full_name": client.full_name},
-        )
+        if acting_user is not None:
+            await record_audit(
+                self.session,
+                user=acting_user,
+                entity_type="client",
+                entity_id=client.id,
+                action="create",
+                new_value={"full_name": client.full_name},
+            )
         return client
 
     async def get(self, client_id) -> Client | None:
