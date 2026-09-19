@@ -11,6 +11,8 @@ from app.core.exceptions import (
     MileageRollbackNotConfirmed,
     NotAllWorkItemsReady,
 )
+from app.modules.notifications.interfaces import NotificationSender
+from app.modules.notifications.logging_sender import LoggingNotificationSender
 from app.modules.users.audit import record_audit
 from app.modules.users.models import User
 from app.modules.users.repository import UserRepository
@@ -22,11 +24,12 @@ from app.modules.visits.schemas import VisitCreate
 
 
 class VisitService:
-    def __init__(self, session: AsyncSession):
+    def __init__(self, session: AsyncSession, notification_sender: NotificationSender | None = None):
         self.session = session
         self.repo = VisitRepository(session)
         self.vehicle_service = VehicleService(session)
         self.user_repo = UserRepository(session)
+        self.notification_sender = notification_sender or LoggingNotificationSender(session)
 
     async def create_visit(self, data: VisitCreate, acting_user: User) -> Visit:
         vehicle = await self.vehicle_service.get(data.vehicle_id)
@@ -98,6 +101,10 @@ class VisitService:
             )
         )
         await self.session.flush()
+
+        if new_status in (VisitStatus.READY, VisitStatus.WAITING_PARTS):
+            await self.notification_sender.send_status_changed(visit, old_status, new_status)
+
         return visit
 
     async def recalculate_total(self, visit_id: uuid.UUID) -> Visit:
