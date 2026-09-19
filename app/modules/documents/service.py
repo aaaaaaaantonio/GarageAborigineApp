@@ -5,6 +5,7 @@ from jinja2 import Environment, FileSystemLoader
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.modules.catalog.models import WorkCatalog
 from app.modules.clients.models import Client
 from app.modules.documents.storage import FileStorage, LocalFileStorage
 from app.modules.vehicles.models import Vehicle
@@ -32,12 +33,29 @@ class DocumentService:
             (await self.session.execute(select(VisitPartItem).where(VisitPartItem.visit_id == visit_id))).scalars()
         )
 
+        catalog_item_ids = {w.catalog_item_id for w in work_items if w.catalog_item_id is not None}
+        catalog_names: dict[uuid.UUID, str] = {}
+        if catalog_item_ids:
+            catalog_items = list(
+                (
+                    await self.session.execute(select(WorkCatalog).where(WorkCatalog.id.in_(catalog_item_ids)))
+                ).scalars()
+            )
+            catalog_names = {c.id: c.name for c in catalog_items}
+
         template = jinja_env.get_template("visit_order.html")
         html = template.render(
             visit=visit,
             client=client,
             vehicle=vehicle,
-            work_items=[{"free_text_name": w.free_text_name, "catalog_item_name": None, **w.__dict__} for w in work_items],
+            work_items=[
+                {
+                    "free_text_name": w.free_text_name,
+                    "catalog_item_name": catalog_names.get(w.catalog_item_id),
+                    **w.__dict__,
+                }
+                for w in work_items
+            ],
             part_items=part_items,
         )
 

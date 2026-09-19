@@ -1,4 +1,5 @@
 import uuid
+from pathlib import Path
 
 from app.core.enums import UserRole, WorkCategory
 from app.modules.clients.schemas import ClientCreate
@@ -40,3 +41,7 @@ async def test_generate_visit_document_sets_document_url(session, tmp_path):
     assert url is not None
     updated_visit = await VisitService(session).get(visit.id)
     assert updated_visit.document_url == url
+
+    pdf_bytes = Path(url).read_bytes()
+    assert len(pdf_bytes) > 0
+    assert pdf_bytes.startswith(b"%PDF")
