@@ -2,6 +2,7 @@ import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.exceptions import VehicleNotFound
 from app.core.plate import normalize_plate
 from app.modules.users.audit import record_audit
 from app.modules.users.models import User
@@ -36,6 +37,9 @@ class VehicleService:
     async def attach_owner(
         self, vehicle_id: uuid.UUID, data: OwnershipCreate, acting_user: User
     ) -> VehicleOwnership:
+        vehicle = await self.repo.get(vehicle_id)
+        if vehicle is None:
+            raise VehicleNotFound()
         ownership = VehicleOwnership(vehicle_id=vehicle_id, **data.model_dump())
         await self.repo.add_ownership(ownership)
         await record_audit(
@@ -53,7 +57,8 @@ class VehicleService:
 
     async def update_mileage(self, vehicle_id: uuid.UUID, mileage: int) -> Vehicle:
         vehicle = await self.repo.get(vehicle_id)
-        assert vehicle is not None
+        if vehicle is None:
+            raise VehicleNotFound()
         vehicle.mileage_current = mileage
         await self.session.flush()
         return vehicle

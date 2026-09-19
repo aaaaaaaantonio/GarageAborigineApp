@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_session
 from app.core.enums import UserRole
+from app.core.exceptions import VehicleNotFound
 from app.modules.users.auth import require_role
 from app.modules.users.models import User
 from app.modules.vehicles.schemas import OwnershipCreate, VehicleCreate, VehicleOut
@@ -46,6 +47,9 @@ async def attach_owner(
     acting_user: User = Depends(require_role(UserRole.ADMIN, UserRole.MASTER)),
 ):
     service = VehicleService(session)
-    ownership = await service.attach_owner(vehicle_id, data, acting_user)
+    try:
+        ownership = await service.attach_owner(vehicle_id, data, acting_user)
+    except VehicleNotFound:
+        raise HTTPException(404, "Vehicle not found")
     await session.commit()
     return {"id": str(ownership.id)}

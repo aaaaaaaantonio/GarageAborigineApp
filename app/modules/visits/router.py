@@ -11,6 +11,8 @@ from app.core.exceptions import (
     InvalidTransition,
     MileageRollbackNotConfirmed,
     NotAllWorkItemsReady,
+    VehicleNotFound,
+    VisitNotFound,
 )
 from app.modules.users.auth import require_role
 from app.modules.users.models import User
@@ -35,6 +37,8 @@ async def create_visit(
         )
     except InvalidAssignedMaster:
         raise HTTPException(422, "assigned_master_id должен ссылаться на активного пользователя с ролью MASTER")
+    except VehicleNotFound:
+        raise HTTPException(404, "Vehicle not found")
     await session.commit()
     return visit
 
@@ -62,6 +66,8 @@ async def change_status(
     service = VisitService(session)
     try:
         visit = await service.change_status(visit_id, data.new_status, acting_user, data.reason)
+    except VisitNotFound:
+        raise HTTPException(404, "Visit not found")
     except InvalidTransition:
         raise HTTPException(409, "Переход между статусами не разрешён")
     except CancelReasonRequired:

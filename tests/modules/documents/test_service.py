@@ -1,7 +1,10 @@
 import uuid
 from pathlib import Path
 
+import pytest
+
 from app.core.enums import UserRole, WorkCategory
+from app.core.exceptions import VisitNotFound
 from app.modules.clients.schemas import ClientCreate
 from app.modules.clients.service import ClientService
 from app.modules.documents.service import DocumentService
@@ -45,3 +48,9 @@ async def test_generate_visit_document_sets_document_url(session, tmp_path):
     pdf_bytes = Path(url).read_bytes()
     assert len(pdf_bytes) > 0
     assert pdf_bytes.startswith(b"%PDF")
+
+
+async def test_generate_document_unknown_visit_raises_not_found(session, tmp_path):
+    storage = LocalFileStorage(root=str(tmp_path))
+    with pytest.raises(VisitNotFound):
+        await DocumentService(session, storage=storage).generate_visit_document(uuid.uuid4())

@@ -1,7 +1,10 @@
 import uuid
 from datetime import date
 
+import pytest
+
 from app.core.enums import UserRole
+from app.core.exceptions import VehicleNotFound
 from app.modules.clients.schemas import ClientCreate
 from app.modules.clients.service import ClientService
 from app.modules.users.models import User
@@ -30,3 +33,20 @@ async def test_attach_owner_and_list_owners(session):
     owners = await vehicle_service.get_owners(vehicle.id)
     assert len(owners) == 1
     assert owners[0].client_id == client.id
+
+
+async def test_attach_owner_unknown_vehicle_raises_not_found(session):
+    admin = User(role=UserRole.ADMIN, full_name="Админ", branch_id=uuid.uuid4())
+    session.add(admin)
+    await session.flush()
+    client = await ClientService(session).create_client(ClientCreate(full_name="Иван", phone="79991234567"), admin)
+
+    with pytest.raises(VehicleNotFound):
+        await VehicleService(session).attach_owner(
+            uuid.uuid4(), OwnershipCreate(client_id=client.id, date_from=date(2024, 1, 1)), admin
+        )
+
+
+async def test_update_mileage_unknown_vehicle_raises_not_found(session):
+    with pytest.raises(VehicleNotFound):
+        await VehicleService(session).update_mileage(uuid.uuid4(), 1000)

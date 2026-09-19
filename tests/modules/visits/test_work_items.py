@@ -3,7 +3,7 @@ import uuid
 import pytest
 
 from app.core.enums import UserRole, WorkCategory, WorkItemStatus
-from app.core.exceptions import NotAssignedMechanic
+from app.core.exceptions import NotAssignedMechanic, VisitNotFound, WorkItemNotFound
 from app.modules.clients.schemas import ClientCreate
 from app.modules.clients.service import ClientService
 from app.modules.users.models import User
@@ -64,3 +64,27 @@ async def test_approve_sets_flags(session):
     approved = await WorkItemService(session).approve(item.id, admin)
     assert approved.approved_by_client is True
     assert approved.approved_at is not None
+
+
+async def test_add_item_unknown_visit_raises_not_found(session):
+    admin = User(role=UserRole.ADMIN, full_name="Админ", branch_id=uuid.uuid4())
+    session.add(admin)
+    await session.flush()
+    with pytest.raises(VisitNotFound):
+        await WorkItemService(session).add_item(
+            uuid.uuid4(),
+            WorkItemCreate(free_text_name="Замена масла", category=WorkCategory.MAINTENANCE, norm_hours=1.0, hourly_rate=1500),
+            admin,
+        )
+
+
+async def test_update_status_unknown_item_raises_not_found(session):
+    admin, mechanic_a, mechanic_b, item = await _setup_visit_with_mechanic(session)
+    with pytest.raises(WorkItemNotFound):
+        await WorkItemService(session).update_status(uuid.uuid4(), WorkItemStatus.IN_PROGRESS, mechanic_a)
+
+
+async def test_approve_unknown_item_raises_not_found(session):
+    admin, mechanic_a, mechanic_b, item = await _setup_visit_with_mechanic(session)
+    with pytest.raises(WorkItemNotFound):
+        await WorkItemService(session).approve(uuid.uuid4(), admin)

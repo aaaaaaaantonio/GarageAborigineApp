@@ -5,6 +5,7 @@ from jinja2 import Environment, FileSystemLoader
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.exceptions import VisitNotFound
 from app.modules.catalog.models import WorkCatalog
 from app.modules.clients.models import Client
 from app.modules.documents.storage import FileStorage, LocalFileStorage
@@ -22,7 +23,8 @@ class DocumentService:
 
     async def generate_visit_document(self, visit_id: uuid.UUID) -> str:
         visit = await self.session.get(Visit, visit_id)
-        assert visit is not None
+        if visit is None:
+            raise VisitNotFound()
         client = await self.session.get(Client, visit.client_id)
         vehicle = await self.session.get(Vehicle, visit.vehicle_id)
 

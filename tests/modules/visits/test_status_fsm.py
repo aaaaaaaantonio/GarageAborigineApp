@@ -3,7 +3,7 @@ import uuid
 import pytest
 
 from app.core.enums import UserRole, VisitStatus, WorkCategory
-from app.core.exceptions import CancelReasonRequired, InvalidTransition, NotAllWorkItemsReady
+from app.core.exceptions import CancelReasonRequired, InvalidTransition, NotAllWorkItemsReady, VisitNotFound
 from app.modules.clients.schemas import ClientCreate
 from app.modules.clients.service import ClientService
 from app.modules.users.models import User
@@ -69,3 +69,9 @@ async def test_ready_blocked_until_all_work_items_ready(session):
 
     with pytest.raises(NotAllWorkItemsReady):
         await VisitService(session).change_status(visit.id, VisitStatus.READY, admin)
+
+
+async def test_change_status_unknown_visit_raises_not_found(session):
+    admin, visit = await _create_visit(session)
+    with pytest.raises(VisitNotFound):
+        await VisitService(session).change_status(uuid.uuid4(), VisitStatus.DIAGNOSTICS, admin)

@@ -4,7 +4,7 @@ from datetime import date
 import pytest
 
 from app.core.enums import UserRole
-from app.core.exceptions import InvalidAssignedMaster, MileageRollbackNotConfirmed
+from app.core.exceptions import InvalidAssignedMaster, MileageRollbackNotConfirmed, VehicleNotFound
 from app.modules.clients.schemas import ClientCreate
 from app.modules.clients.service import ClientService
 from app.modules.users.models import User
@@ -85,6 +85,21 @@ async def test_nonexistent_assigned_master_rejected(session):
                 client_id=client.id,
                 vehicle_id=vehicle.id,
                 assigned_master_id=uuid.uuid4(),
+                mileage_at_intake=55_000,
+            ),
+            admin,
+        )
+
+
+async def test_nonexistent_vehicle_raises_not_found(session):
+    admin, master, client, vehicle = await _setup(session)
+
+    with pytest.raises(VehicleNotFound):
+        await VisitService(session).create_visit(
+            VisitCreate(
+                client_id=client.id,
+                vehicle_id=uuid.uuid4(),
+                assigned_master_id=master.id,
                 mileage_at_intake=55_000,
             ),
             admin,

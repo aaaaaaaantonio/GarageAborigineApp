@@ -13,8 +13,11 @@ class ConsentRepository:
         await self.session.flush()
         return draft
 
-    async def get_draft_by_token(self, token: str) -> ConsentDraft | None:
-        result = await self.session.execute(select(ConsentDraft).where(ConsentDraft.token == token))
+    async def get_draft_by_token(self, token: str, for_update: bool = False) -> ConsentDraft | None:
+        stmt = select(ConsentDraft).where(ConsentDraft.token == token)
+        if for_update:
+            stmt = stmt.with_for_update()
+        result = await self.session.execute(stmt)
         return result.scalars().first()
 
     async def create_consent(self, consent: Consent) -> Consent:

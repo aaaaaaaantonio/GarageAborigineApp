@@ -31,8 +31,8 @@ class ConsentService:
         )
         return await self.repo.create_draft(draft)
 
-    async def get_valid_draft(self, token: str) -> ConsentDraft:
-        draft = await self.repo.get_draft_by_token(token)
+    async def get_valid_draft(self, token: str, for_update: bool = False) -> ConsentDraft:
+        draft = await self.repo.get_draft_by_token(token, for_update=for_update)
         if draft is None:
             raise DraftNotFound()
         if draft.expires_at < datetime.now(timezone.utc):
@@ -40,7 +40,10 @@ class ConsentService:
         return draft
 
     async def confirm(self, token: str, data: ConsentConfirm, ip_address: str | None = None) -> Client:
-        draft = await self.get_valid_draft(token)
+        # for_update=True: locks the draft row so a second concurrent confirm on the
+        # same still-valid token blocks until this transaction commits, then sees
+        # converted_client_id already set — closes the TOCTOU double-scan race.
+        draft = await self.get_valid_draft(token, for_update=True)
         if draft.converted_client_id is not None:
             raise DraftAlreadyUsed()
 

@@ -1,4 +1,5 @@
 import uuid
+from decimal import Decimal
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,6 +11,8 @@ from app.core.exceptions import (
     InvalidTransition,
     MileageRollbackNotConfirmed,
     NotAllWorkItemsReady,
+    VehicleNotFound,
+    VisitNotFound,
 )
 from app.modules.notifications.interfaces import NotificationSender
 from app.modules.notifications.logging_sender import LoggingNotificationSender
@@ -33,7 +36,8 @@ class VisitService:
 
     async def create_visit(self, data: VisitCreate, acting_user: User) -> Visit:
         vehicle = await self.vehicle_service.get(data.vehicle_id)
-        assert vehicle is not None
+        if vehicle is None:
+            raise VehicleNotFound()
         if data.mileage_at_intake < vehicle.mileage_current and not data.mileage_manually_confirmed:
             raise MileageRollbackNotConfirmed()
 
@@ -70,7 +74,8 @@ class VisitService:
         self, visit_id, new_status: VisitStatus, acting_user: User, reason: str | None = None
     ) -> Visit:
         visit = await self.repo.get(visit_id)
-        assert visit is not None
+        if visit is None:
+            raise VisitNotFound()
 
         if new_status not in ALLOWED_TRANSITIONS[visit.status]:
             raise InvalidTransition()
@@ -109,18 +114,25 @@ class VisitService:
 
     async def recalculate_total(self, visit_id: uuid.UUID) -> Visit:
         visit = await self.repo.get(visit_id)
-        assert visit is not None
+        if visit is None:
+            raise VisitNotFound()
 
         work_result = await self.session.execute(
             select(VisitWorkItem).where(VisitWorkItem.visit_id == visit_id)
         )
-        work_total = sum(float(i.norm_hours) * float(i.hourly_rate) for i in work_result.scalars())
+        work_total = sum(
+            (Decimal(str(i.norm_hours)) * Decimal(str(i.hourly_rate)) for i in work_result.scalars()),
+            Decimal("0"),
+        )
 
         part_result = await self.session.execute(
             select(VisitPartItem).where(VisitPartItem.visit_id == visit_id)
         )
-        part_total = sum(float(p.quantity) * float(p.unit_price) for p in part_result.scalars())
+        part_total = sum(
+            (Decimal(str(p.quantity)) * Decimal(str(p.unit_price)) for p in part_result.scalars()),
+            Decimal("0"),
+        )
 
-        visit.total_amount = work_total + part_total - float(visit.discount)
+        visit.total_amount = work_total + part_total - Decimal(str(visit.discount))
         await self.session.flush()
         return visit

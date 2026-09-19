@@ -37,3 +37,15 @@ class DraftExpired(Exception):
 
 class DraftAlreadyUsed(Exception):
     """Черновик согласия уже был подтверждён ранее (повторное использование токена)."""
+
+
+class VisitNotFound(Exception):
+    """Заезд с указанным id не найден."""
+
+
+class VehicleNotFound(Exception):
+    """Автомобиль с указанным id не найден."""
+
+
+class WorkItemNotFound(Exception):
+    """Работа в заезде с указанным id не найдена."""

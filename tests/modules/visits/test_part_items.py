@@ -1,6 +1,9 @@
 import uuid
 
+import pytest
+
 from app.core.enums import PartAvailability, UserRole, WorkCategory
+from app.core.exceptions import VisitNotFound, WorkItemNotFound
 from app.modules.clients.schemas import ClientCreate
 from app.modules.clients.service import ClientService
 from app.modules.users.models import User
@@ -14,7 +17,7 @@ from app.modules.visits.work_items_schemas import WorkItemCreate
 from app.modules.visits.work_items_service import WorkItemService
 
 
-async def _setup_visit_with_work_item(session):
+async def _setup_visit_with_work_item(session, vin="X" * 17):
     admin = User(role=UserRole.ADMIN, full_name="Админ", branch_id=uuid.uuid4())
     master = User(role=UserRole.MASTER, full_name="Мастер", branch_id=uuid.uuid4())
     session.add_all([admin, master])
@@ -22,7 +25,7 @@ async def _setup_visit_with_work_item(session):
 
     client = await ClientService(session).create_client(ClientCreate(full_name="Иван", phone="79991234567"), admin)
     vehicle = await VehicleService(session).create_vehicle(
-        VehicleCreate(vin="X" * 17, plate_number="А123", make="Toyota", model="Camry"), admin
+        VehicleCreate(vin=vin, plate_number="А123", make="Toyota", model="Camry"), admin
     )
     visit = await VisitService(session).create_visit(
         VisitCreate(client_id=client.id, vehicle_id=vehicle.id, assigned_master_id=master.id, mileage_at_intake=1000),
@@ -75,3 +78,25 @@ async def test_add_item_recalculates_visit_total(session):
 
     updated_visit = await VisitService(session).get(visit.id)
     assert float(updated_visit.total_amount) == 3 * 600
+
+
+async def test_add_item_unknown_visit_raises_not_found(session):
+    admin, visit, work_item = await _setup_visit_with_work_item(session)
+    with pytest.raises(VisitNotFound):
+        await PartItemService(session).add_item(
+            uuid.uuid4(),
+            PartItemCreate(work_item_id=work_item.id, name="Масло", quantity=1, unit_price=100),
+            admin,
+        )
+
+
+async def test_add_item_work_item_from_other_visit_rejected(session):
+    admin, visit_a, work_item_a = await _setup_visit_with_work_item(session, vin="X" * 17)
+    _, visit_b, _ = await _setup_visit_with_work_item(session, vin="Y" * 17)
+
+    with pytest.raises(WorkItemNotFound):
+        await PartItemService(session).add_item(
+            visit_b.id,
+            PartItemCreate(work_item_id=work_item_a.id, name="Масло", quantity=1, unit_price=100),
+            admin,
+        )

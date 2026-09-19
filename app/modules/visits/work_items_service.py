@@ -4,10 +4,10 @@ from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.enums import ApprovedVia, WorkItemStatus
-from app.core.exceptions import NotAssignedMechanic
+from app.core.exceptions import NotAssignedMechanic, VisitNotFound, WorkItemNotFound
 from app.modules.users.audit import record_audit
 from app.modules.users.models import User
-from app.modules.visits.models import VisitWorkItem
+from app.modules.visits.models import Visit, VisitWorkItem
 from app.modules.visits.work_items_schemas import WorkItemCreate
 
 
@@ -16,6 +16,10 @@ class WorkItemService:
         self.session = session
 
     async def add_item(self, visit_id: uuid.UUID, data: WorkItemCreate, acting_user: User) -> VisitWorkItem:
+        visit = await self.session.get(Visit, visit_id)
+        if visit is None:
+            raise VisitNotFound()
+
         item = VisitWorkItem(
             visit_id=visit_id,
             catalog_item_id=data.catalog_item_id,
@@ -54,7 +58,8 @@ class WorkItemService:
         self, item_id: uuid.UUID, new_status: WorkItemStatus, acting_user: User
     ) -> VisitWorkItem:
         item = await self.session.get(VisitWorkItem, item_id)
-        assert item is not None
+        if item is None:
+            raise WorkItemNotFound()
         if acting_user.role.value == "mechanic" and item.assigned_mechanic_id != acting_user.id:
             raise NotAssignedMechanic()
         item.status = new_status
@@ -63,7 +68,8 @@ class WorkItemService:
 
     async def approve(self, item_id: uuid.UUID, acting_user: User) -> VisitWorkItem:
         item = await self.session.get(VisitWorkItem, item_id)
-        assert item is not None
+        if item is None:
+            raise WorkItemNotFound()
         item.approved_by_client = True
         item.approved_at = datetime.now(timezone.utc)
         item.approved_via = ApprovedVia.CRM_STATUS
