@@ -41,9 +41,9 @@ class WorkItemService:
         await VisitService(self.session).recalculate_total(visit_id)
 
         if item.is_extra_work:
-            from app.modules.notifications.logging_sender import LoggingNotificationSender
+            from app.modules.notifications.factory import get_notification_sender
 
-            await LoggingNotificationSender(self.session).send_extra_work_approval_request(item)
+            await get_notification_sender(self.session).send_extra_work_approval_request(item)
 
         await record_audit(
             self.session,
