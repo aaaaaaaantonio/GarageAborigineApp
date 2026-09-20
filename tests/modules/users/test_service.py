@@ -27,3 +27,18 @@ async def test_create_user_writes_audit_row(session):
     ).scalar_one()
     assert row.action == "create"
     assert row.entity_type == "user"
+
+
+async def test_get_by_telegram_id_finds_active_user(session):
+    user = User(role=UserRole.MASTER, full_name="Мастер", telegram_id=555111, branch_id=uuid.uuid4())
+    session.add(user)
+    await session.flush()
+
+    found = await UserService(session).get_by_telegram_id(555111)
+    assert found is not None
+    assert found.id == user.id
+
+
+async def test_get_by_telegram_id_returns_none_when_unknown(session):
+    found = await UserService(session).get_by_telegram_id(999999)
+    assert found is None

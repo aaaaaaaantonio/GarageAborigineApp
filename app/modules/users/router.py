@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_session
@@ -30,3 +30,15 @@ async def list_users(
 ):
     service = UserService(session)
     return await service.list_users()
+
+
+@router.get("/by-telegram/{telegram_id}", response_model=UserOut)
+async def get_user_by_telegram(
+    telegram_id: int,
+    session: AsyncSession = Depends(get_session),
+):
+    service = UserService(session)
+    user = await service.get_by_telegram_id(telegram_id)
+    if user is None or user.deleted_at is not None:
+        raise HTTPException(404, "User not found")
+    return user

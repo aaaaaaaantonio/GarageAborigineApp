@@ -33,3 +33,6 @@ class UserService:
 
     async def list_users(self) -> list[User]:
         return await self.repo.list_active()
+
+    async def get_by_telegram_id(self, telegram_id: int) -> User | None:
+        return await self.repo.get_by_telegram_id(telegram_id)
