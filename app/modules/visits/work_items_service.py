@@ -1,6 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.enums import ApprovedVia, WorkItemStatus
@@ -75,3 +76,9 @@ class WorkItemService:
         item.approved_via = ApprovedVia.CRM_STATUS
         await self.session.flush()
         return item
+
+    async def list_mine(self, acting_user: User) -> list[VisitWorkItem]:
+        result = await self.session.execute(
+            select(VisitWorkItem).where(VisitWorkItem.assigned_mechanic_id == acting_user.id)
+        )
+        return list(result.scalars())

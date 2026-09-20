@@ -33,3 +33,14 @@ class WorkItemOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class WorkItemMineOut(BaseModel):
+    id: uuid.UUID
+    visit_id: uuid.UUID
+    status: WorkItemStatus
+    free_text_name: str | None
+    catalog_item_id: uuid.UUID | None
+
+    class Config:
+        from_attributes = True
