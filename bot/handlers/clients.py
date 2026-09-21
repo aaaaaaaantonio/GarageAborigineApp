@@ -1,0 +1,30 @@
+from aiogram import Router
+from aiogram.filters import Command
+from aiogram.fsm.context import FSMContext
+from aiogram.types import Message
+
+from bot.api_client import ApiClient
+from bot.states import NewClientStates
+
+router = Router()
+
+
+@router.message(Command("new_client"))
+async def start_new_client(message: Message, state: FSMContext, **kwargs) -> None:
+    await state.set_state(NewClientStates.waiting_for_phone)
+    await message.answer("Введите телефон клиента:")
+
+
+@router.message(NewClientStates.waiting_for_phone)
+async def receive_phone(message: Message, state: FSMContext, **kwargs) -> None:
+    await state.update_data(phone=message.text)
+    await state.set_state(NewClientStates.waiting_for_full_name)
+    await message.answer("Введите ФИО клиента:")
+
+
+@router.message(NewClientStates.waiting_for_full_name)
+async def receive_full_name(message: Message, state: FSMContext, api: ApiClient, **kwargs) -> None:
+    data = await state.get_data()
+    client = await api.create_client(full_name=message.text, phone=data["phone"])
+    await state.clear()
+    await message.answer(f"Клиент создан: {client['full_name']}")

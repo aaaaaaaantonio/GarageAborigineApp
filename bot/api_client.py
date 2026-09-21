@@ -81,3 +81,10 @@ class ApiClient:
             return await self.get(f"/users/by-telegram/{telegram_id}")
         except ApiNotFound:
             return None
+
+    async def search(self, query: str) -> list[dict]:
+        result = await self.get(f"/search?q={query}")
+        return result
+
+    async def create_client(self, full_name: str, phone: str) -> dict:
+        return await self.post("/clients", json={"full_name": full_name, "phone": phone})
