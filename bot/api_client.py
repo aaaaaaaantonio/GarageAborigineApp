@@ -50,20 +50,29 @@ class ApiClient:
         raise ApiUnavailable("Сервис временно недоступен, попробуйте позже")
 
     async def get(self, path: str) -> dict | list:
-        async with httpx.AsyncClient(base_url=settings.api_base_url) as client:
-            response = await client.get(path, headers=self._headers())
+        try:
+            async with httpx.AsyncClient(base_url=settings.api_base_url) as client:
+                response = await client.get(path, headers=self._headers())
+        except httpx.HTTPError:
+            raise ApiUnavailable("Сервис временно недоступен, попробуйте позже")
         self._raise_for_status(response)
         return response.json()
 
     async def post(self, path: str, json: dict | None = None) -> dict | list:
-        async with httpx.AsyncClient(base_url=settings.api_base_url) as client:
-            response = await client.post(path, json=json or {}, headers=self._headers())
+        try:
+            async with httpx.AsyncClient(base_url=settings.api_base_url) as client:
+                response = await client.post(path, json=json or {}, headers=self._headers())
+        except httpx.HTTPError:
+            raise ApiUnavailable("Сервис временно недоступен, попробуйте позже")
         self._raise_for_status(response)
         return response.json()
 
     async def patch(self, path: str, json: dict | None = None) -> dict | list:
-        async with httpx.AsyncClient(base_url=settings.api_base_url) as client:
-            response = await client.patch(path, json=json or {}, headers=self._headers())
+        try:
+            async with httpx.AsyncClient(base_url=settings.api_base_url) as client:
+                response = await client.patch(path, json=json or {}, headers=self._headers())
+        except httpx.HTTPError:
+            raise ApiUnavailable("Сервис временно недоступен, попробуйте позже")
         self._raise_for_status(response)
         return response.json()
 

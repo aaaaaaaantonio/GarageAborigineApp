@@ -78,3 +78,13 @@ async def test_get_user_by_telegram_returns_dict_on_success():
     client = ApiClient()
     result = await client.get_user_by_telegram(42)
     assert result == {"id": "u1", "role": "master"}
+
+
+@respx.mock
+async def test_get_raises_api_unavailable_on_connection_error():
+    respx.get("http://localhost:8000/clients").mock(
+        side_effect=httpx.ConnectError("Connection failed")
+    )
+    client = ApiClient()
+    with pytest.raises(ApiUnavailable, match="Сервис временно недоступен"):
+        await client.get("/clients")
