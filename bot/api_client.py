@@ -88,3 +88,8 @@ class ApiClient:
 
     async def create_client(self, full_name: str, phone: str) -> dict:
         return await self.post("/clients", json={"full_name": full_name, "phone": phone})
+
+    async def create_vehicle(self, vin: str, plate_number: str, make: str, model: str) -> dict:
+        return await self.post(
+            "/vehicles", json={"vin": vin, "plate_number": plate_number, "make": make, "model": model}
+        )
