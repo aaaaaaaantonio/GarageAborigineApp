@@ -93,3 +93,17 @@ class ApiClient:
         return await self.post(
             "/vehicles", json={"vin": vin, "plate_number": plate_number, "make": make, "model": model}
         )
+
+    async def create_visit(self, client_id: str, vehicle_id: str, assigned_master_id: str, mileage_at_intake: int) -> dict:
+        return await self.post(
+            "/visits",
+            json={
+                "client_id": client_id,
+                "vehicle_id": vehicle_id,
+                "assigned_master_id": assigned_master_id,
+                "mileage_at_intake": mileage_at_intake,
+            },
+        )
+
+    async def change_visit_status(self, visit_id: str, new_status: str) -> dict:
+        return await self.patch(f"/visits/{visit_id}/status", json={"new_status": new_status})
