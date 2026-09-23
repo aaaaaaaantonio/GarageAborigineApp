@@ -47,6 +47,7 @@ async def send_visit_card(message: Message, visit: dict, work_items: list[dict])
             callback_data=f"add_part:{_encode_id(visit['id'])}:{_encode_id(item['id'])}",
         )
     builder.button(text="➕ Добавить работу", callback_data=f"add_work:{visit['id']}")
+    builder.button(text="Сформировать PDF", callback_data=f"gen_doc:{visit['id']}")
     builder.adjust(1)
     await message.answer(
         f"Заезд {visit['id']}\nСтатус: {visit['status']}\nСумма: {visit.get('total_amount', '—')}",

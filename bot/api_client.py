@@ -150,3 +150,6 @@ class ApiClient:
             f"/visits/{visit_id}/part-items",
             json={"work_item_id": work_item_id, "name": name, "quantity": quantity, "unit_price": unit_price},
         )
+
+    async def generate_document(self, visit_id: str) -> dict:
+        return await self.post(f"/visits/{visit_id}/document")
