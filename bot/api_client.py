@@ -107,3 +107,12 @@ class ApiClient:
 
     async def change_visit_status(self, visit_id: str, new_status: str) -> dict:
         return await self.patch(f"/visits/{visit_id}/status", json={"new_status": new_status})
+
+    async def get_visit(self, visit_id: str) -> dict:
+        return await self.get(f"/visits/{visit_id}")
+
+    async def list_work_items(self, visit_id: str) -> list[dict]:
+        return await self.get(f"/visits/{visit_id}/work-items")
+
+    async def approve_work_item(self, visit_id: str, item_id: str) -> dict:
+        return await self.post(f"/visits/{visit_id}/work-items/{item_id}/approve")
