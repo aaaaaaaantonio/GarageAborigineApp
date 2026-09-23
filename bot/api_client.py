@@ -153,3 +153,6 @@ class ApiClient:
 
     async def generate_document(self, visit_id: str) -> dict:
         return await self.post(f"/visits/{visit_id}/document")
+
+    async def register_paper_consent(self, full_name: str, phone: str) -> dict:
+        return await self.post("/consent/paper", json={"full_name": full_name, "phone": phone})
