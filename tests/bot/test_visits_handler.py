@@ -7,12 +7,14 @@ from aiogram.fsm.storage.base import StorageKey
 from bot.handlers.visits import (
     approve_work_callback,
     choose_client_callback,
+    choose_vehicle_callback,
     receive_client_query,
     receive_mileage,
+    receive_vehicle_query,
     send_visit_card,
     start_new_visit,
 )
-from bot.states import NewClientStates, NewVisitStates
+from bot.states import NewClientStates, NewVehicleStates, NewVisitStates
 
 
 def _fsm_context() -> FSMContext:
@@ -21,16 +23,17 @@ def _fsm_context() -> FSMContext:
     return FSMContext(storage=storage, key=key)
 
 
-async def test_receive_mileage_creates_visit_via_api():
+async def test_receive_mileage_uses_acting_user_as_master():
     message = AsyncMock()
     message.text = "45000"
     state = _fsm_context()
     await state.set_state(NewVisitStates.waiting_for_mileage)
-    await state.update_data(client_id="c1", vehicle_id="v1", master_id="m1")
+    await state.update_data(client_id="c1", vehicle_id="v1")
     api = AsyncMock()
     api.create_visit.return_value = {"id": "visit1", "status": "received"}
+    user = {"id": "m1"}
 
-    await receive_mileage(message, state, api=api)
+    await receive_mileage(message, state, api=api, user=user)
 
     api.create_visit.assert_awaited_once_with(
         client_id="c1", vehicle_id="v1", assigned_master_id="m1", mileage_at_intake=45000
@@ -124,6 +127,48 @@ async def test_choose_client_callback_stores_client_id():
     data = await state.get_data()
     assert data["client_id"] == "c1"
     assert (await state.get_state()) == NewVisitStates.waiting_for_vehicle_query.state
+
+
+async def test_receive_vehicle_query_shows_candidates():
+    message = AsyncMock()
+    message.text = "А123"
+    state = _fsm_context()
+    await state.set_state(NewVisitStates.waiting_for_vehicle_query)
+    api = AsyncMock()
+    api.search.return_value = [{"entity": "vehicle", "id": "v1", "matched_field": "plate_number"}]
+    api.get_vehicle.return_value = {"id": "v1", "plate_number": "А123"}
+
+    await receive_vehicle_query(message, state, api=api)
+
+    api.get_vehicle.assert_awaited_once_with("v1")
+    assert (await state.get_state()) == NewVisitStates.choosing_vehicle.state
+
+
+async def test_receive_vehicle_query_falls_back_to_creation_when_no_matches():
+    message = AsyncMock()
+    message.text = "неизвестный VIN"
+    state = _fsm_context()
+    await state.set_state(NewVisitStates.waiting_for_vehicle_query)
+    api = AsyncMock()
+    api.search.return_value = []
+
+    await receive_vehicle_query(message, state, api=api)
+
+    assert (await state.get_state()) == NewVehicleStates.waiting_for_vin.state
+    data = await state.get_data()
+    assert data["return_flow"] == "new_visit"
+
+
+async def test_choose_vehicle_callback_stores_vehicle_id():
+    callback = AsyncMock()
+    callback.data = "vehicle_pick:v1"
+    state = _fsm_context()
+
+    await choose_vehicle_callback(callback, state)
+
+    data = await state.get_data()
+    assert data["vehicle_id"] == "v1"
+    assert (await state.get_state()) == NewVisitStates.waiting_for_mileage.state
 
 
 async def test_approve_work_callback_approves_and_refreshes_card():

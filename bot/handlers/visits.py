@@ -4,7 +4,7 @@ from aiogram.types import CallbackQuery, Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from bot.api_client import ApiClient
-from bot.states import NewClientStates, NewVisitStates
+from bot.states import NewClientStates, NewVehicleStates, NewVisitStates
 
 router = Router()
 
@@ -66,13 +66,40 @@ async def choose_client_callback(callback: CallbackQuery, state: FSMContext, **k
     await callback.answer()
 
 
+@router.message(NewVisitStates.waiting_for_vehicle_query)
+async def receive_vehicle_query(message: Message, state: FSMContext, api: ApiClient, **kwargs) -> None:
+    results = await api.search(message.text)
+    vehicle_ids = [r["id"] for r in results if r["entity"] == "vehicle"][:5]
+    if not vehicle_ids:
+        await state.update_data(return_flow="new_visit")
+        await state.set_state(NewVehicleStates.waiting_for_vin)
+        await message.answer("Автомобиль не найден. Введите VIN:")
+        return
+    builder = InlineKeyboardBuilder()
+    for vehicle_id in vehicle_ids:
+        vehicle = await api.get_vehicle(vehicle_id)
+        builder.button(text=vehicle["plate_number"], callback_data=f"vehicle_pick:{vehicle_id}")
+    builder.adjust(1)
+    await state.set_state(NewVisitStates.choosing_vehicle)
+    await message.answer("Выберите автомобиль:", reply_markup=builder.as_markup())
+
+
+@router.callback_query(lambda c: c.data.startswith("vehicle_pick:"))
+async def choose_vehicle_callback(callback: CallbackQuery, state: FSMContext, **kwargs) -> None:
+    _, vehicle_id = callback.data.split(":")
+    await state.update_data(vehicle_id=vehicle_id)
+    await state.set_state(NewVisitStates.waiting_for_mileage)
+    await callback.message.answer("Введите пробег на приёмке:")
+    await callback.answer()
+
+
 @router.message(NewVisitStates.waiting_for_mileage)
-async def receive_mileage(message: Message, state: FSMContext, api: ApiClient, **kwargs) -> None:
+async def receive_mileage(message: Message, state: FSMContext, api: ApiClient, user: dict, **kwargs) -> None:
     data = await state.get_data()
     visit = await api.create_visit(
         client_id=data["client_id"],
         vehicle_id=data["vehicle_id"],
-        assigned_master_id=data["master_id"],
+        assigned_master_id=user["id"],
         mileage_at_intake=int(message.text),
     )
     await state.clear()

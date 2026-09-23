@@ -4,7 +4,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
 from bot.api_client import ApiClient
-from bot.states import NewVehicleStates
+from bot.states import NewVehicleStates, NewVisitStates
 
 router = Router()
 
@@ -34,5 +34,10 @@ async def receive_make_model(message: Message, state: FSMContext, api: ApiClient
     make, _, model = message.text.partition(" ")
     data = await state.get_data()
     vehicle = await api.create_vehicle(vin=data["vin"], plate_number=data["plate_number"], make=make, model=model)
+    if data.get("return_flow") == "new_visit":
+        await state.update_data(vehicle_id=vehicle["id"])
+        await state.set_state(NewVisitStates.waiting_for_mileage)
+        await message.answer(f"Автомобиль создан: {vehicle['vin']}\nВведите пробег на приёмке:")
+        return
     await state.clear()
     await message.answer(f"Автомобиль создан: {vehicle['vin']}")

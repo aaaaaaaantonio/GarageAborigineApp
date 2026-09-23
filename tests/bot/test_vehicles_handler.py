@@ -5,7 +5,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.fsm.storage.base import StorageKey
 
 from bot.handlers.vehicles import receive_make_model, start_new_vehicle
-from bot.states import NewVehicleStates
+from bot.states import NewVehicleStates, NewVisitStates
 
 
 def _fsm_context() -> FSMContext:
@@ -37,3 +37,18 @@ async def test_receive_make_model_creates_vehicle_via_api():
         vin="X" * 17, plate_number="А123", make="Toyota", model="Camry"
     )
     assert (await state.get_state()) is None
+
+
+async def test_receive_make_model_continues_new_visit_wizard_when_return_flow_set():
+    message = AsyncMock()
+    message.text = "Toyota Camry"
+    state = _fsm_context()
+    await state.update_data(vin="X" * 17, plate_number="А123", return_flow="new_visit")
+    api = AsyncMock()
+    api.create_vehicle.return_value = {"id": "v1", "vin": "X" * 17}
+
+    await receive_make_model(message, state, api=api)
+
+    assert (await state.get_state()) == NewVisitStates.waiting_for_mileage.state
+    data = await state.get_data()
+    assert data["vehicle_id"] == "v1"
