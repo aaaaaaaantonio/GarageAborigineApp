@@ -91,6 +91,54 @@ async def test_send_visit_card_skips_approve_button_for_approved_item():
     assert not any(t.startswith("✅") for t in texts)
 
 
+async def test_send_visit_card_shows_add_part_button_for_unapproved_item():
+    message = AsyncMock()
+    visit_id = "11111111-1111-1111-1111-111111111111"
+    item_id = "22222222-2222-2222-2222-222222222222"
+    visit = {"id": visit_id, "status": "in_progress", "total_amount": "0.00"}
+    work_items = [
+        {
+            "id": item_id,
+            "free_text_name": "Замена масла",
+            "approved_by_client": False,
+        }
+    ]
+
+    await send_visit_card(message, visit, work_items)
+
+    _, kwargs = message.answer.await_args
+    markup = kwargs["reply_markup"]
+    add_part_buttons = [
+        b for row in markup.inline_keyboard for b in row if b.text == "🔧 Замена масла"
+    ]
+    assert len(add_part_buttons) == 1
+    assert add_part_buttons[0].callback_data == f"add_part:{_encode_id(visit_id)}:{_encode_id(item_id)}"
+
+
+async def test_send_visit_card_shows_add_part_button_for_approved_item():
+    message = AsyncMock()
+    visit_id = "11111111-1111-1111-1111-111111111111"
+    item_id = "22222222-2222-2222-2222-222222222222"
+    visit = {"id": visit_id, "status": "in_progress", "total_amount": "0.00"}
+    work_items = [
+        {
+            "id": item_id,
+            "free_text_name": "Замена масла",
+            "approved_by_client": True,
+        }
+    ]
+
+    await send_visit_card(message, visit, work_items)
+
+    _, kwargs = message.answer.await_args
+    markup = kwargs["reply_markup"]
+    add_part_buttons = [
+        b for row in markup.inline_keyboard for b in row if b.text == "🔧 Замена масла"
+    ]
+    assert len(add_part_buttons) == 1
+    assert add_part_buttons[0].callback_data == f"add_part:{_encode_id(visit_id)}:{_encode_id(item_id)}"
+
+
 async def test_start_new_visit_asks_for_client():
     message = AsyncMock()
     state = _fsm_context()
