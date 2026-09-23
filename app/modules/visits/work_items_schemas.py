@@ -30,6 +30,8 @@ class WorkItemOut(BaseModel):
     id: uuid.UUID
     status: WorkItemStatus
     approved_by_client: bool
+    free_text_name: str | None
+    catalog_item_id: uuid.UUID | None
 
     class Config:
         from_attributes = True

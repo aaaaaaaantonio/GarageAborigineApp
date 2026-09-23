@@ -82,3 +82,12 @@ class WorkItemService:
             select(VisitWorkItem).where(VisitWorkItem.assigned_mechanic_id == acting_user.id)
         )
         return list(result.scalars())
+
+    async def list_for_visit(self, visit_id: uuid.UUID) -> list[VisitWorkItem]:
+        visit = await self.session.get(Visit, visit_id)
+        if visit is None:
+            raise VisitNotFound()
+        result = await self.session.execute(
+            select(VisitWorkItem).where(VisitWorkItem.visit_id == visit_id)
+        )
+        return list(result.scalars())

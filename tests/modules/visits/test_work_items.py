@@ -98,3 +98,16 @@ async def test_list_mine_returns_only_own_assigned_items(session):
 
     other = await WorkItemService(session).list_mine(mechanic_b)
     assert other == []
+
+
+async def test_list_for_visit_returns_items_for_that_visit(session):
+    admin, mechanic_a, mechanic_b, item = await _setup_visit_with_mechanic(session)
+
+    items = await WorkItemService(session).list_for_visit(item.visit_id)
+
+    assert [i.id for i in items] == [item.id]
+
+
+async def test_list_for_visit_unknown_visit_raises_not_found(session):
+    with pytest.raises(VisitNotFound):
+        await WorkItemService(session).list_for_visit(uuid.uuid4())
