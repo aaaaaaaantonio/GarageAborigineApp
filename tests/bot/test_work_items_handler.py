@@ -9,6 +9,7 @@ from bot.handlers.work_items import (
     choose_category_callback,
     receive_hours_and_rate,
     receive_work_name,
+    start_add_work_item,
 )
 from bot.states import AddWorkItemStates
 
@@ -17,6 +18,22 @@ def _fsm_context() -> FSMContext:
     storage = MemoryStorage()
     key = StorageKey(bot_id=1, chat_id=1, user_id=1)
     return FSMContext(storage=storage, key=key)
+
+
+async def test_start_add_work_item_asks_for_name_and_stores_visit_id():
+    callback = AsyncMock()
+    callback.data = "add_work:visit1"
+    state = _fsm_context()
+    await state.update_data(stale_key="from_previous_wizard")
+    await state.set_state(AddWorkItemStates.choosing_category)
+
+    await start_add_work_item(callback, state)
+
+    data = await state.get_data()
+    assert data == {"visit_id": "visit1"}
+    assert (await state.get_state()) == AddWorkItemStates.waiting_for_name.state
+    callback.message.answer.assert_awaited_once_with("Введите название работы:")
+    callback.answer.assert_awaited_once()
 
 
 async def test_receive_work_name_shows_catalog_suggestions():

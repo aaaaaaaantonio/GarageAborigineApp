@@ -229,6 +229,20 @@ async def test_send_visit_card_numbers_catalog_items_without_free_text_name():
     assert "✅ работа №2" in texts
 
 
+async def test_send_visit_card_shows_add_work_button():
+    message = AsyncMock()
+    visit = {"id": "11111111-1111-1111-1111-111111111111", "status": "in_progress", "total_amount": "0.00"}
+
+    await send_visit_card(message, visit, [])
+
+    _, kwargs = message.answer.await_args
+    markup = kwargs["reply_markup"]
+    buttons = [b for row in markup.inline_keyboard for b in row]
+    add_work_buttons = [b for b in buttons if b.text == "➕ Добавить работу"]
+    assert len(add_work_buttons) == 1
+    assert add_work_buttons[0].callback_data == f"add_work:{visit['id']}"
+
+
 async def test_receive_mileage_reprompts_on_non_numeric_input():
     message = AsyncMock()
     message.text = "много"

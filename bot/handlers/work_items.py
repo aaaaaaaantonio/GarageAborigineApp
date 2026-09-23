@@ -19,6 +19,16 @@ _CATEGORY_LABELS = {
 }
 
 
+@router.callback_query(lambda c: c.data.startswith("add_work:"))
+async def start_add_work_item(callback: CallbackQuery, state: FSMContext, **kwargs) -> None:
+    _, visit_id = callback.data.split(":")
+    await state.clear()
+    await state.update_data(visit_id=visit_id)
+    await state.set_state(AddWorkItemStates.waiting_for_name)
+    await callback.message.answer("Введите название работы:")
+    await callback.answer()
+
+
 @router.message(AddWorkItemStates.waiting_for_name)
 async def receive_work_name(message: Message, state: FSMContext, api: ApiClient, **kwargs) -> None:
     suggestions = await api.suggest_catalog(message.text)
