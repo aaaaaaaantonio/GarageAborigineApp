@@ -88,6 +88,12 @@ class ApiClient:
     async def get_vehicle(self, vehicle_id: str) -> dict:
         return await self.get(f"/vehicles/{vehicle_id}")
 
+    async def suggest_catalog(self, text: str) -> list[dict]:
+        return await self.get(f"/catalog/suggest?text={text}")
+
+    async def add_work_item(self, visit_id: str, **fields) -> dict:
+        return await self.post(f"/visits/{visit_id}/work-items", json=fields)
+
     async def search(self, query: str) -> list[dict]:
         result = await self.get(f"/search?q={query}")
         return result

@@ -23,6 +23,7 @@ class NewVisitStates(StatesGroup):
 class AddWorkItemStates(StatesGroup):
     waiting_for_name = State()
     choosing_suggestion = State()
+    choosing_category = State()
     waiting_for_hours_and_rate = State()
 
 
