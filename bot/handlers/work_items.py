@@ -71,13 +71,20 @@ async def choose_category_callback(callback: CallbackQuery, state: FSMContext, *
 @router.message(AddWorkItemStates.waiting_for_hours_and_rate)
 async def receive_hours_and_rate(message: Message, state: FSMContext, api: ApiClient, **kwargs) -> None:
     data = await state.get_data()
-    if "norm_hours" in data:
-        norm_hours = data["norm_hours"]
-        hourly_rate = float(message.text)
-    else:
-        norm_hours_text, hourly_rate_text = message.text.split()
-        norm_hours = float(norm_hours_text)
-        hourly_rate = float(hourly_rate_text)
+    try:
+        if "norm_hours" in data:
+            norm_hours = data["norm_hours"]
+            hourly_rate = float(message.text)
+        else:
+            norm_hours_text, hourly_rate_text = message.text.split()
+            norm_hours = float(norm_hours_text)
+            hourly_rate = float(hourly_rate_text)
+    except (ValueError, TypeError):
+        if "norm_hours" in data:
+            await message.answer("Введите число (часовую ставку).")
+        else:
+            await message.answer("Введите нормо-часы и ставку через пробел, например: 1.5 800.")
+        return
 
     await api.add_work_item(
         data["visit_id"],

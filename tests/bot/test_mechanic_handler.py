@@ -43,12 +43,51 @@ async def test_show_my_work_items_omits_button_when_no_next_status():
 
 async def test_change_work_status_callback_updates_status():
     callback = AsyncMock()
-    callback.data = "work_status:visit1:wi1:in_progress"
+    callback.data = "work_status:wi1:in_progress"
     api = AsyncMock()
     api.update_work_item_status.return_value = {"id": "wi1", "status": "in_progress"}
 
     await change_work_status_callback(callback, api=api)
 
-    api.update_work_item_status.assert_awaited_once_with("visit1", "wi1", "in_progress")
+    api.update_work_item_status.assert_awaited_once_with("wi1", "wi1", "in_progress")
     callback.message.answer.assert_awaited_once()
     callback.answer.assert_awaited_once()
+
+
+async def test_show_my_work_items_callback_data_fits_telegram_limit():
+    message = AsyncMock()
+    api = AsyncMock()
+    api.list_my_work_items.return_value = [
+        {
+            "id": "22222222-2222-2222-2222-222222222222",
+            "visit_id": "11111111-1111-1111-1111-111111111111",
+            "status": "not_ready",
+            "free_text_name": "Замена масла",
+            "catalog_item_id": None,
+        }
+    ]
+
+    await show_my_work_items(message, api=api)
+
+    _, kwargs = message.answer.await_args
+    markup = kwargs["reply_markup"]
+    assert all(len(b.callback_data.encode()) <= 64 for row in markup.inline_keyboard for b in row)
+
+
+async def test_show_my_work_items_numbers_catalog_items_without_free_text_name():
+    message = AsyncMock()
+    api = AsyncMock()
+    api.list_my_work_items.return_value = [
+        {
+            "id": "22222222-2222-2222-2222-222222222222",
+            "visit_id": "11111111-1111-1111-1111-111111111111",
+            "status": "not_ready",
+            "free_text_name": None,
+            "catalog_item_id": "33333333-3333-3333-3333-333333333333",
+        }
+    ]
+
+    await show_my_work_items(message, api=api)
+
+    args, _ = message.answer.await_args
+    assert args[0].startswith("работа №1 —")

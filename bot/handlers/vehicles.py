@@ -11,6 +11,7 @@ router = Router()
 
 @router.message(Command("new_vehicle"))
 async def start_new_vehicle(message: Message, state: FSMContext, **kwargs) -> None:
+    await state.clear()
     await state.set_state(NewVehicleStates.waiting_for_vin)
     await message.answer("Введите VIN:")
 

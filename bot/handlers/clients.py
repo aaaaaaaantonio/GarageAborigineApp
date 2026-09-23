@@ -11,6 +11,7 @@ router = Router()
 
 @router.message(Command("new_client"))
 async def start_new_client(message: Message, state: FSMContext, **kwargs) -> None:
+    await state.clear()
     await state.set_state(NewClientStates.waiting_for_phone)
     await message.answer("Введите телефон клиента:")
 

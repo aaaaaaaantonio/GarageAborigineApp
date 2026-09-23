@@ -1,3 +1,6 @@
+import base64
+import uuid as uuid_lib
+
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
@@ -5,6 +8,16 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from bot.api_client import ApiClient
 from bot.states import NewClientStates, NewVehicleStates, NewVisitStates
+
+
+def _encode_id(raw_id: str) -> str:
+    return base64.urlsafe_b64encode(uuid_lib.UUID(str(raw_id)).bytes).rstrip(b"=").decode()
+
+
+def _decode_id(encoded: str) -> str:
+    padded = encoded + "=" * (-len(encoded) % 4)
+    return str(uuid_lib.UUID(bytes=base64.urlsafe_b64decode(padded)))
+
 
 router = Router()
 
@@ -22,10 +35,13 @@ async def send_visit_card(message: Message, visit: dict, work_items: list[dict])
     builder = InlineKeyboardBuilder()
     for status in _NEXT_STATUS_BY_CURRENT.get(visit["status"], []):
         builder.button(text=status, callback_data=f"visit_status:{visit['id']}:{status}")
-    for item in work_items:
+    for index, item in enumerate(work_items, start=1):
         if item.get("approved_by_client") is False:
-            name = item.get("free_text_name") or "работа"
-            builder.button(text=f"✅ {name}", callback_data=f"approve_work:{visit['id']}:{item['id']}")
+            name = item.get("free_text_name") or f"работа №{index}"
+            builder.button(
+                text=f"✅ {name}",
+                callback_data=f"approve_work:{_encode_id(visit['id'])}:{_encode_id(item['id'])}",
+            )
     builder.adjust(1)
     await message.answer(
         f"Заезд {visit['id']}\nСтатус: {visit['status']}\nСумма: {visit.get('total_amount', '—')}",
@@ -35,6 +51,7 @@ async def send_visit_card(message: Message, visit: dict, work_items: list[dict])
 
 @router.message(F.text == "Новый заезд")
 async def start_new_visit(message: Message, state: FSMContext, **kwargs) -> None:
+    await state.clear()
     await state.set_state(NewVisitStates.waiting_for_client_query)
     await message.answer("Введите телефон или ФИО клиента:")
 
@@ -95,12 +112,17 @@ async def choose_vehicle_callback(callback: CallbackQuery, state: FSMContext, **
 
 @router.message(NewVisitStates.waiting_for_mileage)
 async def receive_mileage(message: Message, state: FSMContext, api: ApiClient, user: dict, **kwargs) -> None:
+    try:
+        mileage = int(message.text)
+    except (ValueError, TypeError):
+        await message.answer("Введите число (пробег в км).")
+        return
     data = await state.get_data()
     visit = await api.create_visit(
         client_id=data["client_id"],
         vehicle_id=data["vehicle_id"],
         assigned_master_id=user["id"],
-        mileage_at_intake=int(message.text),
+        mileage_at_intake=mileage,
     )
     await state.clear()
     await send_visit_card(message, visit, [])
@@ -116,7 +138,9 @@ async def change_status_callback(callback: CallbackQuery, api: ApiClient, **kwar
 
 @router.callback_query(lambda c: c.data.startswith("approve_work:"))
 async def approve_work_callback(callback: CallbackQuery, api: ApiClient, **kwargs) -> None:
-    _, visit_id, item_id = callback.data.split(":")
+    _, visit_b64, item_b64 = callback.data.split(":")
+    visit_id = _decode_id(visit_b64)
+    item_id = _decode_id(item_b64)
     await api.approve_work_item(visit_id, item_id)
     visit = await api.get_visit(visit_id)
     items = await api.list_work_items(visit_id)

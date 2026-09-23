@@ -5,6 +5,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.fsm.storage.base import StorageKey
 
 from bot.handlers.visits import (
+    _encode_id,
     approve_work_callback,
     choose_client_callback,
     choose_vehicle_callback,
@@ -54,8 +55,14 @@ async def test_send_visit_card_shows_status_buttons():
 
 async def test_send_visit_card_shows_approve_button_for_unapproved_item():
     message = AsyncMock()
-    visit = {"id": "visit1", "status": "in_progress", "total_amount": "0.00"}
-    work_items = [{"id": "wi1", "free_text_name": "Замена масла", "approved_by_client": False}]
+    visit = {"id": "11111111-1111-1111-1111-111111111111", "status": "in_progress", "total_amount": "0.00"}
+    work_items = [
+        {
+            "id": "22222222-2222-2222-2222-222222222222",
+            "free_text_name": "Замена масла",
+            "approved_by_client": False,
+        }
+    ]
 
     await send_visit_card(message, visit, work_items)
 
@@ -172,15 +179,66 @@ async def test_choose_vehicle_callback_stores_vehicle_id():
 
 
 async def test_approve_work_callback_approves_and_refreshes_card():
+    visit_id = "11111111-1111-1111-1111-111111111111"
+    item_id = "22222222-2222-2222-2222-222222222222"
     callback = AsyncMock()
-    callback.data = "approve_work:visit1:wi1"
+    callback.data = f"approve_work:{_encode_id(visit_id)}:{_encode_id(item_id)}"
     api = AsyncMock()
-    api.get_visit.return_value = {"id": "visit1", "status": "in_progress", "total_amount": "0.00"}
+    api.get_visit.return_value = {"id": visit_id, "status": "in_progress", "total_amount": "0.00"}
     api.list_work_items.return_value = []
 
     await approve_work_callback(callback, api=api)
 
-    api.approve_work_item.assert_awaited_once_with("visit1", "wi1")
-    api.get_visit.assert_awaited_once_with("visit1")
+    api.approve_work_item.assert_awaited_once_with(visit_id, item_id)
+    api.get_visit.assert_awaited_once_with(visit_id)
     callback.message.answer.assert_awaited_once()
     callback.answer.assert_awaited_once()
+
+
+async def test_send_visit_card_callback_data_fits_telegram_limit():
+    message = AsyncMock()
+    visit = {"id": "11111111-1111-1111-1111-111111111111", "status": "in_progress", "total_amount": "0.00"}
+    work_items = [
+        {
+            "id": "22222222-2222-2222-2222-222222222222",
+            "free_text_name": "Замена масла",
+            "approved_by_client": False,
+        }
+    ]
+
+    await send_visit_card(message, visit, work_items)
+
+    _, kwargs = message.answer.await_args
+    markup = kwargs["reply_markup"]
+    assert all(len(b.callback_data.encode()) <= 64 for row in markup.inline_keyboard for b in row)
+
+
+async def test_send_visit_card_numbers_catalog_items_without_free_text_name():
+    message = AsyncMock()
+    visit = {"id": "11111111-1111-1111-1111-111111111111", "status": "in_progress", "total_amount": "0.00"}
+    work_items = [
+        {"id": "22222222-2222-2222-2222-222222222222", "free_text_name": None, "approved_by_client": False},
+        {"id": "33333333-3333-3333-3333-333333333333", "free_text_name": None, "approved_by_client": False},
+    ]
+
+    await send_visit_card(message, visit, work_items)
+
+    _, kwargs = message.answer.await_args
+    texts = [button.text for row in kwargs["reply_markup"].inline_keyboard for button in row]
+    assert "✅ работа №1" in texts
+    assert "✅ работа №2" in texts
+
+
+async def test_receive_mileage_reprompts_on_non_numeric_input():
+    message = AsyncMock()
+    message.text = "много"
+    state = _fsm_context()
+    await state.set_state(NewVisitStates.waiting_for_mileage)
+    await state.update_data(client_id="c1", vehicle_id="v1")
+    api = AsyncMock()
+
+    await receive_mileage(message, state, api=api, user={"id": "m1"})
+
+    api.create_visit.assert_not_awaited()
+    message.answer.assert_awaited_once_with("Введите число (пробег в км).")
+    assert (await state.get_state()) == NewVisitStates.waiting_for_mileage.state

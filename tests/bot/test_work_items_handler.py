@@ -110,3 +110,31 @@ async def test_receive_hours_and_rate_from_free_text_path_parses_both():
         "visit1", catalog_item_id=None, free_text_name="Своя работа", category="body",
         norm_hours=1.5, hourly_rate=900.0,
     )
+
+
+async def test_receive_hours_and_rate_reprompts_on_bad_rate_from_catalog_path():
+    message = AsyncMock()
+    message.text = "дорого"
+    state = _fsm_context()
+    await state.update_data(visit_id="visit1", catalog_item_id="cat1", category="maintenance", norm_hours=1.0)
+    api = AsyncMock()
+
+    await receive_hours_and_rate(message, state, api=api)
+
+    api.add_work_item.assert_not_awaited()
+    message.answer.assert_awaited_once_with("Введите число (часовую ставку).")
+
+
+async def test_receive_hours_and_rate_reprompts_on_malformed_free_text_input():
+    message = AsyncMock()
+    message.text = "полтора"
+    state = _fsm_context()
+    await state.update_data(visit_id="visit1", free_text_name="Своя работа", category="body")
+    api = AsyncMock()
+
+    await receive_hours_and_rate(message, state, api=api)
+
+    api.add_work_item.assert_not_awaited()
+    message.answer.assert_awaited_once_with(
+        "Введите нормо-часы и ставку через пробел, например: 1.5 800."
+    )

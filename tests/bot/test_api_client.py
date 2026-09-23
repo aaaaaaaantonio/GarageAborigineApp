@@ -2,7 +2,14 @@ import httpx
 import pytest
 import respx
 
-from bot.api_client import ApiClient, ApiConflict, ApiNotFound, ApiUnavailable, ApiValidationError
+from bot.api_client import (
+    ApiClient,
+    ApiConflict,
+    ApiForbidden,
+    ApiNotFound,
+    ApiUnavailable,
+    ApiValidationError,
+)
 
 
 @respx.mock
@@ -43,6 +50,27 @@ async def test_post_raises_api_validation_error_on_422():
     client = ApiClient()
     with pytest.raises(ApiValidationError):
         await client.post("/visits", json={})
+
+
+@respx.mock
+async def test_patch_raises_api_forbidden_on_403():
+    respx.patch("http://localhost:8000/visits/abc/work-items/xyz/status").mock(
+        return_value=httpx.Response(403, json={"detail": "Механик не назначен на эту работу"})
+    )
+    client = ApiClient()
+    with pytest.raises(ApiForbidden, match="Механик не назначен на эту работу"):
+        await client.patch("/visits/abc/work-items/xyz/status", json={"new_status": "ready"})
+
+
+@respx.mock
+async def test_search_percent_encodes_user_query():
+    route = respx.get("http://localhost:8000/search", params={"q": "Иван & Ко"}).mock(
+        return_value=httpx.Response(200, json=[])
+    )
+    client = ApiClient()
+    await client.search("Иван & Ко")
+    assert route.called
+    assert "q=%D0%98%D0%B2%D0%B0%D0%BD%20%26%20%D0%9A%D0%BE" in str(route.calls.last.request.url)
 
 
 @respx.mock

@@ -1,3 +1,5 @@
+from urllib.parse import quote
+
 import httpx
 
 from bot.config import settings
@@ -14,6 +16,10 @@ class ApiNotFound(ApiError):
 
 
 class ApiConflict(ApiError):
+    pass
+
+
+class ApiForbidden(ApiError):
     pass
 
 
@@ -47,6 +53,8 @@ class ApiClient:
             raise ApiConflict(detail or "Конфликт")
         if response.status_code == 422:
             raise ApiValidationError(detail or "Некорректные данные")
+        if response.status_code == 403:
+            raise ApiForbidden(detail or "Недостаточно прав")
         raise ApiUnavailable("Сервис временно недоступен, попробуйте позже")
 
     async def get(self, path: str) -> dict | list:
@@ -89,7 +97,7 @@ class ApiClient:
         return await self.get(f"/vehicles/{vehicle_id}")
 
     async def suggest_catalog(self, text: str) -> list[dict]:
-        return await self.get(f"/catalog/suggest?text={text}")
+        return await self.get(f"/catalog/suggest?text={quote(text, safe='')}")
 
     async def add_work_item(self, visit_id: str, **fields) -> dict:
         return await self.post(f"/visits/{visit_id}/work-items", json=fields)
@@ -101,7 +109,7 @@ class ApiClient:
         return await self.patch(f"/visits/{visit_id}/work-items/{item_id}/status", json={"new_status": new_status})
 
     async def search(self, query: str) -> list[dict]:
-        result = await self.get(f"/search?q={query}")
+        result = await self.get(f"/search?q={quote(query, safe='')}")
         return result
 
     async def create_client(self, full_name: str, phone: str) -> dict:
