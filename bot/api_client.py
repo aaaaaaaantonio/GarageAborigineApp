@@ -94,6 +94,12 @@ class ApiClient:
     async def add_work_item(self, visit_id: str, **fields) -> dict:
         return await self.post(f"/visits/{visit_id}/work-items", json=fields)
 
+    async def list_my_work_items(self) -> list[dict]:
+        return await self.get("/work-items/mine")
+
+    async def update_work_item_status(self, visit_id: str, item_id: str, new_status: str) -> dict:
+        return await self.patch(f"/visits/{visit_id}/work-items/{item_id}/status", json={"new_status": new_status})
+
     async def search(self, query: str) -> list[dict]:
         result = await self.get(f"/search?q={query}")
         return result
