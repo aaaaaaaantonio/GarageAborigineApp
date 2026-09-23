@@ -142,3 +142,11 @@ class ApiClient:
 
     async def approve_work_item(self, visit_id: str, item_id: str) -> dict:
         return await self.post(f"/visits/{visit_id}/work-items/{item_id}/approve")
+
+    async def add_part_item(
+        self, visit_id: str, work_item_id: str, name: str, quantity: int, unit_price: float
+    ) -> dict:
+        return await self.post(
+            f"/visits/{visit_id}/part-items",
+            json={"work_item_id": work_item_id, "name": name, "quantity": quantity, "unit_price": unit_price},
+        )

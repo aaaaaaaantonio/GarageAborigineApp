@@ -36,12 +36,16 @@ async def send_visit_card(message: Message, visit: dict, work_items: list[dict])
     for status in _NEXT_STATUS_BY_CURRENT.get(visit["status"], []):
         builder.button(text=status, callback_data=f"visit_status:{visit['id']}:{status}")
     for index, item in enumerate(work_items, start=1):
+        name = item.get("free_text_name") or f"работа №{index}"
         if item.get("approved_by_client") is False:
-            name = item.get("free_text_name") or f"работа №{index}"
             builder.button(
                 text=f"✅ {name}",
                 callback_data=f"approve_work:{_encode_id(visit['id'])}:{_encode_id(item['id'])}",
             )
+        builder.button(
+            text=f"🔧 {name}",
+            callback_data=f"add_part:{_encode_id(visit['id'])}:{_encode_id(item['id'])}",
+        )
     builder.button(text="➕ Добавить работу", callback_data=f"add_work:{visit['id']}")
     builder.adjust(1)
     await message.answer(

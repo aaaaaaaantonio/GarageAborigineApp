@@ -74,8 +74,14 @@ async def test_send_visit_card_shows_approve_button_for_unapproved_item():
 
 async def test_send_visit_card_skips_approve_button_for_approved_item():
     message = AsyncMock()
-    visit = {"id": "visit1", "status": "in_progress", "total_amount": "0.00"}
-    work_items = [{"id": "wi1", "free_text_name": "Замена масла", "approved_by_client": True}]
+    visit = {"id": "11111111-1111-1111-1111-111111111111", "status": "in_progress", "total_amount": "0.00"}
+    work_items = [
+        {
+            "id": "22222222-2222-2222-2222-222222222222",
+            "free_text_name": "Замена масла",
+            "approved_by_client": True,
+        }
+    ]
 
     await send_visit_card(message, visit, work_items)
 
