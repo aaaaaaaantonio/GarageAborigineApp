@@ -82,6 +82,9 @@ class ApiClient:
         except ApiNotFound:
             return None
 
+    async def get_client(self, client_id: str) -> dict:
+        return await self.get(f"/clients/{client_id}")
+
     async def search(self, query: str) -> list[dict]:
         result = await self.get(f"/search?q={query}")
         return result

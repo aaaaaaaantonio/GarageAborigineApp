@@ -1,10 +1,10 @@
-from aiogram import Router
+from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from bot.api_client import ApiClient
-from bot.states import NewVisitStates
+from bot.states import NewClientStates, NewVisitStates
 
 router = Router()
 
@@ -31,6 +31,39 @@ async def send_visit_card(message: Message, visit: dict, work_items: list[dict])
         f"Заезд {visit['id']}\nСтатус: {visit['status']}\nСумма: {visit.get('total_amount', '—')}",
         reply_markup=builder.as_markup(),
     )
+
+
+@router.message(F.text == "Новый заезд")
+async def start_new_visit(message: Message, state: FSMContext, **kwargs) -> None:
+    await state.set_state(NewVisitStates.waiting_for_client_query)
+    await message.answer("Введите телефон или ФИО клиента:")
+
+
+@router.message(NewVisitStates.waiting_for_client_query)
+async def receive_client_query(message: Message, state: FSMContext, api: ApiClient, **kwargs) -> None:
+    results = await api.search(message.text)
+    client_ids = [r["id"] for r in results if r["entity"] == "client"][:5]
+    if not client_ids:
+        await state.update_data(return_flow="new_visit")
+        await state.set_state(NewClientStates.waiting_for_phone)
+        await message.answer("Клиент не найден. Введите телефон клиента:")
+        return
+    builder = InlineKeyboardBuilder()
+    for client_id in client_ids:
+        client = await api.get_client(client_id)
+        builder.button(text=client["full_name"], callback_data=f"client_pick:{client_id}")
+    builder.adjust(1)
+    await state.set_state(NewVisitStates.choosing_client)
+    await message.answer("Выберите клиента:", reply_markup=builder.as_markup())
+
+
+@router.callback_query(lambda c: c.data.startswith("client_pick:"))
+async def choose_client_callback(callback: CallbackQuery, state: FSMContext, **kwargs) -> None:
+    _, client_id = callback.data.split(":")
+    await state.update_data(client_id=client_id)
+    await state.set_state(NewVisitStates.waiting_for_vehicle_query)
+    await callback.message.answer("Введите VIN или гос.номер авто:")
+    await callback.answer()
 
 
 @router.message(NewVisitStates.waiting_for_mileage)

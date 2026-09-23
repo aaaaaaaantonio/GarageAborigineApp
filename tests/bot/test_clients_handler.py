@@ -5,7 +5,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.fsm.storage.base import StorageKey
 
 from bot.handlers.clients import receive_full_name, start_new_client
-from bot.states import NewClientStates
+from bot.states import NewClientStates, NewVisitStates
 
 
 def _fsm_context() -> FSMContext:
@@ -37,3 +37,18 @@ async def test_receive_full_name_creates_client_via_api():
     api.create_client.assert_awaited_once_with(full_name="Иван Иванов", phone="79991234567")
     assert (await state.get_state()) is None
     message.answer.assert_awaited()
+
+
+async def test_receive_full_name_continues_new_visit_wizard_when_return_flow_set():
+    message = AsyncMock()
+    message.text = "Иван Иванов"
+    state = _fsm_context()
+    await state.update_data(phone="79991234567", return_flow="new_visit")
+    api = AsyncMock()
+    api.create_client.return_value = {"id": "c1", "full_name": "Иван Иванов"}
+
+    await receive_full_name(message, state, api=api)
+
+    assert (await state.get_state()) == NewVisitStates.waiting_for_vehicle_query.state
+    data = await state.get_data()
+    assert data["client_id"] == "c1"

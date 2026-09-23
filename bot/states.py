@@ -13,10 +13,11 @@ class NewVehicleStates(StatesGroup):
 
 
 class NewVisitStates(StatesGroup):
+    waiting_for_client_query = State()
     choosing_client = State()
+    waiting_for_vehicle_query = State()
     choosing_vehicle = State()
     waiting_for_mileage = State()
-    choosing_master = State()
 
 
 class AddWorkItemStates(StatesGroup):

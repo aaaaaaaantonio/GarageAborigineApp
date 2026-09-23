@@ -4,8 +4,15 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.fsm.storage.base import StorageKey
 
-from bot.handlers.visits import approve_work_callback, receive_mileage, send_visit_card
-from bot.states import NewVisitStates
+from bot.handlers.visits import (
+    approve_work_callback,
+    choose_client_callback,
+    receive_client_query,
+    receive_mileage,
+    send_visit_card,
+    start_new_visit,
+)
+from bot.states import NewClientStates, NewVisitStates
 
 
 def _fsm_context() -> FSMContext:
@@ -66,6 +73,57 @@ async def test_send_visit_card_skips_approve_button_for_approved_item():
     markup = kwargs["reply_markup"]
     texts = [button.text for row in markup.inline_keyboard for button in row]
     assert not any(t.startswith("✅") for t in texts)
+
+
+async def test_start_new_visit_asks_for_client():
+    message = AsyncMock()
+    state = _fsm_context()
+
+    await start_new_visit(message, state)
+
+    assert (await state.get_state()) == NewVisitStates.waiting_for_client_query.state
+
+
+async def test_receive_client_query_shows_candidates():
+    message = AsyncMock()
+    message.text = "Иван"
+    state = _fsm_context()
+    await state.set_state(NewVisitStates.waiting_for_client_query)
+    api = AsyncMock()
+    api.search.return_value = [{"entity": "client", "id": "c1", "matched_field": "full_name"}]
+    api.get_client.return_value = {"id": "c1", "full_name": "Иван Иванов"}
+
+    await receive_client_query(message, state, api=api)
+
+    api.get_client.assert_awaited_once_with("c1")
+    assert (await state.get_state()) == NewVisitStates.choosing_client.state
+
+
+async def test_receive_client_query_falls_back_to_creation_when_no_matches():
+    message = AsyncMock()
+    message.text = "неизвестный"
+    state = _fsm_context()
+    await state.set_state(NewVisitStates.waiting_for_client_query)
+    api = AsyncMock()
+    api.search.return_value = []
+
+    await receive_client_query(message, state, api=api)
+
+    assert (await state.get_state()) == NewClientStates.waiting_for_phone.state
+    data = await state.get_data()
+    assert data["return_flow"] == "new_visit"
+
+
+async def test_choose_client_callback_stores_client_id():
+    callback = AsyncMock()
+    callback.data = "client_pick:c1"
+    state = _fsm_context()
+
+    await choose_client_callback(callback, state)
+
+    data = await state.get_data()
+    assert data["client_id"] == "c1"
+    assert (await state.get_state()) == NewVisitStates.waiting_for_vehicle_query.state
 
 
 async def test_approve_work_callback_approves_and_refreshes_card():
