@@ -43,7 +43,7 @@ async def test_receive_make_model_continues_new_visit_wizard_when_return_flow_se
     message = AsyncMock()
     message.text = "Toyota Camry"
     state = _fsm_context()
-    await state.update_data(vin="X" * 17, plate_number="А123", return_flow="new_visit")
+    await state.update_data(vin="X" * 17, plate_number="А123", return_flow="new_visit", client_id="c1")
     api = AsyncMock()
     api.create_vehicle.return_value = {"id": "v1", "vin": "X" * 17}
 
@@ -52,3 +52,31 @@ async def test_receive_make_model_continues_new_visit_wizard_when_return_flow_se
     assert (await state.get_state()) == NewVisitStates.waiting_for_mileage.state
     data = await state.get_data()
     assert data["vehicle_id"] == "v1"
+
+
+async def test_receive_make_model_links_new_vehicle_to_client_in_new_visit_flow():
+    from datetime import date
+
+    message = AsyncMock()
+    message.text = "Toyota Camry"
+    state = _fsm_context()
+    await state.update_data(vin="X" * 17, plate_number="А123", return_flow="new_visit", client_id="c1")
+    api = AsyncMock()
+    api.create_vehicle.return_value = {"id": "v1", "vin": "X" * 17}
+
+    await receive_make_model(message, state, api=api)
+
+    api.attach_owner.assert_awaited_once_with("v1", "c1", date_from=date.today().isoformat())
+
+
+async def test_receive_make_model_standalone_does_not_attach_owner():
+    message = AsyncMock()
+    message.text = "Toyota Camry"
+    state = _fsm_context()
+    await state.update_data(vin="X" * 17, plate_number="А123")
+    api = AsyncMock()
+    api.create_vehicle.return_value = {"id": "v1", "vin": "X" * 17}
+
+    await receive_make_model(message, state, api=api)
+
+    api.attach_owner.assert_not_awaited()

@@ -1,3 +1,5 @@
+from datetime import date
+
 from aiogram import Router
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
@@ -37,6 +39,7 @@ async def receive_make_model(message: Message, state: FSMContext, api: ApiClient
     data = await state.get_data()
     vehicle = await api.create_vehicle(vin=data["vin"], plate_number=data["plate_number"], make=make, model=model)
     if data.get("return_flow") == "new_visit":
+        await api.attach_owner(vehicle["id"], data["client_id"], date_from=date.today().isoformat())
         await state.update_data(vehicle_id=vehicle["id"])
         await state.set_state(NewVisitStates.waiting_for_mileage)
         await message.answer(f"Автомобиль создан: {vehicle['vin']}\nВведите пробег на приёмке:")
