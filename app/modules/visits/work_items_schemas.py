@@ -28,6 +28,8 @@ class WorkItemStatusChange(BaseModel):
 
 class WorkItemOut(BaseModel):
     id: uuid.UUID
+    visit_id: uuid.UUID
+    name: str
     status: WorkItemStatus
     approved_by_client: bool
     free_text_name: str | None
@@ -40,6 +42,7 @@ class WorkItemOut(BaseModel):
 class WorkItemMineOut(BaseModel):
     id: uuid.UUID
     visit_id: uuid.UUID
+    name: str
     status: WorkItemStatus
     free_text_name: str | None
     catalog_item_id: uuid.UUID | None

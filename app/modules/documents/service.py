@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import VisitNotFound
-from app.modules.catalog.models import WorkCatalog
+from app.modules.catalog.repository import CatalogRepository
 from app.modules.clients.models import Client
 from app.modules.documents.storage import FileStorage, LocalFileStorage
 from app.modules.vehicles.models import Vehicle
@@ -29,21 +29,21 @@ class DocumentService:
         vehicle = await self.session.get(Vehicle, visit.vehicle_id)
 
         work_items = list(
-            (await self.session.execute(select(VisitWorkItem).where(VisitWorkItem.visit_id == visit_id))).scalars()
+            (
+                await self.session.execute(
+                    select(VisitWorkItem)
+                    .where(VisitWorkItem.visit_id == visit_id)
+                    .order_by(VisitWorkItem.created_at, VisitWorkItem.id)
+                )
+            ).scalars()
         )
         part_items = list(
             (await self.session.execute(select(VisitPartItem).where(VisitPartItem.visit_id == visit_id))).scalars()
         )
 
-        catalog_item_ids = {w.catalog_item_id for w in work_items if w.catalog_item_id is not None}
-        catalog_names: dict[uuid.UUID, str] = {}
-        if catalog_item_ids:
-            catalog_items = list(
-                (
-                    await self.session.execute(select(WorkCatalog).where(WorkCatalog.id.in_(catalog_item_ids)))
-                ).scalars()
-            )
-            catalog_names = {c.id: c.name for c in catalog_items}
+        catalog_names = await CatalogRepository(self.session).names_by_ids(
+            {w.catalog_item_id for w in work_items if w.catalog_item_id is not None}
+        )
 
         template = jinja_env.get_template("visit_order.html")
         html = template.render(

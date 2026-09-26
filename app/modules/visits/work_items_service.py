@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.enums import ApprovedVia, WorkItemStatus
 from app.core.exceptions import NotAssignedMechanic, VisitNotFound, WorkItemNotFound
+from app.modules.catalog.repository import CatalogRepository
 from app.modules.users.audit import record_audit
 from app.modules.users.models import User
 from app.modules.visits.models import Visit, VisitWorkItem
@@ -15,6 +16,15 @@ from app.modules.visits.work_items_schemas import WorkItemCreate
 class WorkItemService:
     def __init__(self, session: AsyncSession):
         self.session = session
+
+    async def _with_names(self, items: list[VisitWorkItem]) -> list[VisitWorkItem]:
+        """Attach a display `name` to each item: catalog name, else free-text name."""
+        catalog_names = await CatalogRepository(self.session).names_by_ids(
+            {i.catalog_item_id for i in items if i.catalog_item_id is not None}
+        )
+        for item in items:
+            item.name = catalog_names.get(item.catalog_item_id) or item.free_text_name
+        return items
 
     async def add_item(self, visit_id: uuid.UUID, data: WorkItemCreate, acting_user: User) -> VisitWorkItem:
         visit = await self.session.get(Visit, visit_id)
@@ -53,7 +63,7 @@ class WorkItemService:
             action="create",
             new_value={"visit_id": str(visit_id)},
         )
-        return item
+        return (await self._with_names([item]))[0]
 
     async def update_status(
         self, item_id: uuid.UUID, new_status: WorkItemStatus, acting_user: User
@@ -65,7 +75,7 @@ class WorkItemService:
             raise NotAssignedMechanic()
         item.status = new_status
         await self.session.flush()
-        return item
+        return (await self._with_names([item]))[0]
 
     async def approve(self, item_id: uuid.UUID, acting_user: User) -> VisitWorkItem:
         item = await self.session.get(VisitWorkItem, item_id)
@@ -75,19 +85,23 @@ class WorkItemService:
         item.approved_at = datetime.now(timezone.utc)
         item.approved_via = ApprovedVia.CRM_STATUS
         await self.session.flush()
-        return item
+        return (await self._with_names([item]))[0]
 
     async def list_mine(self, acting_user: User) -> list[VisitWorkItem]:
         result = await self.session.execute(
-            select(VisitWorkItem).where(VisitWorkItem.assigned_mechanic_id == acting_user.id)
+            select(VisitWorkItem)
+            .where(VisitWorkItem.assigned_mechanic_id == acting_user.id)
+            .order_by(VisitWorkItem.created_at, VisitWorkItem.id)
         )
-        return list(result.scalars())
+        return await self._with_names(list(result.scalars()))
 
     async def list_for_visit(self, visit_id: uuid.UUID) -> list[VisitWorkItem]:
         visit = await self.session.get(Visit, visit_id)
         if visit is None:
             raise VisitNotFound()
         result = await self.session.execute(
-            select(VisitWorkItem).where(VisitWorkItem.visit_id == visit_id)
+            select(VisitWorkItem)
+            .where(VisitWorkItem.visit_id == visit_id)
+            .order_by(VisitWorkItem.created_at, VisitWorkItem.id)
         )
-        return list(result.scalars())
+        return await self._with_names(list(result.scalars()))
