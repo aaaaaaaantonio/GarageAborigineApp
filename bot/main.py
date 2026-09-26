@@ -5,7 +5,7 @@ from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 
 from bot.config import settings
-from bot.handlers import start, clients, vehicles, visits, work_items, part_items, mechanic, documents, consent, search
+from bot.handlers import start, clients, vehicles, visits, work_items, part_items, mechanic, documents, consent, admin, search
 from bot.middlewares.auth import AuthMiddleware
 from bot.middlewares.error_handling import ErrorHandlingMiddleware
 
@@ -27,6 +27,7 @@ async def main() -> None:
     dp.include_router(mechanic.router)
     dp.include_router(documents.router)
     dp.include_router(consent.router)
+    dp.include_router(admin.router)
     dp.include_router(search.router)
     await dp.start_polling(bot)
 

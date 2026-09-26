@@ -156,3 +156,8 @@ class ApiClient:
 
     async def register_paper_consent(self, full_name: str, phone: str) -> dict:
         return await self.post("/consent/paper", json={"full_name": full_name, "phone": phone})
+
+    async def create_staff_user(self, role: str, full_name: str, telegram_id: int | None) -> dict:
+        return await self.post(
+            "/users", json={"role": role, "full_name": full_name, "telegram_id": telegram_id}
+        )
