@@ -1,3 +1,4 @@
+import logging
 import uuid
 
 from aiogram import Bot
@@ -7,6 +8,8 @@ from app.core.enums import VisitStatus
 from app.modules.notifications.logging_sender import LoggingNotificationSender
 from app.modules.users.models import User
 from app.modules.visits.models import Visit, VisitWorkItem
+
+logger = logging.getLogger(__name__)
 
 
 class TelegramNotificationSender:
@@ -22,7 +25,12 @@ class TelegramNotificationSender:
     async def _send(self, chat_id: int | None, text: str) -> None:
         if chat_id is None:
             return
-        await self.bot.send_message(chat_id=chat_id, text=text)
+        try:
+            await self.bot.send_message(chat_id=chat_id, text=text)
+        except Exception:
+            # The outbox row is already written; a Telegram delivery failure
+            # must not roll back the business operation that triggered it.
+            logger.exception("Telegram notification to chat %s failed", chat_id)
 
     async def send_status_changed(self, visit: Visit, old_status: VisitStatus, new_status: VisitStatus) -> None:
         await self._log.send_status_changed(visit, old_status, new_status)

@@ -59,3 +59,16 @@ async def test_send_status_changed_skips_telegram_when_no_telegram_id(session):
     rows = list((await session.execute(select(NotificationOutbox))).scalars())
     assert any(r.kind == "status_changed" for r in rows)
     bot.send_message.assert_not_awaited()
+
+
+async def test_send_status_changed_swallows_telegram_failure(session, caplog):
+    visit = await _make_visit_with_master(session, telegram_id=778)
+    bot = AsyncMock()
+    bot.send_message.side_effect = RuntimeError("chat not found")
+    sender = TelegramNotificationSender(session, bot)
+
+    await sender.send_status_changed(visit, VisitStatus.RECEIVED, VisitStatus.READY)
+
+    rows = list((await session.execute(select(NotificationOutbox))).scalars())
+    assert any(r.kind == "status_changed" for r in rows)
+    assert "chat not found" in caplog.text
