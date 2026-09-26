@@ -20,3 +20,11 @@ def test_admin_menu_includes_add_staff_button():
     markup = main_menu(UserRole.ADMIN)
     texts = [button.text for row in markup.keyboard for button in row]
     assert "Добавить сотрудника" in texts
+
+
+def test_admin_menu_hides_new_visit_button():
+    markup = main_menu(UserRole.ADMIN)
+    texts = [button.text for row in markup.keyboard for button in row]
+    assert "Новый заезд" not in texts
+    assert "Поиск" in texts
+    assert "Регистрация клиента (бумага)" in texts

@@ -3,19 +3,29 @@ from aiogram.utils.keyboard import ReplyKeyboardBuilder
 
 from app.core.enums import UserRole
 
-STAFF_BUTTONS = ["Новый заезд", "Поиск", "Регистрация клиента (бумага)"]
-ADMIN_ONLY_BUTTONS = ["Добавить сотрудника"]
-MECHANIC_BUTTONS = ["Мои работы"]
+NEW_VISIT = "Новый заезд"
+SEARCH = "Поиск"
+PAPER_CONSENT = "Регистрация клиента (бумага)"
+ADD_STAFF = "Добавить сотрудника"
+MY_WORK_ITEMS = "Мои работы"
+
+# A visit's assigned master must have role MASTER (backend rule), and an ADMIN
+# has no UI to choose one, so "Новый заезд" is offered to masters only.
+MASTER_ONLY_BUTTONS = [NEW_VISIT]
+SHARED_STAFF_BUTTONS = [SEARCH, PAPER_CONSENT]
+ADMIN_ONLY_BUTTONS = [ADD_STAFF]
+MECHANIC_BUTTONS = [MY_WORK_ITEMS]
+ALL_MENU_BUTTONS = MASTER_ONLY_BUTTONS + SHARED_STAFF_BUTTONS + ADMIN_ONLY_BUTTONS + MECHANIC_BUTTONS
 
 
 def main_menu(role: UserRole) -> ReplyKeyboardMarkup:
     builder = ReplyKeyboardBuilder()
     if role == UserRole.MECHANIC:
         buttons = MECHANIC_BUTTONS
+    elif role == UserRole.ADMIN:
+        buttons = SHARED_STAFF_BUTTONS + ADMIN_ONLY_BUTTONS
     else:
-        buttons = list(STAFF_BUTTONS)
-        if role == UserRole.ADMIN:
-            buttons += ADMIN_ONLY_BUTTONS
+        buttons = MASTER_ONLY_BUTTONS + SHARED_STAFF_BUTTONS
     for text in buttons:
         builder.button(text=text)
     builder.adjust(1)
