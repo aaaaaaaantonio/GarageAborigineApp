@@ -42,3 +42,15 @@ async def test_get_by_telegram_id_finds_active_user(session):
 async def test_get_by_telegram_id_returns_none_when_unknown(session):
     found = await UserService(session).get_by_telegram_id(999999)
     assert found is None
+
+
+async def test_get_by_telegram_id_ignores_soft_deleted_user(session):
+    from datetime import datetime, timezone
+
+    user = User(role=UserRole.MASTER, full_name="Уволенный", telegram_id=555222, branch_id=uuid.uuid4())
+    session.add(user)
+    await session.flush()
+    user.deleted_at = datetime.now(timezone.utc)
+    await session.flush()
+
+    assert await UserService(session).get_by_telegram_id(555222) is None

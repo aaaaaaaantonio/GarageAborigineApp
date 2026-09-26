@@ -23,5 +23,7 @@ class UserRepository:
         return list(result.scalars())
 
     async def get_by_telegram_id(self, telegram_id: int) -> User | None:
-        result = await self.session.execute(select(User).where(User.telegram_id == telegram_id))
+        result = await self.session.execute(
+            select(User).where(User.telegram_id == telegram_id, User.deleted_at.is_(None))
+        )
         return result.scalars().first()
