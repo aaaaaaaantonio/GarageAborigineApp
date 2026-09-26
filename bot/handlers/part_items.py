@@ -3,7 +3,8 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
 from bot.api_client import ApiClient
-from bot.handlers.visits import _decode_id, send_visit_card
+from bot.callback_ids import decode_id
+from bot.handlers.visits import refresh_visit_card
 from bot.states import AddPartItemStates
 from bot.texts import CANCEL_HINT, TEXT_REQUIRED
 
@@ -13,8 +14,8 @@ router = Router()
 @router.callback_query(F.data.startswith("add_part:"))
 async def start_add_part_item(callback: CallbackQuery, state: FSMContext, **kwargs) -> None:
     _, visit_b64, work_item_b64 = callback.data.split(":")
-    visit_id = _decode_id(visit_b64)
-    work_item_id = _decode_id(work_item_b64)
+    visit_id = decode_id(visit_b64)
+    work_item_id = decode_id(work_item_b64)
     await state.clear()
     await state.update_data(visit_id=visit_id, work_item_id=work_item_id)
     await state.set_state(AddPartItemStates.waiting_for_name)
@@ -53,8 +54,5 @@ async def receive_quantity_and_price(message: Message, state: FSMContext, api: A
         quantity=quantity,
         unit_price=unit_price,
     )
-    visit_id = data["visit_id"]
     await state.clear()
-    visit = await api.get_visit(visit_id)
-    items = await api.list_work_items(visit_id)
-    await send_visit_card(message, visit, items)
+    await refresh_visit_card(message, api, data["visit_id"])

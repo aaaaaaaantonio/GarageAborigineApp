@@ -1,59 +1,54 @@
-import base64
-import uuid as uuid_lib
-
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-from bot.api_client import ApiClient
-from bot.states import NewClientStates, NewVehicleStates, NewVisitStates
-from bot.texts import CANCEL_HINT
-
-
-def _encode_id(raw_id: str) -> str:
-    return base64.urlsafe_b64encode(uuid_lib.UUID(str(raw_id)).bytes).rstrip(b"=").decode()
-
-
-def _decode_id(encoded: str) -> str:
-    padded = encoded + "=" * (-len(encoded) % 4)
-    return str(uuid_lib.UUID(bytes=base64.urlsafe_b64decode(padded)))
-
+from bot.api_client import ApiClient, ApiMileageRollback
+from bot.callback_ids import decode_id, encode_id
+from bot.states import NewClientStates, NewVehicleStates, NewVisitStates, VisitCancelStates
+from bot.texts import CANCEL_HINT, TEXT_REQUIRED
+from bot.work_item_status import FROM_VISIT_CARD, add_work_status_buttons
 
 router = Router()
 
+# Mirrors app/modules/visits/fsm.py ALLOWED_TRANSITIONS (UI hint only; backend enforces).
 _NEXT_STATUS_BY_CURRENT = {
     "received": ["diagnostics", "cancelled"],
     "diagnostics": ["approval", "cancelled"],
     "approval": ["in_progress", "cancelled"],
     "in_progress": ["waiting_parts", "ready", "cancelled"],
     "waiting_parts": ["in_progress", "cancelled"],
-    "ready": ["issued"],
+    "ready": ["issued", "cancelled"],
 }
+
+MILEAGE_CONFIRM = "mileage_confirm"
 
 
 async def send_visit_card(message: Message, visit: dict, work_items: list[dict]) -> None:
     builder = InlineKeyboardBuilder()
     for status in _NEXT_STATUS_BY_CURRENT.get(visit["status"], []):
         builder.button(text=status, callback_data=f"visit_status:{visit['id']}:{status}")
+    lines = [f"Заезд {visit['id']}", f"Статус: {visit['status']}", f"Сумма: {visit.get('total_amount', '—')}"]
+    if work_items:
+        lines.append("Работы:")
     for index, item in enumerate(work_items, start=1):
-        name = item.get("free_text_name") or f"работа №{index}"
+        name = item["name"]
+        lines.append(f"{index}. {name} — {item['status']}")
+        visit_b64, item_b64 = encode_id(visit["id"]), encode_id(item["id"])
         if item.get("approved_by_client") is False:
-            builder.button(
-                text=f"✅ {name}",
-                callback_data=f"approve_work:{_encode_id(visit['id'])}:{_encode_id(item['id'])}",
-            )
-        builder.button(
-            text=f"🔧 {name}",
-            callback_data=f"add_part:{_encode_id(visit['id'])}:{_encode_id(item['id'])}",
-        )
+            builder.button(text=f"✅ {name}", callback_data=f"approve_work:{visit_b64}:{item_b64}")
+        add_work_status_buttons(builder, visit["id"], item, FROM_VISIT_CARD, label_prefix=f"🔄 {name} ")
+        builder.button(text=f"🔧 {name}", callback_data=f"add_part:{visit_b64}:{item_b64}")
     builder.button(text="➕ Добавить работу", callback_data=f"add_work:{visit['id']}")
     builder.button(text="Сформировать PDF", callback_data=f"gen_doc:{visit['id']}")
     builder.adjust(1)
-    await message.answer(
-        f"Заезд {visit['id']}\nСтатус: {visit['status']}\nСумма: {visit.get('total_amount', '—')}",
-        reply_markup=builder.as_markup(),
-    )
+    await message.answer("\n".join(lines), reply_markup=builder.as_markup())
+
+
+async def refresh_visit_card(message: Message, api: ApiClient, visit_id: str) -> None:
+    visit = await api.get_visit(visit_id)
+    items = await api.list_work_items(visit_id)
+    await send_visit_card(message, visit, items)
 
 
 async def start_new_visit(message: Message, state: FSMContext, **kwargs) -> None:
@@ -117,39 +112,79 @@ async def choose_vehicle_callback(callback: CallbackQuery, state: FSMContext, **
     await callback.answer()
 
 
+async def _create_visit(
+    message: Message, state: FSMContext, api: ApiClient, user: dict, mileage: int, confirmed: bool
+) -> None:
+    data = await state.get_data()
+    try:
+        visit = await api.create_visit(
+            client_id=data["client_id"],
+            vehicle_id=data["vehicle_id"],
+            assigned_master_id=user["id"],
+            mileage_at_intake=mileage,
+            mileage_manually_confirmed=confirmed,
+        )
+    except ApiMileageRollback as e:
+        # Keep client/vehicle and the entered mileage until the master confirms
+        # (or types a different mileage — also accepted in this state).
+        await state.update_data(mileage=mileage)
+        await state.set_state(NewVisitStates.confirming_mileage)
+        builder = InlineKeyboardBuilder()
+        builder.button(text="Подтвердить пробег", callback_data=MILEAGE_CONFIRM)
+        await message.answer(f"{e.message}\nИли введите другой пробег.", reply_markup=builder.as_markup())
+        return
+    await state.clear()
+    await send_visit_card(message, visit, [])
+
+
 @router.message(NewVisitStates.waiting_for_mileage)
+@router.message(NewVisitStates.confirming_mileage)
 async def receive_mileage(message: Message, state: FSMContext, api: ApiClient, user: dict, **kwargs) -> None:
     try:
         mileage = int(message.text)
     except (ValueError, TypeError):
         await message.answer("Введите число (пробег в км).")
         return
+    await _create_visit(message, state, api, user, mileage, confirmed=False)
+
+
+@router.callback_query(NewVisitStates.confirming_mileage, F.data == MILEAGE_CONFIRM)
+async def confirm_mileage_callback(callback: CallbackQuery, state: FSMContext, api: ApiClient, user: dict, **kwargs) -> None:
     data = await state.get_data()
-    visit = await api.create_visit(
-        client_id=data["client_id"],
-        vehicle_id=data["vehicle_id"],
-        assigned_master_id=user["id"],
-        mileage_at_intake=mileage,
-    )
-    await state.clear()
-    await send_visit_card(message, visit, [])
-
-
-@router.callback_query(lambda c: c.data.startswith("visit_status:"))
-async def change_status_callback(callback: CallbackQuery, api: ApiClient, **kwargs) -> None:
-    _, visit_id, new_status = callback.data.split(":")
-    visit = await api.change_visit_status(visit_id, new_status)
-    await callback.message.answer(f"Статус обновлён: {visit['status']}")
+    await _create_visit(callback.message, state, api, user, data["mileage"], confirmed=True)
     await callback.answer()
 
 
-@router.callback_query(lambda c: c.data.startswith("approve_work:"))
+@router.callback_query(F.data.startswith("visit_status:"))
+async def change_status_callback(callback: CallbackQuery, state: FSMContext, api: ApiClient, **kwargs) -> None:
+    _, visit_id, new_status = callback.data.split(":")
+    if new_status == "cancelled":
+        await state.clear()
+        await state.update_data(visit_id=visit_id)
+        await state.set_state(VisitCancelStates.waiting_for_reason)
+        await callback.message.answer(f"Укажите причину отмены заезда {CANCEL_HINT}:")
+        await callback.answer()
+        return
+    await api.change_visit_status(visit_id, new_status)
+    await refresh_visit_card(callback.message, api, visit_id)
+    await callback.answer()
+
+
+@router.message(VisitCancelStates.waiting_for_reason)
+async def receive_cancel_reason(message: Message, state: FSMContext, api: ApiClient, **kwargs) -> None:
+    if not message.text:
+        await message.answer(TEXT_REQUIRED)
+        return
+    visit_id = (await state.get_data())["visit_id"]
+    await api.change_visit_status(visit_id, "cancelled", reason=message.text)
+    await state.clear()
+    await refresh_visit_card(message, api, visit_id)
+
+
+@router.callback_query(F.data.startswith("approve_work:"))
 async def approve_work_callback(callback: CallbackQuery, api: ApiClient, **kwargs) -> None:
     _, visit_b64, item_b64 = callback.data.split(":")
-    visit_id = _decode_id(visit_b64)
-    item_id = _decode_id(item_b64)
-    await api.approve_work_item(visit_id, item_id)
-    visit = await api.get_visit(visit_id)
-    items = await api.list_work_items(visit_id)
-    await send_visit_card(callback.message, visit, items)
+    visit_id = decode_id(visit_b64)
+    await api.approve_work_item(visit_id, decode_id(item_b64))
+    await refresh_visit_card(callback.message, api, visit_id)
     await callback.answer()

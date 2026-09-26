@@ -5,7 +5,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.fsm.storage.base import StorageKey
 
 from bot.handlers.part_items import receive_part_name, receive_quantity_and_price, start_add_part_item
-from bot.handlers.visits import _encode_id
+from bot.callback_ids import encode_id as _encode_id
 from bot.states import AddPartItemStates
 
 

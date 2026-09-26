@@ -4,7 +4,7 @@ from aiogram.types import CallbackQuery, Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from bot.api_client import ApiClient
-from bot.handlers.visits import send_visit_card
+from bot.handlers.visits import refresh_visit_card
 from bot.states import AddWorkItemStates
 from bot.texts import CANCEL_HINT, TEXT_REQUIRED
 
@@ -111,8 +111,5 @@ async def receive_hours_and_rate(message: Message, state: FSMContext, api: ApiCl
         norm_hours=norm_hours,
         hourly_rate=hourly_rate,
     )
-    visit_id = data["visit_id"]
     await state.clear()
-    visit = await api.get_visit(visit_id)
-    items = await api.list_work_items(visit_id)
-    await send_visit_card(message, visit, items)
+    await refresh_visit_card(message, api, data["visit_id"])

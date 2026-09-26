@@ -11,7 +11,6 @@ from bot.handlers import (
     consent,
     documents,
     fallback,
-    mechanic,
     menu,
     part_items,
     search,
@@ -19,6 +18,7 @@ from bot.handlers import (
     vehicles,
     visits,
     work_items,
+    work_status,
 )
 from bot.middlewares.auth import AuthMiddleware
 from bot.middlewares.error_handling import ErrorHandlingMiddleware
@@ -35,7 +35,7 @@ def setup_routers(dp: Dispatcher) -> None:
     dp.include_router(visits.router)
     dp.include_router(work_items.router)
     dp.include_router(part_items.router)
-    dp.include_router(mechanic.router)
+    dp.include_router(work_status.router)
     dp.include_router(documents.router)
     dp.include_router(consent.router)
     dp.include_router(admin.router)

@@ -138,3 +138,33 @@ async def test_state_bound_wizard_callbacks_do_not_fire_without_state(env, data)
     assert await state.get_state() is None
     assert await state.get_data() == {}
     api.create_visit.assert_not_awaited()
+
+
+async def test_mileage_confirm_callback_routes_in_confirming_state(env):
+    bot, dp, state, api, user = env
+    await state.set_state(NewVisitStates.confirming_mileage)
+    await state.update_data(client_id="c1", vehicle_id="v1", mileage=900)
+    api.create_visit.return_value = {"id": "11111111-1111-1111-1111-111111111111", "status": "received"}
+
+    await dp.feed_update(bot, _callback("mileage_confirm"), api=api, user=user)
+
+    api.create_visit.assert_awaited_once_with(
+        client_id="c1", vehicle_id="v1", assigned_master_id="m1", mileage_at_intake=900,
+        mileage_manually_confirmed=True,
+    )
+    assert await state.get_state() is None
+
+
+async def test_work_status_button_from_card_routes_to_shared_handler(env):
+    from bot.callback_ids import encode_id
+
+    bot, dp, state, api, user = env
+    visit_id, item_id = "11111111-1111-1111-1111-111111111111", "22222222-2222-2222-2222-222222222222"
+    api.update_work_item_status.return_value = {"id": item_id, "name": "X", "status": "ready"}
+    api.get_visit.return_value = {"id": visit_id, "status": "in_progress", "total_amount": "0.00"}
+    api.list_work_items.return_value = []
+
+    await dp.feed_update(bot, _callback(f"wsc:{encode_id(visit_id)}:{encode_id(item_id)}:ready"), api=api, user=user)
+
+    api.update_work_item_status.assert_awaited_once_with(visit_id, item_id, "ready")
+    api.get_visit.assert_awaited_once_with(visit_id)

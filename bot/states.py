@@ -18,6 +18,7 @@ class NewVisitStates(StatesGroup):
     waiting_for_vehicle_query = State()
     choosing_vehicle = State()
     waiting_for_mileage = State()
+    confirming_mileage = State()
 
 
 class AddWorkItemStates(StatesGroup):
@@ -42,3 +43,7 @@ class NewStaffStates(StatesGroup):
 class PaperConsentStates(StatesGroup):
     waiting_for_phone = State()
     waiting_for_full_name = State()
+
+
+class VisitCancelStates(StatesGroup):
+    waiting_for_reason = State()
