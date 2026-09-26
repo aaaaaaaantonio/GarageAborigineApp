@@ -1,16 +1,11 @@
 from aiogram import Router, F
 from aiogram.fsm.context import FSMContext
-from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import Message
 
 from bot.api_client import ApiClient
+from bot.states import PaperConsentStates
 
 router = Router()
-
-
-class PaperConsentStates(StatesGroup):
-    waiting_for_phone = State()
-    waiting_for_full_name = State()
 
 
 @router.message(F.text == "Регистрация клиента (бумага)")

@@ -37,3 +37,8 @@ class NewStaffStates(StatesGroup):
     choosing_role = State()
     waiting_for_full_name = State()
     waiting_for_telegram_id = State()
+
+
+class PaperConsentStates(StatesGroup):
+    waiting_for_phone = State()
+    waiting_for_full_name = State()
