@@ -49,3 +49,7 @@ class VehicleNotFound(Exception):
 
 class WorkItemNotFound(Exception):
     """Работа в заезде с указанным id не найдена."""
+
+
+class DocumentNotFound(Exception):
+    """Документ по заезду ещё не сформирован или файл отсутствует."""

@@ -5,7 +5,7 @@ from jinja2 import Environment, FileSystemLoader
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import VisitNotFound
+from app.core.exceptions import DocumentNotFound, VisitNotFound
 from app.modules.catalog.repository import CatalogRepository
 from app.modules.clients.models import Client
 from app.modules.documents.storage import FileStorage, LocalFileStorage
@@ -14,6 +14,10 @@ from app.modules.visits.models import Visit, VisitPartItem, VisitWorkItem
 
 TEMPLATE_DIR = __file__.rsplit("/", 1)[0] + "/templates"
 jinja_env = Environment(loader=FileSystemLoader(TEMPLATE_DIR))
+
+
+def _visit_document_path(visit_id: uuid.UUID) -> str:
+    return f"visits/{visit_id}.pdf"
 
 
 class DocumentService:
@@ -62,8 +66,19 @@ class DocumentService:
         )
 
         pdf_bytes = weasyprint.HTML(string=html).write_pdf()
-        url = self.storage.save(pdf_bytes, f"visits/{visit_id}.pdf")
+        url = self.storage.save(pdf_bytes, _visit_document_path(visit_id))
 
         visit.document_url = url
         await self.session.flush()
         return url
+
+    async def get_visit_document(self, visit_id: uuid.UUID) -> bytes:
+        """PDF-файл заезда. Документ хранится один на заезд, поэтому его
+        идентификатор совпадает с visit_id."""
+        visit = await self.session.get(Visit, visit_id)
+        if visit is None or visit.document_url is None:
+            raise DocumentNotFound()
+        content = self.storage.read(_visit_document_path(visit_id))
+        if content is None:
+            raise DocumentNotFound()
+        return content

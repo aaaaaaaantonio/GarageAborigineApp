@@ -1,5 +1,5 @@
 from aiogram import Router
-from aiogram.types import CallbackQuery
+from aiogram.types import BufferedInputFile, CallbackQuery
 
 from bot.api_client import ApiClient
 
@@ -10,5 +10,6 @@ router = Router()
 async def generate_document_callback(callback: CallbackQuery, api: ApiClient, **kwargs) -> None:
     _, visit_id = callback.data.split(":")
     result = await api.generate_document(visit_id)
-    await callback.message.answer(f"Документ готов: {result['document_url']}")
+    content = await api.get_document_file(result["document_id"])
+    await callback.message.answer_document(BufferedInputFile(content, filename=f"zakaz-naryad-{visit_id}.pdf"))
     await callback.answer()

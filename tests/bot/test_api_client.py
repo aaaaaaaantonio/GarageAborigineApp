@@ -116,3 +116,91 @@ async def test_get_raises_api_unavailable_on_connection_error():
     client = ApiClient()
     with pytest.raises(ApiUnavailable, match="Сервис временно недоступен"):
         await client.get("/clients")
+
+
+@respx.mock
+async def test_422_with_pydantic_error_list_becomes_readable_text():
+    respx.post("http://localhost:8000/clients").mock(
+        return_value=httpx.Response(
+            422,
+            json={
+                "detail": [
+                    {"loc": ["body", "phone"], "msg": "Field required", "type": "missing"},
+                    {"loc": ["body", "full_name"], "msg": "String too short", "type": "string_too_short"},
+                ]
+            },
+        )
+    )
+    client = ApiClient()
+    with pytest.raises(ApiValidationError) as exc_info:
+        await client.post("/clients", json={})
+    assert isinstance(exc_info.value.message, str)
+    assert "phone: Field required" in exc_info.value.message
+    assert "full_name: String too short" in exc_info.value.message
+
+
+@respx.mock
+async def test_change_visit_status_sends_reason():
+    route = respx.patch("http://localhost:8000/visits/v1/status").mock(
+        return_value=httpx.Response(200, json={"id": "v1", "status": "cancelled"})
+    )
+    await ApiClient().change_visit_status("v1", "cancelled", reason="Клиент передумал")
+    import json as _json
+
+    assert _json.loads(route.calls.last.request.content) == {"new_status": "cancelled", "reason": "Клиент передумал"}
+
+
+@respx.mock
+async def test_create_visit_sends_mileage_manually_confirmed():
+    route = respx.post("http://localhost:8000/visits").mock(
+        return_value=httpx.Response(201, json={"id": "v1", "status": "received"})
+    )
+    await ApiClient().create_visit(
+        client_id="c1", vehicle_id="veh1", assigned_master_id="m1", mileage_at_intake=100,
+        mileage_manually_confirmed=True,
+    )
+    import json as _json
+
+    assert _json.loads(route.calls.last.request.content)["mileage_manually_confirmed"] is True
+
+
+@respx.mock
+async def test_create_visit_409_raises_mileage_rollback():
+    from bot.api_client import ApiMileageRollback
+
+    respx.post("http://localhost:8000/visits").mock(
+        return_value=httpx.Response(409, json={"detail": "Пробег меньше последнего зафиксированного"})
+    )
+    with pytest.raises(ApiMileageRollback):
+        await ApiClient().create_visit(
+            client_id="c1", vehicle_id="veh1", assigned_master_id="m1", mileage_at_intake=100
+        )
+
+
+@respx.mock
+async def test_attach_owner_posts_ownership():
+    route = respx.post("http://localhost:8000/vehicles/veh1/owners").mock(
+        return_value=httpx.Response(201, json={"id": "o1"})
+    )
+    await ApiClient().attach_owner("veh1", "c1", date_from="2026-09-27")
+    import json as _json
+
+    assert _json.loads(route.calls.last.request.content) == {"client_id": "c1", "date_from": "2026-09-27"}
+
+
+@respx.mock
+async def test_get_document_file_returns_bytes():
+    respx.get("http://localhost:8000/documents/d1/file").mock(
+        return_value=httpx.Response(200, content=b"%PDF-1.7", headers={"content-type": "application/pdf"})
+    )
+    assert await ApiClient().get_document_file("d1") == b"%PDF-1.7"
+
+
+@respx.mock
+async def test_generate_document_uses_long_timeout():
+    route = respx.post("http://localhost:8000/visits/v1/document").mock(
+        return_value=httpx.Response(200, json={"document_id": "v1", "document_url": "/x.pdf"})
+    )
+    await ApiClient().generate_document("v1")
+    timeout = route.calls.last.request.extensions["timeout"]
+    assert timeout["read"] >= 30
