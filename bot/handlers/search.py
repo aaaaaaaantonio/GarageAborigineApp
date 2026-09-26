@@ -1,4 +1,5 @@
-from aiogram import Router, F
+from aiogram import F, Router
+from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
 from bot.api_client import ApiClient
@@ -6,8 +7,9 @@ from bot.api_client import ApiClient
 router = Router()
 
 
-@router.message(F.text == "Поиск")
-async def start_search(message: Message, **kwargs) -> None:
+async def start_search(message: Message, state: FSMContext, **kwargs) -> None:
+    """Menu entry point (registered in bot/handlers/menu.py)."""
+    await state.clear()
     await message.answer("Введите телефон, VIN, гос.номер или имя клиента:")
 
 

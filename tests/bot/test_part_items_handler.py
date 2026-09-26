@@ -27,7 +27,7 @@ async def test_start_add_part_item_asks_for_name_and_stores_ids():
     data = await state.get_data()
     assert data == {"visit_id": visit_id, "work_item_id": work_item_id}
     assert (await state.get_state()) == AddPartItemStates.waiting_for_name.state
-    callback.message.answer.assert_awaited_once_with("Введите название запчасти:")
+    callback.message.answer.assert_awaited_once_with("Введите название запчасти (/cancel — отмена):")
     callback.answer.assert_awaited_once()
 
 

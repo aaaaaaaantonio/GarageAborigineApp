@@ -5,6 +5,7 @@ from aiogram.types import Message
 
 from bot.api_client import ApiClient
 from bot.states import NewVehicleStates, NewVisitStates
+from bot.texts import CANCEL_HINT
 
 router = Router()
 
@@ -13,7 +14,7 @@ router = Router()
 async def start_new_vehicle(message: Message, state: FSMContext, **kwargs) -> None:
     await state.clear()
     await state.set_state(NewVehicleStates.waiting_for_vin)
-    await message.answer("Введите VIN:")
+    await message.answer(f"Введите VIN {CANCEL_HINT}:")
 
 
 @router.message(NewVehicleStates.waiting_for_vin)

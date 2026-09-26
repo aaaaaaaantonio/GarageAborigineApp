@@ -1,25 +1,27 @@
-from aiogram import Router, F
+from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from bot.api_client import ApiClient
 from bot.states import NewStaffStates
+from bot.texts import CANCEL_HINT
 
 router = Router()
 
 
-@router.message(F.text == "Добавить сотрудника")
 async def start_new_staff(message: Message, state: FSMContext, **kwargs) -> None:
+    """Menu entry point (registered in bot/handlers/menu.py)."""
+    await state.clear()
     builder = InlineKeyboardBuilder()
     for role in ("admin", "master", "mechanic"):
         builder.button(text=role, callback_data=f"staff_role:{role}")
     builder.adjust(1)
     await state.set_state(NewStaffStates.choosing_role)
-    await message.answer("Выберите роль:", reply_markup=builder.as_markup())
+    await message.answer(f"Выберите роль {CANCEL_HINT}:", reply_markup=builder.as_markup())
 
 
-@router.callback_query(lambda c: c.data.startswith("staff_role:"))
+@router.callback_query(NewStaffStates.choosing_role, F.data.startswith("staff_role:"))
 async def choose_staff_role(callback, state: FSMContext, **kwargs) -> None:
     _, role = callback.data.split(":")
     await state.update_data(role=role)

@@ -1,6 +1,14 @@
 from unittest.mock import AsyncMock
 
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.storage.base import StorageKey
+from aiogram.fsm.storage.memory import MemoryStorage
+
 from bot.handlers.mechanic import change_work_status_callback, show_my_work_items
+
+
+def _fsm_context() -> FSMContext:
+    return FSMContext(storage=MemoryStorage(), key=StorageKey(bot_id=1, chat_id=1, user_id=1))
 
 
 async def test_show_my_work_items_handles_empty_list():
@@ -8,7 +16,7 @@ async def test_show_my_work_items_handles_empty_list():
     api = AsyncMock()
     api.list_my_work_items.return_value = []
 
-    await show_my_work_items(message, api=api)
+    await show_my_work_items(message, _fsm_context(), api=api)
 
     message.answer.assert_awaited_once_with("У вас нет назначенных работ.")
 
@@ -20,7 +28,7 @@ async def test_show_my_work_items_sends_status_button_per_item():
         {"id": "wi1", "visit_id": "visit1", "status": "not_ready", "free_text_name": "Замена масла", "catalog_item_id": None}
     ]
 
-    await show_my_work_items(message, api=api)
+    await show_my_work_items(message, _fsm_context(), api=api)
 
     message.answer.assert_awaited_once()
     args, kwargs = message.answer.await_args
@@ -35,7 +43,7 @@ async def test_show_my_work_items_omits_button_when_no_next_status():
         {"id": "wi1", "visit_id": "visit1", "status": "ready", "free_text_name": "Замена масла", "catalog_item_id": None}
     ]
 
-    await show_my_work_items(message, api=api)
+    await show_my_work_items(message, _fsm_context(), api=api)
 
     _, kwargs = message.answer.await_args
     assert kwargs["reply_markup"] is None
@@ -67,7 +75,7 @@ async def test_show_my_work_items_callback_data_fits_telegram_limit():
         }
     ]
 
-    await show_my_work_items(message, api=api)
+    await show_my_work_items(message, _fsm_context(), api=api)
 
     _, kwargs = message.answer.await_args
     markup = kwargs["reply_markup"]
@@ -87,7 +95,7 @@ async def test_show_my_work_items_numbers_catalog_items_without_free_text_name()
         }
     ]
 
-    await show_my_work_items(message, api=api)
+    await show_my_work_items(message, _fsm_context(), api=api)
 
     args, _ = message.answer.await_args
     assert args[0].startswith("работа №1 —")

@@ -5,6 +5,7 @@ from aiogram.types import Message
 
 from bot.api_client import ApiClient
 from bot.states import NewClientStates, NewVisitStates
+from bot.texts import CANCEL_HINT
 
 router = Router()
 
@@ -13,7 +14,7 @@ router = Router()
 async def start_new_client(message: Message, state: FSMContext, **kwargs) -> None:
     await state.clear()
     await state.set_state(NewClientStates.waiting_for_phone)
-    await message.answer("Введите телефон клиента:")
+    await message.answer(f"Введите телефон клиента {CANCEL_HINT}:")
 
 
 @router.message(NewClientStates.waiting_for_phone)

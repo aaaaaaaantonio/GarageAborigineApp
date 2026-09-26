@@ -8,6 +8,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from bot.api_client import ApiClient
 from bot.states import NewClientStates, NewVehicleStates, NewVisitStates
+from bot.texts import CANCEL_HINT
 
 
 def _encode_id(raw_id: str) -> str:
@@ -55,11 +56,11 @@ async def send_visit_card(message: Message, visit: dict, work_items: list[dict])
     )
 
 
-@router.message(F.text == "Новый заезд")
 async def start_new_visit(message: Message, state: FSMContext, **kwargs) -> None:
+    """Menu entry point (registered in bot/handlers/menu.py)."""
     await state.clear()
     await state.set_state(NewVisitStates.waiting_for_client_query)
-    await message.answer("Введите телефон или ФИО клиента:")
+    await message.answer(f"Введите телефон или ФИО клиента {CANCEL_HINT}:")
 
 
 @router.message(NewVisitStates.waiting_for_client_query)
@@ -80,7 +81,7 @@ async def receive_client_query(message: Message, state: FSMContext, api: ApiClie
     await message.answer("Выберите клиента:", reply_markup=builder.as_markup())
 
 
-@router.callback_query(lambda c: c.data.startswith("client_pick:"))
+@router.callback_query(NewVisitStates.choosing_client, F.data.startswith("client_pick:"))
 async def choose_client_callback(callback: CallbackQuery, state: FSMContext, **kwargs) -> None:
     _, client_id = callback.data.split(":")
     await state.update_data(client_id=client_id)
@@ -107,7 +108,7 @@ async def receive_vehicle_query(message: Message, state: FSMContext, api: ApiCli
     await message.answer("Выберите автомобиль:", reply_markup=builder.as_markup())
 
 
-@router.callback_query(lambda c: c.data.startswith("vehicle_pick:"))
+@router.callback_query(NewVisitStates.choosing_vehicle, F.data.startswith("vehicle_pick:"))
 async def choose_vehicle_callback(callback: CallbackQuery, state: FSMContext, **kwargs) -> None:
     _, vehicle_id = callback.data.split(":")
     await state.update_data(vehicle_id=vehicle_id)

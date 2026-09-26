@@ -1,4 +1,4 @@
-from aiogram import Router
+from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
@@ -6,7 +6,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from bot.api_client import ApiClient
 from bot.handlers.visits import send_visit_card
 from bot.states import AddWorkItemStates
-from bot.texts import TEXT_REQUIRED
+from bot.texts import CANCEL_HINT, TEXT_REQUIRED
 
 router = Router()
 
@@ -20,13 +20,13 @@ _CATEGORY_LABELS = {
 }
 
 
-@router.callback_query(lambda c: c.data.startswith("add_work:"))
+@router.callback_query(F.data.startswith("add_work:"))
 async def start_add_work_item(callback: CallbackQuery, state: FSMContext, **kwargs) -> None:
     _, visit_id = callback.data.split(":")
     await state.clear()
     await state.update_data(visit_id=visit_id)
     await state.set_state(AddWorkItemStates.waiting_for_name)
-    await callback.message.answer("Введите название работы:")
+    await callback.message.answer(f"Введите название работы {CANCEL_HINT}:")
     await callback.answer()
 
 
@@ -49,7 +49,7 @@ async def receive_work_name(message: Message, state: FSMContext, api: ApiClient,
     await message.answer("Выберите работу из справочника или укажите свою:", reply_markup=builder.as_markup())
 
 
-@router.callback_query(lambda c: c.data.startswith("catalog_pick:"))
+@router.callback_query(AddWorkItemStates.choosing_suggestion, F.data.startswith("catalog_pick:"))
 async def choose_catalog_callback(callback: CallbackQuery, state: FSMContext, **kwargs) -> None:
     _, picked = callback.data.split(":")
     if picked == "none":
@@ -73,7 +73,7 @@ async def choose_catalog_callback(callback: CallbackQuery, state: FSMContext, **
     await callback.answer()
 
 
-@router.callback_query(lambda c: c.data.startswith("category_pick:"))
+@router.callback_query(AddWorkItemStates.choosing_category, F.data.startswith("category_pick:"))
 async def choose_category_callback(callback: CallbackQuery, state: FSMContext, **kwargs) -> None:
     _, category = callback.data.split(":")
     await state.update_data(category=category)

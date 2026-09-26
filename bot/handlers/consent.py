@@ -1,17 +1,19 @@
-from aiogram import Router, F
+from aiogram import Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
 from bot.api_client import ApiClient
 from bot.states import PaperConsentStates
+from bot.texts import CANCEL_HINT
 
 router = Router()
 
 
-@router.message(F.text == "Регистрация клиента (бумага)")
 async def start_paper_consent(message: Message, state: FSMContext, **kwargs) -> None:
+    """Menu entry point (registered in bot/handlers/menu.py)."""
+    await state.clear()
     await state.set_state(PaperConsentStates.waiting_for_phone)
-    await message.answer("Введите телефон клиента:")
+    await message.answer(f"Введите телефон клиента {CANCEL_HINT}:")
 
 
 @router.message(PaperConsentStates.waiting_for_phone)

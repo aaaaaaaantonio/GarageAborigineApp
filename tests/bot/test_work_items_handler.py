@@ -32,7 +32,7 @@ async def test_start_add_work_item_asks_for_name_and_stores_visit_id():
     data = await state.get_data()
     assert data == {"visit_id": "visit1"}
     assert (await state.get_state()) == AddWorkItemStates.waiting_for_name.state
-    callback.message.answer.assert_awaited_once_with("Введите название работы:")
+    callback.message.answer.assert_awaited_once_with("Введите название работы (/cancel — отмена):")
     callback.answer.assert_awaited_once()
 
 

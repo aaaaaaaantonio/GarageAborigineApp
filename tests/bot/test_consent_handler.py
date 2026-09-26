@@ -34,5 +34,5 @@ async def test_start_paper_consent_asks_for_phone():
 
     await start_paper_consent(message, state)
 
-    message.answer.assert_awaited_once_with("Введите телефон клиента:")
+    message.answer.assert_awaited_once_with("Введите телефон клиента (/cancel — отмена):")
     assert (await state.get_state()) is not None

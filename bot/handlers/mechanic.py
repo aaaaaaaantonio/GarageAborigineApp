@@ -1,4 +1,5 @@
 from aiogram import F, Router
+from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
@@ -18,8 +19,9 @@ def _next_status(current: str) -> str | None:
     return _STATUS_ORDER[index + 1]
 
 
-@router.message(F.text == "Мои работы")
-async def show_my_work_items(message: Message, api: ApiClient, **kwargs) -> None:
+async def show_my_work_items(message: Message, state: FSMContext, api: ApiClient, **kwargs) -> None:
+    """Menu entry point (registered in bot/handlers/menu.py)."""
+    await state.clear()
     items = await api.list_my_work_items()
     if not items:
         await message.answer("У вас нет назначенных работ.")
