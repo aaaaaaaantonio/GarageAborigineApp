@@ -5,6 +5,7 @@ from aiogram.types import CallbackQuery, Message
 from bot.api_client import ApiClient
 from bot.handlers.visits import _decode_id, send_visit_card
 from bot.states import AddPartItemStates
+from bot.texts import TEXT_REQUIRED
 
 router = Router()
 
@@ -23,6 +24,9 @@ async def start_add_part_item(callback: CallbackQuery, state: FSMContext, **kwar
 
 @router.message(AddPartItemStates.waiting_for_name)
 async def receive_part_name(message: Message, state: FSMContext, **kwargs) -> None:
+    if message.text is None:
+        await message.answer(TEXT_REQUIRED)
+        return
     await state.update_data(name=message.text)
     await state.set_state(AddPartItemStates.waiting_for_quantity_and_price)
     await message.answer("Введите количество и цену через пробел (например: 2 350):")
@@ -30,6 +34,9 @@ async def receive_part_name(message: Message, state: FSMContext, **kwargs) -> No
 
 @router.message(AddPartItemStates.waiting_for_quantity_and_price)
 async def receive_quantity_and_price(message: Message, state: FSMContext, api: ApiClient, **kwargs) -> None:
+    if message.text is None:
+        await message.answer(TEXT_REQUIRED)
+        return
     try:
         quantity_str, price_str = message.text.split()
         quantity = int(quantity_str)

@@ -155,3 +155,31 @@ async def test_receive_hours_and_rate_reprompts_on_malformed_free_text_input():
     message.answer.assert_awaited_once_with(
         "Введите нормо-часы и ставку через пробел, например: 1.5 800."
     )
+
+
+async def test_receive_hours_and_rate_asks_for_text_on_non_text_message():
+    message = AsyncMock()
+    message.text = None
+    state = _fsm_context()
+    await state.set_state(AddWorkItemStates.waiting_for_hours_and_rate)
+    await state.update_data(visit_id="visit1", free_text_name="Своя работа", category="body")
+    api = AsyncMock()
+
+    await receive_hours_and_rate(message, state, api=api)
+
+    api.add_work_item.assert_not_awaited()
+    message.answer.assert_awaited_once_with("Пожалуйста, отправьте ответ текстом.")
+    assert (await state.get_state()) == AddWorkItemStates.waiting_for_hours_and_rate.state
+
+
+async def test_receive_work_name_asks_for_text_on_non_text_message():
+    message = AsyncMock()
+    message.text = None
+    state = _fsm_context()
+    await state.set_state(AddWorkItemStates.waiting_for_name)
+    api = AsyncMock()
+
+    await receive_work_name(message, state, api=api)
+
+    api.suggest_catalog.assert_not_awaited()
+    message.answer.assert_awaited_once_with("Пожалуйста, отправьте ответ текстом.")

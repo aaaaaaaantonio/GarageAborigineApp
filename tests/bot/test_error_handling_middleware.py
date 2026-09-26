@@ -1,7 +1,5 @@
 from unittest.mock import AsyncMock
 
-import pytest
-
 from bot.api_client import ApiConflict, ApiNotFound
 from bot.middlewares.error_handling import ErrorHandlingMiddleware
 
@@ -45,13 +43,14 @@ async def test_api_conflict_is_caught_and_replied():
     event.answer.assert_awaited_once_with("Переход между статусами не разрешён")
 
 
-async def test_non_api_error_propagates():
+async def test_unexpected_error_is_logged_and_replied_generically(caplog):
     middleware = ErrorHandlingMiddleware()
     handler = AsyncMock(side_effect=ValueError("boom"))
     event = AsyncMock()
     data = {}
 
-    with pytest.raises(ValueError, match="boom"):
-        await middleware(handler, event, data)
+    result = await middleware(handler, event, data)
 
-    event.answer.assert_not_awaited()
+    assert result is None
+    event.answer.assert_awaited_once_with("Что-то пошло не так, попробуйте ещё раз.")
+    assert "boom" in caplog.text

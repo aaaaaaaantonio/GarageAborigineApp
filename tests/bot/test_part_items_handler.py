@@ -76,3 +76,29 @@ async def test_receive_quantity_and_price_reprompts_on_malformed_input():
     api.add_part_item.assert_not_awaited()
     message.answer.assert_awaited_once_with("Введите количество и цену через пробел, например: 2 350.")
     assert (await state.get_state()) == AddPartItemStates.waiting_for_quantity_and_price.state
+
+
+async def test_receive_quantity_and_price_asks_for_text_on_non_text_message():
+    message = AsyncMock()
+    message.text = None
+    state = _fsm_context()
+    await state.set_state(AddPartItemStates.waiting_for_quantity_and_price)
+    await state.update_data(visit_id="visit1", work_item_id="wi1", name="Фильтр")
+    api = AsyncMock()
+
+    await receive_quantity_and_price(message, state, api=api)
+
+    api.add_part_item.assert_not_awaited()
+    message.answer.assert_awaited_once_with("Пожалуйста, отправьте ответ текстом.")
+
+
+async def test_receive_part_name_asks_for_text_on_non_text_message():
+    message = AsyncMock()
+    message.text = None
+    state = _fsm_context()
+    await state.set_state(AddPartItemStates.waiting_for_name)
+
+    await receive_part_name(message, state)
+
+    assert "name" not in await state.get_data()
+    message.answer.assert_awaited_once_with("Пожалуйста, отправьте ответ текстом.")

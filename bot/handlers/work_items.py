@@ -6,6 +6,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from bot.api_client import ApiClient
 from bot.handlers.visits import send_visit_card
 from bot.states import AddWorkItemStates
+from bot.texts import TEXT_REQUIRED
 
 router = Router()
 
@@ -31,6 +32,9 @@ async def start_add_work_item(callback: CallbackQuery, state: FSMContext, **kwar
 
 @router.message(AddWorkItemStates.waiting_for_name)
 async def receive_work_name(message: Message, state: FSMContext, api: ApiClient, **kwargs) -> None:
+    if message.text is None:
+        await message.answer(TEXT_REQUIRED)
+        return
     suggestions = await api.suggest_catalog(message.text)
     await state.update_data(
         free_text_name=message.text,
@@ -80,6 +84,9 @@ async def choose_category_callback(callback: CallbackQuery, state: FSMContext, *
 
 @router.message(AddWorkItemStates.waiting_for_hours_and_rate)
 async def receive_hours_and_rate(message: Message, state: FSMContext, api: ApiClient, **kwargs) -> None:
+    if message.text is None:
+        await message.answer(TEXT_REQUIRED)
+        return
     data = await state.get_data()
     try:
         if "norm_hours" in data:
