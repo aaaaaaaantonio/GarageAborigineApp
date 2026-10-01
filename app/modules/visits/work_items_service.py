@@ -75,10 +75,20 @@ class WorkItemService:
         item = await self.session.get(VisitWorkItem, item_id)
         if item is None:
             raise WorkItemNotFound()
-        if acting_user.role.value == "mechanic" and item.assigned_mechanic_id != acting_user.id:
+        if acting_user.role == UserRole.MECHANIC and item.assigned_mechanic_id != acting_user.id:
             raise NotAssignedMechanic()
+        old_status = item.status
         item.status = new_status
         await self.session.flush()
+        await record_audit(
+            self.session,
+            user=acting_user,
+            entity_type="visit_work_item",
+            entity_id=item.id,
+            action="status_change",
+            old_value={"status": old_status.value},
+            new_value={"status": new_status.value},
+        )
         return (await self._with_names([item]))[0]
 
     async def approve(self, item_id: uuid.UUID, acting_user: User) -> VisitWorkItem:
@@ -89,6 +99,14 @@ class WorkItemService:
         item.approved_at = datetime.now(timezone.utc)
         item.approved_via = ApprovedVia.CRM_STATUS
         await self.session.flush()
+        await record_audit(
+            self.session,
+            user=acting_user,
+            entity_type="visit_work_item",
+            entity_id=item.id,
+            action="approve",
+            new_value={"approved_via": item.approved_via.value},
+        )
         return (await self._with_names([item]))[0]
 
     async def list_mine(self, acting_user: User) -> list[VisitWorkItem]:
