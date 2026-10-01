@@ -1,5 +1,6 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.exceptions import ClientPhoneTaken
 from app.core.phone import normalize_phone
 from app.modules.clients.models import Client
 from app.modules.clients.repository import ClientRepository
@@ -14,9 +15,12 @@ class ClientService:
         self.repo = ClientRepository(session)
 
     async def create_client(self, data: ClientCreate, acting_user: User | None = None) -> Client:
+        phone_normalized = normalize_phone(data.phone)
+        if await self.repo.get_by_phone_normalized(phone_normalized) is not None:
+            raise ClientPhoneTaken()
         client = Client(
             full_name=data.full_name,
-            phone_normalized=normalize_phone(data.phone),
+            phone_normalized=phone_normalized,
             phone_display=data.phone,
             client_type=data.client_type,
             legal_details=data.legal_details,

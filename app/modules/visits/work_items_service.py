@@ -4,8 +4,8 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.enums import ApprovedVia, WorkItemStatus
-from app.core.exceptions import NotAssignedMechanic, VisitNotFound, WorkItemNotFound
+from app.core.enums import ApprovedVia, UserRole, WorkItemStatus
+from app.core.exceptions import InvalidAssignedMechanic, NotAssignedMechanic, VisitNotFound, WorkItemNotFound
 from app.modules.catalog.repository import CatalogRepository
 from app.modules.users.audit import record_audit
 from app.modules.users.models import User
@@ -30,6 +30,10 @@ class WorkItemService:
         visit = await self.session.get(Visit, visit_id)
         if visit is None:
             raise VisitNotFound()
+        if data.assigned_mechanic_id is not None:
+            mechanic = await self.session.get(User, data.assigned_mechanic_id)
+            if mechanic is None or mechanic.deleted_at is not None or mechanic.role != UserRole.MECHANIC:
+                raise InvalidAssignedMechanic()
 
         item = VisitWorkItem(
             visit_id=visit_id,
@@ -71,10 +75,20 @@ class WorkItemService:
         item = await self.session.get(VisitWorkItem, item_id)
         if item is None:
             raise WorkItemNotFound()
-        if acting_user.role.value == "mechanic" and item.assigned_mechanic_id != acting_user.id:
+        if acting_user.role == UserRole.MECHANIC and item.assigned_mechanic_id != acting_user.id:
             raise NotAssignedMechanic()
+        old_status = item.status
         item.status = new_status
         await self.session.flush()
+        await record_audit(
+            self.session,
+            user=acting_user,
+            entity_type="visit_work_item",
+            entity_id=item.id,
+            action="status_change",
+            old_value={"status": old_status.value},
+            new_value={"status": new_status.value},
+        )
         return (await self._with_names([item]))[0]
 
     async def approve(self, item_id: uuid.UUID, acting_user: User) -> VisitWorkItem:
@@ -85,6 +99,14 @@ class WorkItemService:
         item.approved_at = datetime.now(timezone.utc)
         item.approved_via = ApprovedVia.CRM_STATUS
         await self.session.flush()
+        await record_audit(
+            self.session,
+            user=acting_user,
+            entity_type="visit_work_item",
+            entity_id=item.id,
+            action="approve",
+            new_value={"approved_via": item.approved_via.value},
+        )
         return (await self._with_names([item]))[0]
 
     async def list_mine(self, acting_user: User) -> list[VisitWorkItem]:

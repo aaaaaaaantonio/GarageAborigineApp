@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_session
 from app.core.enums import UserRole
-from app.core.exceptions import NotAssignedMechanic, VisitNotFound, WorkItemNotFound
+from app.core.exceptions import InvalidAssignedMechanic, NotAssignedMechanic, VisitNotFound, WorkItemNotFound
 from app.modules.users.auth import require_role
 from app.modules.users.models import User
 from app.modules.visits.work_items_schemas import WorkItemCreate, WorkItemOut, WorkItemStatusChange
@@ -26,6 +26,8 @@ async def add_work_item(
         item = await service.add_item(visit_id, data, acting_user)
     except VisitNotFound:
         raise HTTPException(404, "Visit not found")
+    except InvalidAssignedMechanic:
+        raise HTTPException(422, "assigned_mechanic_id должен ссылаться на активного пользователя с ролью MECHANIC")
     await session.commit()
     return item
 

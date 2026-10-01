@@ -7,12 +7,16 @@ class InvalidAssignedMaster(Exception):
     """assigned_master_id не ссылается на активного пользователя с ролью MASTER."""
 
 
+class ClientPhoneTaken(Exception):
+    """Телефон уже принадлежит активному (не удалённому) клиенту."""
+
+
+class InvalidAssignedMechanic(Exception):
+    """assigned_mechanic_id не ссылается на активного пользователя с ролью MECHANIC."""
+
+
 class NotAssignedMechanic(Exception):
     """Механик пытается изменить статус работы, назначенной не на него."""
-
-
-class MissingWorkNameSource(Exception):
-    """Ни catalog_item_id, ни free_text_name не указаны."""
 
 
 class InvalidTransition(Exception):

@@ -210,3 +210,17 @@ Still open (not touched this pass — lower priority, left for a future cleanup 
 ## Worktree cleanup (2026-09-19)
 
 After the merge above, `git worktree remove --force .claude/worktrees/crm-backend` was run to delete the now-merged feature worktree/branch. This directory (`.superpowers/sdd/2026-09-15-crm-backend-plan/`) lived only inside that worktree and was never git-tracked, so the force-remove deleted it along with the venv/lockfile it was meant to clear. This file was reconstructed from conversation context immediately after (see recovery note at the top); the task-N-brief/report files and review-*.diff files were not recoverable. This copy now lives at `.superpowers/sdd/` under the **main** repo root — should be committed to git if it's meant to survive future worktree cleanups.
+
+## Tech-debt pass (2026-10-01, branch backend-tech-debt, commits 8b43fcd..870ec8c)
+
+Closed everything left in "Still open" above plus the Task 8 minors:
+- deleted_at filters on ClientRepository.get / VehicleRepository.get_by_vin.
+- Partial unique index uq_clients_phone_normalized_active (WHERE deleted_at IS NULL) + ClientPhoneTaken → 409 on POST /clients, /consent/paper, /consent/confirm. Migration a3f5c1e8d2b4.
+- GIN trigram index ix_work_catalog_name_trgm + `name % :q` predicate (pg_trgm.similarity_threshold set per transaction) so suggest() can use it. Migration b7d2e9f4a6c1.
+- class Config → ConfigDict; pytest now errors on PydanticDeprecatedSince20.
+- InvalidAssignedMechanic (422) on add_item; unknown id previously surfaced as 500 FK violation.
+- audit_log rows for work-item status_change and approve; mechanic role compared via UserRole enum.
+- Removed dead MissingWorkNameSource.
+Suite: 198 passed. Remaining warning is WeasyPrint wanting system HarfBuzz-Subset (environment, not code).
+
+Open, found during this pass (not fixed): bot never sends assigned_mechanic_id when adding a work item, so a mechanic's "Мои работы" is always empty in practice. search module's fuzzy client/vehicle matching has the same no-index pattern as catalog suggest had.

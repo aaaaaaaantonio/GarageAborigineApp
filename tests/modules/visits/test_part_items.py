@@ -17,13 +17,13 @@ from app.modules.visits.work_items_schemas import WorkItemCreate
 from app.modules.visits.work_items_service import WorkItemService
 
 
-async def _setup_visit_with_work_item(session, vin="X" * 17):
+async def _setup_visit_with_work_item(session, vin="X" * 17, phone="79991234567"):
     admin = User(role=UserRole.ADMIN, full_name="Админ", branch_id=uuid.uuid4())
     master = User(role=UserRole.MASTER, full_name="Мастер", branch_id=uuid.uuid4())
     session.add_all([admin, master])
     await session.flush()
 
-    client = await ClientService(session).create_client(ClientCreate(full_name="Иван", phone="79991234567"), admin)
+    client = await ClientService(session).create_client(ClientCreate(full_name="Иван", phone=phone), admin)
     vehicle = await VehicleService(session).create_vehicle(
         VehicleCreate(vin=vin, plate_number="А123", make="Toyota", model="Camry"), admin
     )
@@ -92,7 +92,7 @@ async def test_add_item_unknown_visit_raises_not_found(session):
 
 async def test_add_item_work_item_from_other_visit_rejected(session):
     admin, visit_a, work_item_a = await _setup_visit_with_work_item(session, vin="X" * 17)
-    _, visit_b, _ = await _setup_visit_with_work_item(session, vin="Y" * 17)
+    _, visit_b, _ = await _setup_visit_with_work_item(session, vin="Y" * 17, phone="79997654321")
 
     with pytest.raises(WorkItemNotFound):
         await PartItemService(session).add_item(
