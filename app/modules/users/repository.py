@@ -3,6 +3,7 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.enums import UserRole
 from app.modules.users.models import User
 
 
@@ -20,6 +21,12 @@ class UserRepository:
 
     async def list_active(self) -> list[User]:
         result = await self.session.execute(select(User).where(User.deleted_at.is_(None)))
+        return list(result.scalars())
+
+    async def list_active_by_role(self, role: UserRole) -> list[User]:
+        result = await self.session.execute(
+            select(User).where(User.role == role, User.deleted_at.is_(None)).order_by(User.full_name)
+        )
         return list(result.scalars())
 
     async def get_by_telegram_id(self, telegram_id: int) -> User | None:
