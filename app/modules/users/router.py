@@ -32,6 +32,15 @@ async def list_users(
     return await service.list_users()
 
 
+@router.get("/mechanics", response_model=list[UserOut])
+async def list_mechanics(
+    session: AsyncSession = Depends(get_session),
+    acting_user: User = Depends(require_role(UserRole.ADMIN, UserRole.MASTER)),
+):
+    service = UserService(session)
+    return await service.list_mechanics()
+
+
 @router.get("/by-telegram/{telegram_id}", response_model=UserOut)
 async def get_user_by_telegram(
     telegram_id: int,

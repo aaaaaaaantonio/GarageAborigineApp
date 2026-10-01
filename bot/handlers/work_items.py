@@ -4,6 +4,7 @@ from aiogram.types import CallbackQuery, Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from bot.api_client import ApiClient
+from bot.callback_ids import decode_id, encode_id
 from bot.handlers.visits import refresh_visit_card
 from bot.states import AddWorkItemStates
 from bot.texts import CANCEL_HINT, TEXT_REQUIRED
@@ -103,13 +104,39 @@ async def receive_hours_and_rate(message: Message, state: FSMContext, api: ApiCl
             await message.answer("Введите нормо-часы и ставку через пробел, например: 1.5 800.")
         return
 
+    await state.update_data(norm_hours=norm_hours, hourly_rate=hourly_rate)
+    mechanics = await api.list_mechanics()
+    if not mechanics:
+        await _create_work_item(message, state, api, assigned_mechanic_id=None)
+        return
+
+    builder = InlineKeyboardBuilder()
+    for mechanic in mechanics:
+        builder.button(text=mechanic["full_name"], callback_data=f"assign_mech:{encode_id(mechanic['id'])}")
+    builder.button(text="Без исполнителя", callback_data="assign_mech:none")
+    builder.adjust(1)
+    await state.set_state(AddWorkItemStates.choosing_mechanic)
+    await message.answer("Кому назначить работу?", reply_markup=builder.as_markup())
+
+
+@router.callback_query(AddWorkItemStates.choosing_mechanic, F.data.startswith("assign_mech:"))
+async def choose_mechanic_callback(callback: CallbackQuery, state: FSMContext, api: ApiClient, **kwargs) -> None:
+    _, picked = callback.data.split(":")
+    mechanic_id = None if picked == "none" else decode_id(picked)
+    await _create_work_item(callback.message, state, api, assigned_mechanic_id=mechanic_id)
+    await callback.answer()
+
+
+async def _create_work_item(message: Message, state: FSMContext, api: ApiClient, assigned_mechanic_id: str | None) -> None:
+    data = await state.get_data()
     await api.add_work_item(
         data["visit_id"],
         catalog_item_id=data.get("catalog_item_id"),
         free_text_name=None if data.get("catalog_item_id") else data["free_text_name"],
         category=data["category"],
-        norm_hours=norm_hours,
-        hourly_rate=hourly_rate,
+        norm_hours=data["norm_hours"],
+        hourly_rate=data["hourly_rate"],
+        assigned_mechanic_id=assigned_mechanic_id,
     )
     await state.clear()
     await refresh_visit_card(message, api, data["visit_id"])
