@@ -1,5 +1,5 @@
 import uuid
-from datetime import date
+from datetime import date, datetime, timezone
 
 import pytest
 
@@ -9,6 +9,7 @@ from app.modules.clients.schemas import ClientCreate
 from app.modules.clients.service import ClientService
 from app.modules.users.models import User
 from app.modules.vehicles.schemas import OwnershipCreate, VehicleCreate
+from app.modules.vehicles.repository import VehicleRepository
 from app.modules.vehicles.service import VehicleService
 
 
@@ -50,3 +51,16 @@ async def test_attach_owner_unknown_vehicle_raises_not_found(session):
 async def test_update_mileage_unknown_vehicle_raises_not_found(session):
     with pytest.raises(VehicleNotFound):
         await VehicleService(session).update_mileage(uuid.uuid4(), 1000)
+
+
+async def test_get_by_vin_ignores_soft_deleted_vehicle(session):
+    admin = User(role=UserRole.ADMIN, full_name="Админ", branch_id=uuid.uuid4())
+    session.add(admin)
+    await session.flush()
+    vehicle = await VehicleService(session).create_vehicle(
+        VehicleCreate(vin="Y" * 17, plate_number="В456ОР77", make="Lada", model="Vesta"), admin
+    )
+    vehicle.deleted_at = datetime.now(timezone.utc)
+    await session.flush()
+
+    assert await VehicleRepository(session).get_by_vin("Y" * 17) is None

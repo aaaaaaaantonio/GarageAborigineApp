@@ -19,7 +19,9 @@ class VehicleRepository:
         return await self.session.get(Vehicle, vehicle_id)
 
     async def get_by_vin(self, vin: str) -> Vehicle | None:
-        result = await self.session.execute(select(Vehicle).where(Vehicle.vin == vin))
+        result = await self.session.execute(
+            select(Vehicle).where(Vehicle.vin == vin, Vehicle.deleted_at.is_(None))
+        )
         return result.scalars().first()
 
     async def add_ownership(self, ownership: VehicleOwnership) -> VehicleOwnership:

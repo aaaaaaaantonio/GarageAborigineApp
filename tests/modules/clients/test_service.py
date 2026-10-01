@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime, timezone
 
 from app.core.enums import UserRole
 from app.modules.clients.schemas import ClientCreate
@@ -19,3 +20,16 @@ async def test_create_client_normalizes_phone_and_finds_by_any_format(session):
     found = await service.get_by_phone("89991234567")
     assert found is not None
     assert found.full_name == "Иван Иванов"
+
+
+async def test_get_ignores_soft_deleted_client(session):
+    admin = User(role=UserRole.ADMIN, full_name="Админ", branch_id=uuid.uuid4())
+    session.add(admin)
+    await session.flush()
+
+    service = ClientService(session)
+    client = await service.create_client(ClientCreate(full_name="Иван", phone="79991234567"), admin)
+    client.deleted_at = datetime.now(timezone.utc)
+    await session.flush()
+
+    assert await service.get(client.id) is None

@@ -16,7 +16,10 @@ class ClientRepository:
         return client
 
     async def get(self, client_id: uuid.UUID) -> Client | None:
-        return await self.session.get(Client, client_id)
+        result = await self.session.execute(
+            select(Client).where(Client.id == client_id, Client.deleted_at.is_(None))
+        )
+        return result.scalars().first()
 
     async def get_by_phone_normalized(self, phone_normalized: str) -> Client | None:
         result = await self.session.execute(
