@@ -19,10 +19,6 @@ class NotAssignedMechanic(Exception):
     """Механик пытается изменить статус работы, назначенной не на него."""
 
 
-class MissingWorkNameSource(Exception):
-    """Ни catalog_item_id, ни free_text_name не указаны."""
-
-
 class InvalidTransition(Exception):
     """Переход между статусами заезда не разрешён FSM."""
 
