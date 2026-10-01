@@ -33,7 +33,7 @@ class Visit(Base, UUIDPkMixin, TimestampMixin, SoftDeleteMixin):
     document_url: Mapped[str | None] = mapped_column(String, nullable=True)
 
 
-class VisitWorkItem(Base, UUIDPkMixin):
+class VisitWorkItem(Base, UUIDPkMixin, TimestampMixin):
     __tablename__ = "visit_work_items"
 
     visit_id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("visits.id"), nullable=False)

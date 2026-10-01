@@ -28,3 +28,9 @@ class CatalogRepository:
             .limit(limit)
         )
         return list(result.scalars())
+
+    async def names_by_ids(self, ids: set[uuid.UUID]) -> dict[uuid.UUID, str]:
+        if not ids:
+            return {}
+        result = await self.session.execute(select(WorkCatalog.id, WorkCatalog.name).where(WorkCatalog.id.in_(ids)))
+        return {row.id: row.name for row in result}

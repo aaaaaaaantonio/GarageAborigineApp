@@ -7,6 +7,8 @@ from app.core.config import settings
 class FileStorage(Protocol):
     def save(self, content: bytes, relative_path: str) -> str: ...
 
+    def read(self, relative_path: str) -> bytes | None: ...
+
 
 class LocalFileStorage:
     """MVP-реализация поверх локальной ФС. Замена на S3-совместимое
@@ -22,3 +24,9 @@ class LocalFileStorage:
         full_path.parent.mkdir(parents=True, exist_ok=True)
         full_path.write_bytes(content)
         return str(full_path)
+
+    def read(self, relative_path: str) -> bytes | None:
+        full_path = self.root / relative_path
+        if not full_path.is_file():
+            return None
+        return full_path.read_bytes()

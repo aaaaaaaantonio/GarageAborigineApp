@@ -30,6 +30,19 @@ async def add_work_item(
     return item
 
 
+@router.get("", response_model=list[WorkItemOut])
+async def list_work_items(
+    visit_id: uuid.UUID,
+    session: AsyncSession = Depends(get_session),
+    acting_user: User = Depends(require_role(UserRole.ADMIN, UserRole.MASTER, UserRole.MECHANIC)),
+):
+    service = WorkItemService(session)
+    try:
+        return await service.list_for_visit(visit_id)
+    except VisitNotFound:
+        raise HTTPException(404, "Visit not found")
+
+
 @router.patch("/{item_id}/status", response_model=WorkItemOut)
 async def change_work_item_status(
     visit_id: uuid.UUID,

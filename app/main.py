@@ -6,9 +6,11 @@ from app.modules.vehicles.router import router as vehicles_router
 from app.modules.catalog.router import router as catalog_router
 from app.modules.visits.router import router as visits_router
 from app.modules.visits.work_items_router import router as work_items_router
+from app.modules.visits.work_items_mine_router import router as work_items_mine_router
 from app.modules.visits.part_items_router import router as part_items_router
 from app.modules.consent.router import router as consent_router
 from app.modules.search.router import router as search_router
+from app.modules.documents.router import files_router as document_files_router
 from app.modules.documents.router import router as documents_router
 
 app = FastAPI(title="CRM Backend")
@@ -19,10 +21,12 @@ app.include_router(vehicles_router)
 app.include_router(catalog_router)
 app.include_router(visits_router)
 app.include_router(work_items_router)
+app.include_router(work_items_mine_router)
 app.include_router(part_items_router)
 app.include_router(consent_router)
 app.include_router(search_router)
 app.include_router(documents_router)
+app.include_router(document_files_router)
 
 
 @app.get("/health")

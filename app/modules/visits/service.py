@@ -14,8 +14,8 @@ from app.core.exceptions import (
     VehicleNotFound,
     VisitNotFound,
 )
+from app.modules.notifications.factory import get_notification_sender
 from app.modules.notifications.interfaces import NotificationSender
-from app.modules.notifications.logging_sender import LoggingNotificationSender
 from app.modules.users.audit import record_audit
 from app.modules.users.models import User
 from app.modules.users.repository import UserRepository
@@ -32,7 +32,7 @@ class VisitService:
         self.repo = VisitRepository(session)
         self.vehicle_service = VehicleService(session)
         self.user_repo = UserRepository(session)
-        self.notification_sender = notification_sender or LoggingNotificationSender(session)
+        self.notification_sender = notification_sender or get_notification_sender(session)
 
     async def create_visit(self, data: VisitCreate, acting_user: User) -> Visit:
         vehicle = await self.vehicle_service.get(data.vehicle_id)

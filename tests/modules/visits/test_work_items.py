@@ -88,3 +88,92 @@ async def test_approve_unknown_item_raises_not_found(session):
     admin, mechanic_a, mechanic_b, item = await _setup_visit_with_mechanic(session)
     with pytest.raises(WorkItemNotFound):
         await WorkItemService(session).approve(uuid.uuid4(), admin)
+
+
+async def test_list_mine_returns_only_own_assigned_items(session):
+    admin, mechanic_a, mechanic_b, item_a = await _setup_visit_with_mechanic(session)
+
+    mine = await WorkItemService(session).list_mine(mechanic_a)
+    assert [i.id for i in mine] == [item_a.id]
+
+    other = await WorkItemService(session).list_mine(mechanic_b)
+    assert other == []
+
+
+async def test_list_for_visit_returns_items_for_that_visit(session):
+    admin, mechanic_a, mechanic_b, item = await _setup_visit_with_mechanic(session)
+
+    items = await WorkItemService(session).list_for_visit(item.visit_id)
+
+    assert [i.id for i in items] == [item.id]
+
+
+async def test_list_for_visit_unknown_visit_raises_not_found(session):
+    with pytest.raises(VisitNotFound):
+        await WorkItemService(session).list_for_visit(uuid.uuid4())
+
+
+async def _add_catalog_item(session, admin, name="Замена масла"):
+    from app.modules.catalog.schemas import WorkCatalogCreate
+    from app.modules.catalog.service import CatalogService
+
+    return await CatalogService(session).create_item(
+        WorkCatalogCreate(name=name, category=WorkCategory.MAINTENANCE, default_norm_hours=1.0), admin
+    )
+
+
+async def test_list_for_visit_resolves_name_from_catalog_or_free_text(session):
+    admin, mechanic_a, mechanic_b, free_item = await _setup_visit_with_mechanic(session)
+    catalog_item = await _add_catalog_item(session, admin, name="Диагностика ходовой")
+    catalog_work = await WorkItemService(session).add_item(
+        free_item.visit_id,
+        WorkItemCreate(
+            catalog_item_id=catalog_item.id, category=WorkCategory.CHASSIS, norm_hours=1.0, hourly_rate=1000
+        ),
+        admin,
+    )
+
+    items = await WorkItemService(session).list_for_visit(free_item.visit_id)
+
+    names = {i.id: i.name for i in items}
+    assert names[free_item.id] == "Замена масла"
+    assert names[catalog_work.id] == "Диагностика ходовой"
+
+
+async def test_list_for_visit_orders_by_created_at(session):
+    from datetime import datetime, timedelta, timezone
+
+    admin, mechanic_a, mechanic_b, first = await _setup_visit_with_mechanic(session)
+    second = await WorkItemService(session).add_item(
+        first.visit_id,
+        WorkItemCreate(free_text_name="Вторая", category=WorkCategory.OTHER, norm_hours=1.0, hourly_rate=1000),
+        admin,
+    )
+    now = datetime.now(timezone.utc)
+    first.created_at = now + timedelta(minutes=1)
+    second.created_at = now
+    await session.flush()
+
+    items = await WorkItemService(session).list_for_visit(first.visit_id)
+
+    assert [i.id for i in items] == [second.id, first.id]
+
+
+async def test_list_mine_resolves_name(session):
+    admin, mechanic_a, mechanic_b, item = await _setup_visit_with_mechanic(session)
+
+    mine = await WorkItemService(session).list_mine(mechanic_a)
+
+    assert mine[0].name == "Замена масла"
+
+
+async def test_update_status_result_serializes_with_name_and_visit_id(session):
+    from app.modules.visits.work_items_schemas import WorkItemOut
+
+    admin, mechanic_a, mechanic_b, item = await _setup_visit_with_mechanic(session)
+
+    updated = await WorkItemService(session).update_status(item.id, WorkItemStatus.IN_PROGRESS, admin)
+
+    out = WorkItemOut.model_validate(updated)
+    assert out.name == "Замена масла"
+    assert out.visit_id == item.visit_id
