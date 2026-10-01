@@ -7,6 +7,10 @@ class InvalidAssignedMaster(Exception):
     """assigned_master_id не ссылается на активного пользователя с ролью MASTER."""
 
 
+class ClientPhoneTaken(Exception):
+    """Телефон уже принадлежит активному (не удалённому) клиенту."""
+
+
 class NotAssignedMechanic(Exception):
     """Механик пытается изменить статус работы, назначенной не на него."""
 

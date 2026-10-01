@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_session
 from app.core.enums import UserRole
-from app.core.exceptions import DraftAlreadyUsed, DraftExpired, DraftNotFound
+from app.core.exceptions import ClientPhoneTaken, DraftAlreadyUsed, DraftExpired, DraftNotFound
 from app.modules.consent.schemas import ConsentConfirm, ConsentDraftOut, ConsentPaperRegister
 from app.modules.consent.service import ConsentService
 from app.modules.users.auth import require_role
@@ -47,6 +47,8 @@ async def confirm(token: str, data: ConsentConfirm, request: Request, session: A
         raise HTTPException(410, "Срок действия ссылки истёк")
     except DraftAlreadyUsed:
         raise HTTPException(409, "Черновик уже был подтверждён")
+    except ClientPhoneTaken:
+        raise HTTPException(409, "Клиент с таким телефоном уже есть")
     await session.commit()
     return {"client_id": str(client.id)}
 
@@ -58,6 +60,9 @@ async def register_paper(
     acting_user: User = Depends(require_role(UserRole.ADMIN, UserRole.MASTER)),
 ):
     service = ConsentService(session)
-    client = await service.register_paper(data, acting_user)
+    try:
+        client = await service.register_paper(data, acting_user)
+    except ClientPhoneTaken:
+        raise HTTPException(409, "Клиент с таким телефоном уже есть")
     await session.commit()
     return {"client_id": str(client.id)}

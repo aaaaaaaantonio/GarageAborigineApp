@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import String, JSON
+from sqlalchemy import Index, String, JSON, text
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -11,6 +11,16 @@ from app.core.models import Base, SoftDeleteMixin, TimestampMixin, UUIDPkMixin
 
 class Client(Base, UUIDPkMixin, TimestampMixin, SoftDeleteMixin):
     __tablename__ = "clients"
+    __table_args__ = (
+        # Один активный клиент на телефон; удалённые (анонимизированные) не мешают
+        # повторной регистрации того же номера.
+        Index(
+            "uq_clients_phone_normalized_active",
+            "phone_normalized",
+            unique=True,
+            postgresql_where=text("deleted_at IS NULL"),
+        ),
+    )
 
     full_name: Mapped[str] = mapped_column(String(255), nullable=False)
     phone_normalized: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
