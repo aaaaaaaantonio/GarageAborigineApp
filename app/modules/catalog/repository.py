@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.catalog.models import WorkCatalog
@@ -16,10 +16,17 @@ class CatalogRepository:
         return item
 
     async def suggest(self, query: str, threshold: float, limit: int = 3) -> list[WorkCatalog]:
+        # `name % :q` is what lets Postgres use ix_work_catalog_name_trgm; it filters
+        # by pg_trgm.similarity_threshold (>=), set here per-transaction. The explicit
+        # similarity() > threshold keeps the original strict comparison.
+        await self.session.execute(
+            select(func.set_config("pg_trgm.similarity_threshold", str(threshold), True))
+        )
         result = await self.session.execute(
             select(WorkCatalog)
             .where(
                 WorkCatalog.deleted_at.is_(None),
+                text("name % :q"),
                 text("similarity(name, :q) > :threshold"),
             )
             .params(q=query, threshold=threshold)
