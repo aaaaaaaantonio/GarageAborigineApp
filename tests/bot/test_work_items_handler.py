@@ -4,9 +4,11 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.fsm.storage.base import StorageKey
 
+from bot.callback_ids import encode_id
 from bot.handlers.work_items import (
     choose_catalog_callback,
     choose_category_callback,
+    choose_mechanic_callback,
     receive_hours_and_rate,
     receive_work_name,
     start_add_work_item,
@@ -102,12 +104,13 @@ async def test_receive_hours_and_rate_from_catalog_path_asks_only_rate():
     api = AsyncMock()
     api.get_visit.return_value = {"id": "visit1", "status": "received", "total_amount": "0.00"}
     api.list_work_items.return_value = []
+    api.list_mechanics.return_value = []
 
     await receive_hours_and_rate(message, state, api=api)
 
     api.add_work_item.assert_awaited_once_with(
         "visit1", catalog_item_id="cat1", free_text_name=None, category="maintenance",
-        norm_hours=1.0, hourly_rate=800.0,
+        norm_hours=1.0, hourly_rate=800.0, assigned_mechanic_id=None,
     )
     assert (await state.get_state()) is None
 
@@ -120,12 +123,13 @@ async def test_receive_hours_and_rate_from_free_text_path_parses_both():
     api = AsyncMock()
     api.get_visit.return_value = {"id": "visit1", "status": "received", "total_amount": "0.00"}
     api.list_work_items.return_value = []
+    api.list_mechanics.return_value = []
 
     await receive_hours_and_rate(message, state, api=api)
 
     api.add_work_item.assert_awaited_once_with(
         "visit1", catalog_item_id=None, free_text_name="Своя работа", category="body",
-        norm_hours=1.5, hourly_rate=900.0,
+        norm_hours=1.5, hourly_rate=900.0, assigned_mechanic_id=None,
     )
 
 
@@ -183,3 +187,68 @@ async def test_receive_work_name_asks_for_text_on_non_text_message():
 
     api.suggest_catalog.assert_not_awaited()
     message.answer.assert_awaited_once_with("Пожалуйста, отправьте ответ текстом.")
+
+
+MECH_ID = "11111111-1111-1111-1111-111111111111"
+
+
+async def test_receive_hours_and_rate_offers_mechanics_before_creating():
+    message = AsyncMock()
+    message.text = "1.5 900"
+    state = _fsm_context()
+    await state.set_state(AddWorkItemStates.waiting_for_hours_and_rate)
+    await state.update_data(visit_id="visit1", free_text_name="Своя работа", category="body")
+    api = AsyncMock()
+    api.list_mechanics.return_value = [{"id": MECH_ID, "full_name": "Анна"}]
+
+    await receive_hours_and_rate(message, state, api=api)
+
+    api.add_work_item.assert_not_awaited()
+    assert (await state.get_state()) == AddWorkItemStates.choosing_mechanic.state
+    data = await state.get_data()
+    assert (data["norm_hours"], data["hourly_rate"]) == (1.5, 900.0)
+    markup = message.answer.await_args.kwargs["reply_markup"]
+    buttons = [(b.text, b.callback_data) for row in markup.inline_keyboard for b in row]
+    assert buttons == [("Анна", f"assign_mech:{encode_id(MECH_ID)}"), ("Без исполнителя", "assign_mech:none")]
+
+
+async def _state_choosing_mechanic():
+    state = _fsm_context()
+    await state.set_state(AddWorkItemStates.choosing_mechanic)
+    await state.update_data(
+        visit_id="visit1", free_text_name="Своя работа", category="body", norm_hours=1.5, hourly_rate=900.0
+    )
+    return state
+
+
+async def test_choose_mechanic_callback_creates_item_assigned_to_mechanic():
+    callback = AsyncMock()
+    callback.data = f"assign_mech:{encode_id(MECH_ID)}"
+    state = await _state_choosing_mechanic()
+    api = AsyncMock()
+    api.get_visit.return_value = {"id": "visit1", "status": "received", "total_amount": "0.00"}
+    api.list_work_items.return_value = []
+
+    await choose_mechanic_callback(callback, state, api=api)
+
+    api.add_work_item.assert_awaited_once_with(
+        "visit1", catalog_item_id=None, free_text_name="Своя работа", category="body",
+        norm_hours=1.5, hourly_rate=900.0, assigned_mechanic_id=MECH_ID,
+    )
+    assert (await state.get_state()) is None
+    api.get_visit.assert_awaited_once_with("visit1")
+    callback.answer.assert_awaited_once()
+
+
+async def test_choose_mechanic_callback_none_creates_unassigned_item():
+    callback = AsyncMock()
+    callback.data = "assign_mech:none"
+    state = await _state_choosing_mechanic()
+    api = AsyncMock()
+    api.get_visit.return_value = {"id": "visit1", "status": "received", "total_amount": "0.00"}
+    api.list_work_items.return_value = []
+
+    await choose_mechanic_callback(callback, state, api=api)
+
+    assert api.add_work_item.await_args.kwargs["assigned_mechanic_id"] is None
+    assert (await state.get_state()) is None

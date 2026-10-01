@@ -26,6 +26,7 @@ class AddWorkItemStates(StatesGroup):
     choosing_suggestion = State()
     choosing_category = State()
     waiting_for_hours_and_rate = State()
+    choosing_mechanic = State()
 
 
 class AddPartItemStates(StatesGroup):

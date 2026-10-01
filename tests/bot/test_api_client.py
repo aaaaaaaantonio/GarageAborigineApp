@@ -204,3 +204,12 @@ async def test_generate_document_uses_long_timeout():
     await ApiClient().generate_document("v1")
     timeout = route.calls.last.request.extensions["timeout"]
     assert timeout["read"] >= 30
+
+
+@respx.mock
+async def test_list_mechanics_calls_users_mechanics():
+    respx.get("http://localhost:8000/users/mechanics").mock(
+        return_value=httpx.Response(200, json=[{"id": "m1", "full_name": "Анна"}])
+    )
+    client = ApiClient()
+    assert await client.list_mechanics() == [{"id": "m1", "full_name": "Анна"}]

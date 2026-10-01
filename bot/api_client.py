@@ -124,6 +124,9 @@ class ApiClient:
     async def add_work_item(self, visit_id: str, **fields) -> dict:
         return await self.post(f"/visits/{visit_id}/work-items", json=fields)
 
+    async def list_mechanics(self) -> list[dict]:
+        return await self.get("/users/mechanics")
+
     async def list_my_work_items(self) -> list[dict]:
         return await self.get("/work-items/mine")
 
