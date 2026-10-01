@@ -1,6 +1,6 @@
 import uuid
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from app.core.enums import PartAvailability
 
@@ -20,5 +20,4 @@ class PartItemOut(BaseModel):
     quantity: int
     unit_price: float
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

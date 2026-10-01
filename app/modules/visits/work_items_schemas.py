@@ -1,6 +1,6 @@
 import uuid
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, ConfigDict, model_validator
 
 from app.core.enums import WorkCategory, WorkItemStatus
 
@@ -35,8 +35,7 @@ class WorkItemOut(BaseModel):
     free_text_name: str | None
     catalog_item_id: uuid.UUID | None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class WorkItemMineOut(BaseModel):
@@ -47,5 +46,4 @@ class WorkItemMineOut(BaseModel):
     free_text_name: str | None
     catalog_item_id: uuid.UUID | None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
