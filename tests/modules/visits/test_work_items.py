@@ -1,9 +1,10 @@
 import uuid
+from datetime import datetime, timezone
 
 import pytest
 
 from app.core.enums import UserRole, WorkCategory, WorkItemStatus
-from app.core.exceptions import NotAssignedMechanic, VisitNotFound, WorkItemNotFound
+from app.core.exceptions import InvalidAssignedMechanic, NotAssignedMechanic, VisitNotFound, WorkItemNotFound
 from app.modules.clients.schemas import ClientCreate
 from app.modules.clients.service import ClientService
 from app.modules.users.models import User
@@ -177,3 +178,38 @@ async def test_update_status_result_serializes_with_name_and_visit_id(session):
     out = WorkItemOut.model_validate(updated)
     assert out.name == "Замена масла"
     assert out.visit_id == item.visit_id
+
+
+async def _new_work_item(mechanic_id):
+    return WorkItemCreate(
+        free_text_name="Диагностика",
+        category=WorkCategory.MAINTENANCE,
+        norm_hours=1.0,
+        hourly_rate=1500,
+        assigned_mechanic_id=mechanic_id,
+    )
+
+
+@pytest.mark.parametrize("who", ["master", "unknown", "deleted_mechanic"])
+async def test_add_item_rejects_invalid_assigned_mechanic(session, who):
+    admin, mechanic_a, mechanic_b, item = await _setup_visit_with_mechanic(session)
+    if who == "master":
+        assignee = User(role=UserRole.MASTER, full_name="Мастер 2", branch_id=uuid.uuid4())
+        session.add(assignee)
+        await session.flush()
+        assignee_id = assignee.id
+    elif who == "unknown":
+        assignee_id = uuid.uuid4()
+    else:
+        mechanic_b.deleted_at = datetime.now(timezone.utc)
+        await session.flush()
+        assignee_id = mechanic_b.id
+
+    with pytest.raises(InvalidAssignedMechanic):
+        await WorkItemService(session).add_item(item.visit_id, await _new_work_item(assignee_id), admin)
+
+
+async def test_add_item_without_mechanic_is_allowed(session):
+    admin, mechanic_a, mechanic_b, item = await _setup_visit_with_mechanic(session)
+    created = await WorkItemService(session).add_item(item.visit_id, await _new_work_item(None), admin)
+    assert created.assigned_mechanic_id is None

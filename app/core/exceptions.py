@@ -11,6 +11,10 @@ class ClientPhoneTaken(Exception):
     """Телефон уже принадлежит активному (не удалённому) клиенту."""
 
 
+class InvalidAssignedMechanic(Exception):
+    """assigned_mechanic_id не ссылается на активного пользователя с ролью MECHANIC."""
+
+
 class NotAssignedMechanic(Exception):
     """Механик пытается изменить статус работы, назначенной не на него."""
 

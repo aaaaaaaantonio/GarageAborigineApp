@@ -4,8 +4,8 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.enums import ApprovedVia, WorkItemStatus
-from app.core.exceptions import NotAssignedMechanic, VisitNotFound, WorkItemNotFound
+from app.core.enums import ApprovedVia, UserRole, WorkItemStatus
+from app.core.exceptions import InvalidAssignedMechanic, NotAssignedMechanic, VisitNotFound, WorkItemNotFound
 from app.modules.catalog.repository import CatalogRepository
 from app.modules.users.audit import record_audit
 from app.modules.users.models import User
@@ -30,6 +30,10 @@ class WorkItemService:
         visit = await self.session.get(Visit, visit_id)
         if visit is None:
             raise VisitNotFound()
+        if data.assigned_mechanic_id is not None:
+            mechanic = await self.session.get(User, data.assigned_mechanic_id)
+            if mechanic is None or mechanic.deleted_at is not None or mechanic.role != UserRole.MECHANIC:
+                raise InvalidAssignedMechanic()
 
         item = VisitWorkItem(
             visit_id=visit_id,
