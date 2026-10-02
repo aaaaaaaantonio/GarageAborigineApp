@@ -51,3 +51,19 @@ async def test_list_mechanics_forbidden_for_mechanic(api_app, session):
         resp = await client.get("/users/mechanics", headers={"X-User-Id": str(mechanic.id)})
 
     assert resp.status_code == 403
+
+
+async def test_get_user_by_telegram_supports_ids_above_int32(api_app, session):
+    # Newer Telegram accounts have IDs beyond 2**31 - 1.
+    big_id = 8_123_456_789
+    user = _user(UserRole.ADMIN, "Админ")
+    user.telegram_id = big_id
+    session.add(user)
+    await session.flush()
+
+    transport = ASGITransport(app=api_app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.get(f"/users/by-telegram/{big_id}")
+
+    assert resp.status_code == 200
+    assert resp.json()["id"] == str(user.id)
