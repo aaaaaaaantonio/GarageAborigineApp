@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import VehicleNotFound
 from app.core.plate import normalize_plate
+from app.modules.clients.models import Client
 from app.modules.users.audit import record_audit
 from app.modules.users.models import User
 from app.modules.vehicles.models import Vehicle, VehicleOwnership
@@ -62,3 +63,9 @@ class VehicleService:
         vehicle.mileage_current = mileage
         await self.session.flush()
         return vehicle
+
+    async def list_current_for_client(self, client_id: uuid.UUID) -> list[Vehicle]:
+        return await self.repo.list_current_for_client(client_id)
+
+    async def get_current_owner(self, vehicle_id: uuid.UUID) -> Client | None:
+        return await self.repo.get_current_owner(vehicle_id)

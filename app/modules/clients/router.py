@@ -10,6 +10,8 @@ from app.modules.clients.schemas import ClientCreate, ClientOut
 from app.modules.clients.service import ClientService
 from app.modules.users.auth import require_role
 from app.modules.users.models import User
+from app.modules.vehicles.schemas import VehicleOut
+from app.modules.vehicles.service import VehicleService
 
 router = APIRouter(prefix="/clients", tags=["clients"])
 
@@ -40,3 +42,14 @@ async def get_client(
     if client is None:
         raise HTTPException(404, "Client not found")
     return client
+
+
+@router.get("/{client_id}/vehicles", response_model=list[VehicleOut])
+async def list_client_vehicles(
+    client_id: uuid.UUID,
+    session: AsyncSession = Depends(get_session),
+    acting_user: User = Depends(require_role(UserRole.ADMIN, UserRole.MASTER)),
+):
+    if await ClientService(session).get(client_id) is None:
+        raise HTTPException(404, "Client not found")
+    return await VehicleService(session).list_current_for_client(client_id)

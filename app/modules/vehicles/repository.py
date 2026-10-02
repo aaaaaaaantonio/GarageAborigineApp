@@ -3,6 +3,7 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.modules.clients.models import Client
 from app.modules.vehicles.models import Vehicle, VehicleOwnership
 
 
@@ -34,3 +35,29 @@ class VehicleRepository:
             select(VehicleOwnership).where(VehicleOwnership.vehicle_id == vehicle_id)
         )
         return list(result.scalars())
+
+    async def list_current_for_client(self, client_id: uuid.UUID) -> list[Vehicle]:
+        result = await self.session.execute(
+            select(Vehicle)
+            .join(VehicleOwnership, VehicleOwnership.vehicle_id == Vehicle.id)
+            .where(
+                VehicleOwnership.client_id == client_id,
+                VehicleOwnership.date_to.is_(None),
+                Vehicle.deleted_at.is_(None),
+            )
+            .order_by(Vehicle.plate_number)
+        )
+        return list(result.scalars().unique())
+
+    async def get_current_owner(self, vehicle_id: uuid.UUID) -> Client | None:
+        result = await self.session.execute(
+            select(Client)
+            .join(VehicleOwnership, VehicleOwnership.client_id == Client.id)
+            .where(
+                VehicleOwnership.vehicle_id == vehicle_id,
+                VehicleOwnership.date_to.is_(None),
+                Client.deleted_at.is_(None),
+            )
+            .order_by(VehicleOwnership.date_from.desc())
+        )
+        return result.scalars().first()

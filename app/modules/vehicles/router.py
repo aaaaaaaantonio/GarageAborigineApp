@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.db import get_session
 from app.core.enums import UserRole
 from app.core.exceptions import VehicleNotFound
+from app.modules.clients.schemas import ClientOut
 from app.modules.users.auth import require_role
 from app.modules.users.models import User
 from app.modules.vehicles.schemas import OwnershipCreate, VehicleCreate, VehicleOut
@@ -30,13 +31,25 @@ async def create_vehicle(
 async def get_vehicle(
     vehicle_id: uuid.UUID,
     session: AsyncSession = Depends(get_session),
-    acting_user: User = Depends(require_role(UserRole.ADMIN, UserRole.MASTER)),
+    acting_user: User = Depends(require_role(UserRole.ADMIN, UserRole.MASTER, UserRole.MECHANIC)),
 ):
     service = VehicleService(session)
     vehicle = await service.get(vehicle_id)
     if vehicle is None:
         raise HTTPException(404, "Vehicle not found")
     return vehicle
+
+
+@router.get("/{vehicle_id}/owner", response_model=ClientOut | None)
+async def get_vehicle_owner(
+    vehicle_id: uuid.UUID,
+    session: AsyncSession = Depends(get_session),
+    acting_user: User = Depends(require_role(UserRole.ADMIN, UserRole.MASTER)),
+):
+    service = VehicleService(session)
+    if await service.get(vehicle_id) is None:
+        raise HTTPException(404, "Vehicle not found")
+    return await service.get_current_owner(vehicle_id)
 
 
 @router.post("/{vehicle_id}/owners", status_code=201)
