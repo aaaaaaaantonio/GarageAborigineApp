@@ -1,4 +1,4 @@
-# Full stack: docker-compose up --build
+# Full stack: docker compose up -d --build   (needs Compose v2 + BuildKit)
 # Needs .env (copy .env.example) with BOT_TOKEN set for the bot.
 services:
   postgres:
@@ -30,10 +30,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
-      interval: 3s
-      retries: 30
     restart: unless-stopped
 
   bot:
@@ -43,6 +39,9 @@ services:
     env_file: .env
     environment:
       API_BASE_URL: http://api:8000
+    # The image's HEALTHCHECK probes the API's HTTP port; the bot has none.
+    healthcheck:
+      disable: true
     depends_on:
       api:
         condition: service_healthy
