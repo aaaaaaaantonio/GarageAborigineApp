@@ -16,7 +16,7 @@ from app.core.exceptions import (
 )
 from app.modules.users.auth import require_role
 from app.modules.users.models import User
-from app.modules.visits.schemas import VisitCreate, VisitOut, VisitStatusChange
+from app.modules.visits.schemas import VisitCreate, VisitListOut, VisitOut, VisitStatusChange
 from app.modules.visits.service import VisitService
 
 router = APIRouter(prefix="/visits", tags=["visits"])
@@ -40,7 +40,19 @@ async def create_visit(
     except VehicleNotFound:
         raise HTTPException(404, "Vehicle not found")
     await session.commit()
-    return visit
+    return await service.get_summary(visit.id)
+
+
+@router.get("", response_model=VisitListOut)
+async def list_visits(
+    active: bool = False,
+    client_id: uuid.UUID | None = None,
+    vehicle_id: uuid.UUID | None = None,
+    session: AsyncSession = Depends(get_session),
+    acting_user: User = Depends(require_role(UserRole.ADMIN, UserRole.MASTER)),
+):
+    service = VisitService(session)
+    return await service.list_visits(acting_user, active=active, client_id=client_id, vehicle_id=vehicle_id)
 
 
 @router.get("/{visit_id}", response_model=VisitOut)
@@ -50,7 +62,7 @@ async def get_visit(
     acting_user: User = Depends(require_role(UserRole.ADMIN, UserRole.MASTER)),
 ):
     service = VisitService(session)
-    visit = await service.get(visit_id)
+    visit = await service.get_summary(visit_id)
     if visit is None:
         raise HTTPException(404, "Visit not found")
     return visit
@@ -75,4 +87,4 @@ async def change_status(
     except NotAllWorkItemsReady:
         raise HTTPException(409, "Не все работы в статусе 'готово'")
     await session.commit()
-    return visit
+    return await service.get_summary(visit.id)

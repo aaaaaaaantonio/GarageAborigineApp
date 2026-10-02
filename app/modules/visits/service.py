@@ -23,7 +23,27 @@ from app.modules.vehicles.service import VehicleService
 from app.modules.visits.fsm import ALLOWED_TRANSITIONS
 from app.modules.visits.models import Visit, VisitPartItem, VisitStatusLog, VisitWorkItem
 from app.modules.visits.repository import VisitRepository
-from app.modules.visits.schemas import VisitCreate
+from app.modules.visits.schemas import VisitCreate, VisitListOut, VisitOut
+
+
+VISIT_LIST_LIMIT = 30
+
+
+def _summary_out(row) -> VisitOut:
+    return VisitOut(
+        id=row.id,
+        status=row.status,
+        mileage_at_intake=row.mileage_at_intake,
+        total_amount=row.total_amount,
+        created_at=row.created_at,
+        client_id=row.client_id,
+        client_name=row.client_name,
+        vehicle_id=row.vehicle_id,
+        plate_number=row.plate_number,
+        make_model=f"{row.make} {row.model}",
+        assigned_master_id=row.assigned_master_id,
+        master_name=row.master_name,
+    )
 
 
 class VisitService:
@@ -69,6 +89,30 @@ class VisitService:
 
     async def get(self, visit_id) -> Visit | None:
         return await self.repo.get(visit_id)
+
+    async def get_summary(self, visit_id) -> VisitOut | None:
+        row = await self.repo.get_summary(visit_id)
+        return None if row is None else _summary_out(row)
+
+    async def list_visits(
+        self,
+        acting_user: User,
+        *,
+        active: bool = False,
+        client_id: uuid.UUID | None = None,
+        vehicle_id: uuid.UUID | None = None,
+    ) -> VisitListOut:
+        rows = await self.repo.list_summaries(
+            viewer_id=acting_user.id,
+            active=active,
+            client_id=client_id,
+            vehicle_id=vehicle_id,
+            limit=VISIT_LIST_LIMIT + 1,
+        )
+        return VisitListOut(
+            items=[_summary_out(r) for r in rows[:VISIT_LIST_LIMIT]],
+            has_more=len(rows) > VISIT_LIST_LIMIT,
+        )
 
     async def change_status(
         self, visit_id, new_status: VisitStatus, acting_user: User, reason: str | None = None

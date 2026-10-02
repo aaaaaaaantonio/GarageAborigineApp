@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict
 
@@ -27,3 +28,16 @@ class VisitOut(BaseModel):
     status: VisitStatus
     mileage_at_intake: int
     total_amount: float
+    created_at: datetime
+    client_id: uuid.UUID
+    client_name: str
+    vehicle_id: uuid.UUID
+    plate_number: str
+    make_model: str
+    assigned_master_id: uuid.UUID
+    master_name: str
+
+
+class VisitListOut(BaseModel):
+    items: list[VisitOut]
+    has_more: bool
