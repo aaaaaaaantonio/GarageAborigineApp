@@ -1,5 +1,7 @@
 from fastapi import FastAPI
 
+from app.core.logging import install_access_log_filter
+
 from app.modules.users.router import router as users_router
 from app.modules.clients.router import router as clients_router
 from app.modules.vehicles.router import router as vehicles_router
@@ -12,6 +14,8 @@ from app.modules.consent.router import router as consent_router
 from app.modules.search.router import router as search_router
 from app.modules.documents.router import files_router as document_files_router
 from app.modules.documents.router import router as documents_router
+
+install_access_log_filter()
 
 app = FastAPI(title="CRM Backend")
 
