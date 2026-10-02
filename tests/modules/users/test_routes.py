@@ -67,3 +67,32 @@ async def test_get_user_by_telegram_supports_ids_above_int32(api_app, session):
 
     assert resp.status_code == 200
     assert resp.json()["id"] == str(user.id)
+
+
+async def test_list_masters_returns_active_masters_sorted_by_name(api_app, session):
+    admin = _user(UserRole.ADMIN, "Админ")
+    boris = _user(UserRole.MASTER, "Борис")
+    anna = _user(UserRole.MASTER, "Анна")
+    fired = _user(UserRole.MASTER, "Уволенный")
+    fired.deleted_at = datetime.now(timezone.utc)
+    session.add_all([admin, boris, anna, fired, _user(UserRole.MECHANIC, "Механик")])
+    await session.flush()
+
+    transport = ASGITransport(app=api_app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.get("/users/masters", headers={"X-User-Id": str(admin.id)})
+
+    assert resp.status_code == 200
+    assert [u["full_name"] for u in resp.json()] == ["Анна", "Борис"]
+
+
+async def test_list_masters_forbidden_for_master(api_app, session):
+    master = _user(UserRole.MASTER, "Мастер")
+    session.add(master)
+    await session.flush()
+
+    transport = ASGITransport(app=api_app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.get("/users/masters", headers={"X-User-Id": str(master.id)})
+
+    assert resp.status_code == 403
