@@ -1,3 +1,5 @@
+# Full stack: docker-compose up --build
+# Needs .env (copy .env.example) with BOT_TOKEN set for the bot.
 services:
   postgres:
     image: postgres:15
@@ -9,5 +11,43 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U crm"]
+      interval: 2s
+      retries: 30
+
+  api:
+    build: .
+    image: garage-crm
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://crm:crm@postgres:5432/crm
+      FILE_STORAGE_ROOT: /data/storage
+    ports:
+      - "8000:8000"
+    volumes:
+      - storage:/data/storage
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 3s
+      retries: 30
+    restart: unless-stopped
+
+  bot:
+    build: .
+    image: garage-crm
+    command: ["python", "-m", "bot.main"]
+    env_file: .env
+    environment:
+      API_BASE_URL: http://api:8000
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
 volumes:
   pgdata:
+  storage:
