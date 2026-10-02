@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import Index, String, JSON, text
+from sqlalchemy import BigInteger, Index, String, JSON, text
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -25,7 +25,7 @@ class Client(Base, UUIDPkMixin, TimestampMixin, SoftDeleteMixin):
     full_name: Mapped[str] = mapped_column(String(255), nullable=False)
     phone_normalized: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
     phone_display: Mapped[str] = mapped_column(String(32), nullable=False)
-    telegram_id: Mapped[int | None] = mapped_column(nullable=True)
+    telegram_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     telegram_username: Mapped[str | None] = mapped_column(String(64), nullable=True)
     client_type: Mapped[ClientType] = mapped_column(nullable=False, default=ClientType.INDIVIDUAL)
     legal_details: Mapped[dict | None] = mapped_column(JSON, nullable=True)
