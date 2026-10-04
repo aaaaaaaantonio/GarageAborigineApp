@@ -10,7 +10,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.methods import SendMessage
 from aiogram.types import CallbackQuery, Chat, Message, MessageEntity, Update, User
 
-from bot.main import setup_routers
+from bot.main import build_dispatcher
 from bot.states import AddWorkItemStates, NewClientStates, NewVisitStates
 
 CHAT_ID = USER_ID = 1001
@@ -66,8 +66,7 @@ def _callback(data: str, message_id: int = 5) -> Update:
 
 
 # Routers are module-level singletons and can be attached to one Dispatcher only.
-_DP = Dispatcher(storage=MemoryStorage())
-setup_routers(_DP)
+_DP = build_dispatcher(MemoryStorage())
 
 
 @pytest.fixture
@@ -208,3 +207,42 @@ async def test_old_format_buttons_are_stale(env):
 
     answers = [m.text for m in bot.sent if type(m).__name__ == "AnswerCallbackQuery"]
     assert answers == ["Кнопка устарела — начните действие заново."] * 4
+
+
+async def test_text_at_a_button_step_stays_in_the_wizard(env):
+    bot, dp, state, api, user = env
+    await state.set_state(AddWorkItemStates.choosing_mechanic)
+    await state.update_data(
+        nav_stack=[["menu", {}]], nav_msg_id=5, wiz_name="add_work", wiz_steps=[],
+        mechanic_choices=[["AAAAAAAAAAAAAAAAAAAAAA", "Петров"]],
+    )
+
+    await dp.feed_update(bot, _message("Петров"), api=api, user=user)
+
+    api.search.assert_not_awaited()
+    assert await state.get_state() == AddWorkItemStates.choosing_mechanic.state
+    assert "Выберите вариант кнопкой.\n\nКому назначить работу?" in _texts(bot)
+
+
+async def test_double_tap_on_final_wizard_button_creates_one_work_item(env):
+    import asyncio
+
+    bot, dp, state, api, user = env
+    visit_id = "11111111-1111-1111-1111-111111111111"
+    await state.set_state(AddWorkItemStates.choosing_mechanic)
+    await state.update_data(
+        nav_stack=[["menu", {}], ["visit", {"visit_id": visit_id}]], nav_msg_id=5, wiz_name="add_work", wiz_steps=[],
+        visit_id=visit_id, catalog_item_id=None, free_text_name="X", category="other", norm_hours=1.0, hourly_rate=100.0,
+    )
+
+    async def slow_add(*args, **kwargs):
+        await asyncio.sleep(0.05)
+        return {}
+
+    api.add_work_item.side_effect = slow_add
+    api.get_visit.return_value = {"id": visit_id, "status": "in_progress", "total_amount": 0}
+    api.list_work_items.return_value = []
+
+    await asyncio.gather(*(dp.feed_update(bot, _callback("assign_mech:none"), api=api, user=user) for _ in range(2)))
+
+    assert api.add_work_item.await_count == 1

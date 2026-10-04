@@ -1,4 +1,4 @@
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.state import State, StatesGroup
@@ -234,3 +234,22 @@ async def test_go_drops_an_unfinished_wizard():
 
     assert await state.get_state() is None
     assert "visit_id" not in await state.get_data()
+
+
+async def test_inaccessible_message_gets_a_new_live_message():
+    from aiogram.types import InaccessibleMessage
+
+    state = fsm_context()
+    await on_screens(state, ("t_item", {"item_id": A}), msg_id=5)
+    callback = make_callback("x")
+    old = MagicMock(spec=InaccessibleMessage)
+    old.chat = MagicMock(id=1)
+    old.message_id = 5
+    callback.message = old
+    callback.bot.send_message = AsyncMock(return_value=MagicMock(message_id=300))
+
+    await nav.refresh(callback, state, AsyncMock(), MASTER)
+
+    callback.bot.send_message.assert_awaited_once()
+    assert callback.bot.send_message.await_args.args[:2] == (1, f"item {A}")
+    assert (await state.get_data())["nav_msg_id"] == 300

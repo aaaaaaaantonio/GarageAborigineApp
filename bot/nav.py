@@ -76,22 +76,26 @@ async def clear_wizard(state: FSMContext) -> None:
 async def present(event: Event, state: FSMContext, text: str, markup: InlineKeyboardMarkup | None) -> None:
     """Show `text` as the live message: edit the pressed message, or send a new one for a text message."""
     if isinstance(event, CallbackQuery):
-        message = event.message
-        try:
-            await message.edit_text(text, reply_markup=markup)
-            live_id = message.message_id
-        except TelegramBadRequest as e:
-            if "message is not modified" in e.message:
+        message, bot = event.message, event.bot
+        if not isinstance(message, Message):
+            # Deleted or otherwise inaccessible: nothing to edit, start a new live message.
+            live_id = (await bot.send_message(message.chat.id, text, reply_markup=markup)).message_id
+        else:
+            try:
+                await message.edit_text(text, reply_markup=markup)
                 live_id = message.message_id
-            else:
-                live_id = (await message.answer(text, reply_markup=markup)).message_id
+            except TelegramBadRequest as e:
+                if "message is not modified" in e.message:
+                    live_id = message.message_id
+                else:
+                    live_id = (await message.answer(text, reply_markup=markup)).message_id
     else:
-        message = event
+        message, bot = event, event.bot
         live_id = (await message.answer(text, reply_markup=markup)).message_id
     previous = (await state.get_data()).get(NAV_MSG)
     if previous is not None and previous != live_id:
         try:
-            await message.bot.edit_message_reply_markup(chat_id=message.chat.id, message_id=previous, reply_markup=None)
+            await bot.edit_message_reply_markup(chat_id=message.chat.id, message_id=previous, reply_markup=None)
         except TelegramAPIError:
             logger.debug("Could not remove buttons from message %s", previous)
     await state.update_data(**{NAV_MSG: live_id})

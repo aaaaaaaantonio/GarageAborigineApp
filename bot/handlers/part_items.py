@@ -4,6 +4,7 @@ from aiogram.types import CallbackQuery, Message
 
 from bot import actions, nav, wizard
 from bot.api_client import ApiClient
+from bot.handlers.navigation import STAFF_ROLES
 from bot.states import AddPartItemStates
 from bot.texts import TEXT_REQUIRED
 
@@ -22,6 +23,9 @@ async def quantity_and_price_prompt(state: FSMContext, api: ApiClient, user: dic
 
 @router.callback_query(F.data == actions.ADD_PART)
 async def start_add_part_item(callback: CallbackQuery, state: FSMContext, api: ApiClient, user: dict, **kwargs) -> None:
+    if user["role"] not in STAFF_ROLES:
+        await callback.answer("Недостаточно прав")
+        return
     args = await nav.top_args(callback, state, "work")
     if args is None:
         return

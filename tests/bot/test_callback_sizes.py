@@ -2,6 +2,7 @@
 from unittest.mock import AsyncMock
 
 from bot import nav
+from bot.api_client import ApiForbidden
 from tests.bot.helpers import ADMIN, MECHANIC, buttons
 
 # UUIDs encode to 22 chars regardless of value; use distinct ones.
@@ -43,6 +44,9 @@ def test_every_screen_is_covered():
 async def test_all_screen_buttons_fit_64_bytes():
     for user in (ADMIN, MECHANIC):
         for name, args in SCREEN_ARGS.items():
-            _, markup = await nav.SCREENS[name].render(_api(), user, args)
+            try:
+                _, markup = await nav.SCREENS[name].render(_api(), user, args)
+            except ApiForbidden:
+                continue  # a screen the role may not open draws no buttons
             for text, data in buttons(markup):
                 assert len(data.encode()) <= 64, (name, text, data)

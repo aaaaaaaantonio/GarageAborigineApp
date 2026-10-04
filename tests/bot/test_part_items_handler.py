@@ -2,7 +2,7 @@ from unittest.mock import AsyncMock
 
 from bot.handlers.part_items import receive_part_name, receive_quantity_and_price, start_add_part_item
 from bot.states import AddPartItemStates
-from tests.bot.helpers import MASTER, fsm_context, make_callback, make_message, on_screens, shown
+from tests.bot.helpers import MASTER, MECHANIC, fsm_context, make_callback, make_message, on_screens, shown
 
 VISIT = "11111111-1111-1111-1111-111111111111"
 ITEM = "22222222-2222-2222-2222-222222222222"
@@ -69,3 +69,14 @@ async def test_part_name_must_be_text():
     await receive_part_name(message, state, api=_api(), user=MASTER)
 
     assert shown(message)[0] == "Пожалуйста, отправьте ответ текстом.\n\nВведите название запчасти:"
+
+
+async def test_mechanic_cannot_start_add_part():
+    state = fsm_context()
+    await on_screens(state, WORK)
+    callback = make_callback("act:add_part")
+
+    await start_add_part_item(callback, state, api=_api(), user=MECHANIC)
+
+    assert await state.get_state() is None
+    callback.answer.assert_awaited_once_with("Недостаточно прав")

@@ -3,11 +3,12 @@
 The query lives in the results screen's args, so paging needs no extra state.
 """
 from aiogram import F, Router
+from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InlineKeyboardButton, Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-from bot import actions, nav
+from bot import actions, nav, wizard
 from bot.api_client import ApiClient
 
 router = Router()
@@ -56,6 +57,12 @@ async def render_search_results(api: ApiClient, user: dict, args: dict) -> nav.R
         arrows.append(InlineKeyboardButton(text="Далее ›", callback_data=f"{actions.SEARCH_PAGE}:{page + 1}"))
     builder.row(*arrows)
     return f"Найдено: {len(results)} · стр. {page + 1}/{pages}\nМожно уточнить запрос.", builder.as_markup()
+
+
+@router.message(~StateFilter(None))
+async def text_at_button_step(message: Message, state: FSMContext, api: ApiClient, user: dict, **kwargs) -> None:
+    """A wizard step waiting for a button press got a message: it stays in the wizard (spec §3)."""
+    await wizard.reprompt(message, state, api, user, "Выберите вариант кнопкой.")
 
 
 @router.message(F.text)

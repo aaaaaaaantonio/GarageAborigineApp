@@ -2,7 +2,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from bot.api_client import ApiNotFound
+from bot.api_client import ApiForbidden, ApiNotFound
 from bot.callback_ids import encode_id
 from bot.handlers.documents import pdf_callback
 from bot.handlers.mechanic import render_my_works
@@ -291,3 +291,51 @@ async def test_pdf_action_sends_document_without_redrawing():
     assert document.filename == f"zakaz-naryad-{VISIT}.pdf"
     callback.message.edit_text.assert_not_awaited()
     callback.answer.assert_awaited_once_with()
+
+
+async def test_my_works_hides_finished_items_and_caps_the_list():
+    api = AsyncMock()
+    done = {"id": ITEM2, "visit_id": VISIT, "name": "Готовая", "status": "ready"}
+    active = [
+        {"id": f"{n:08d}-0000-0000-0000-000000000000", "visit_id": VISIT, "name": f"Работа {n}", "status": "in_progress"}
+        for n in range(35)
+    ]
+    api.list_my_work_items.return_value = [done, *active]
+
+    text, markup = await render_my_works(api, MECHANIC, {})
+
+    assert text == "Мои работы (35)\nПоказаны первые 30."
+    assert len(buttons(markup)) == 30
+    assert all("Готовая" not in label for label, _ in buttons(markup))
+
+
+async def test_my_works_with_only_finished_items_is_empty():
+    api = AsyncMock()
+    api.list_my_work_items.return_value = [{"id": ITEM, "visit_id": VISIT, "name": "Готовая", "status": "ready"}]
+
+    assert (await render_my_works(api, MECHANIC, {}))[0] == "У вас нет назначенных работ."
+
+
+async def test_mechanic_cannot_open_reassign_screen():
+    with pytest.raises(ApiForbidden):
+        await render_reassign(_api(), MECHANIC, {"visit_id": VISIT, "item_id": ITEM})
+
+
+async def test_mechanic_reassign_and_approve_actions_are_refused():
+    args = {"visit_id": VISIT, "item_id": ITEM}
+    api = _api()
+    state = fsm_context()
+    await on_screens(state, ("work", args), ("reassign", args))
+    callback = make_callback("act:reassign:none")
+
+    await reassign_callback(callback, state, api=api, user=MECHANIC)
+
+    api.assign_work_item_mechanic.assert_not_awaited()
+    callback.answer.assert_awaited_once_with("Недостаточно прав")
+
+    await on_screens(state, ("work", args))
+    callback = make_callback("act:approve")
+    await approve_callback(callback, state, api=api, user=MECHANIC)
+
+    api.approve_work_item.assert_not_awaited()
+    callback.answer.assert_awaited_once_with("Недостаточно прав")

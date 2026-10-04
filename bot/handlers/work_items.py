@@ -4,7 +4,7 @@ from aiogram.types import CallbackQuery, Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from bot import actions, nav, wizard
-from bot.api_client import ApiClient, ApiNotFound
+from bot.api_client import ApiClient, ApiForbidden, ApiNotFound
 from bot.callback_ids import decode_id, encode_id
 from bot.handlers.navigation import STAFF_ROLES
 from bot.states import AddWorkItemStates
@@ -74,6 +74,9 @@ async def work_status_callback(callback: CallbackQuery, state: FSMContext, api: 
 
 @router.callback_query(F.data == actions.APPROVE)
 async def approve_callback(callback: CallbackQuery, state: FSMContext, api: ApiClient, user: dict, **kwargs) -> None:
+    if user["role"] not in STAFF_ROLES:
+        await callback.answer("Недостаточно прав")
+        return
     args = await nav.top_args(callback, state, "work")
     if args is None:
         return
@@ -83,6 +86,8 @@ async def approve_callback(callback: CallbackQuery, state: FSMContext, api: ApiC
 
 @nav.screen("reassign", params=("visit_id", "item_id"))
 async def render_reassign(api: ApiClient, user: dict, args: dict) -> nav.Rendered:
+    if user["role"] not in STAFF_ROLES:
+        raise ApiForbidden("Недостаточно прав")
     builder = InlineKeyboardBuilder()
     for mechanic in await api.list_mechanics():
         builder.button(text=mechanic["full_name"], callback_data=f"{actions.REASSIGN}:{encode_id(mechanic['id'])}")
@@ -93,6 +98,9 @@ async def render_reassign(api: ApiClient, user: dict, args: dict) -> nav.Rendere
 
 @router.callback_query(F.data.startswith(f"{actions.REASSIGN}:"))
 async def reassign_callback(callback: CallbackQuery, state: FSMContext, api: ApiClient, user: dict, **kwargs) -> None:
+    if user["role"] not in STAFF_ROLES:
+        await callback.answer("Недостаточно прав")
+        return
     args = await nav.top_args(callback, state, "reassign")
     if args is None:
         return

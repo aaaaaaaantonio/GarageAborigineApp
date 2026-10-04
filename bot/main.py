@@ -5,7 +5,7 @@ from datetime import timedelta
 from aiogram import Bot, Dispatcher
 from aiogram.exceptions import TelegramAPIError, TelegramUnauthorizedError
 from aiogram.fsm.storage.base import BaseStorage
-from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.fsm.storage.memory import MemoryStorage, SimpleEventIsolation
 from aiogram.fsm.storage.redis import RedisStorage
 from aiogram.types import BotCommand
 from aiogram.utils.token import TokenValidationError
@@ -104,16 +104,24 @@ def build_storage(redis_url: str) -> BaseStorage:
     return RedisStorage.from_url(redis_url, state_ttl=STORAGE_TTL, data_ttl=STORAGE_TTL)
 
 
+def build_dispatcher(storage: BaseStorage) -> Dispatcher:
+    # One update per user at a time: a double tap on a wizard's last button
+    # runs after the first finished the wizard and lands in fallback as stale,
+    # instead of creating the record twice. One bot process, so in-memory locks suffice.
+    dp = Dispatcher(storage=storage, events_isolation=SimpleEventIsolation())
+    setup_routers(dp)
+    return dp
+
+
 async def main() -> None:
     logging.basicConfig(level=logging.INFO)
     bot = await create_bot(settings.bot_token)
     await set_commands(bot)
-    dp = Dispatcher(storage=build_storage(settings.redis_url))
+    dp = build_dispatcher(build_storage(settings.redis_url))
     dp.message.middleware(ErrorHandlingMiddleware())
     dp.message.middleware(AuthMiddleware())
     dp.callback_query.middleware(ErrorHandlingMiddleware())
     dp.callback_query.middleware(AuthMiddleware())
-    setup_routers(dp)
     await dp.start_polling(bot)
 
 
