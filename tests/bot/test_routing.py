@@ -129,13 +129,13 @@ async def test_mileage_confirm_callback_routes_in_confirming_state(env):
 
 async def test_search_page_button_routes_to_search_not_stale_fallback(env):
     bot, dp, state, api, user = env
-    await state.update_data(search_query="Toyota")
+    await state.update_data(nav_stack=[["menu", {}], ["search_results", {"query": "Toyota", "page": 0}]], nav_msg_id=5)
     api.search.return_value = [
         {"entity": "vehicle", "id": f"{n:08d}-0000-0000-0000-000000000000", "matched_field": "make"} for n in range(12)
     ]
     api.get_vehicle.return_value = {"make": "Toyota", "model": "Camry", "plate_number": "А1"}
 
-    await dp.feed_update(bot, _callback("search_page:1"), api=api, user=user)
+    await dp.feed_update(bot, _callback("act:spage:1"), api=api, user=user)
 
     api.search.assert_awaited_once_with("Toyota")
     edits = [m for m in bot.sent if type(m).__name__ == "EditMessageText"]
