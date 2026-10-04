@@ -52,6 +52,8 @@ class WorkItemMineOut(BaseModel):
     status: WorkItemStatus
     free_text_name: str | None
     catalog_item_id: uuid.UUID | None
+    plate_number: str | None = None
+    make_model: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

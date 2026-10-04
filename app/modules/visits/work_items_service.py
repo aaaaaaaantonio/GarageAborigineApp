@@ -10,6 +10,7 @@ from app.modules.catalog.models import WorkCatalog
 from app.modules.catalog.repository import CatalogRepository
 from app.modules.users.audit import record_audit
 from app.modules.users.models import User
+from app.modules.vehicles.models import Vehicle
 from app.modules.visits.models import Visit, VisitWorkItem
 from app.modules.visits.work_items_schemas import (
     VehicleWorkHistoryItemOut,
@@ -172,7 +173,20 @@ class WorkItemService:
             .where(VisitWorkItem.assigned_mechanic_id == acting_user.id)
             .order_by(VisitWorkItem.created_at, VisitWorkItem.id)
         )
-        return await self._with_names(list(result.scalars()))
+        items = await self._with_names(list(result.scalars()))
+        # The mechanic can't read GET /visits/{id}; the bot labels work items by car.
+        visit_ids = {i.visit_id for i in items}
+        vehicles = {}
+        if visit_ids:
+            rows = await self.session.execute(
+                select(Visit.id, Vehicle.plate_number, Vehicle.make, Vehicle.model)
+                .join(Vehicle, Vehicle.id == Visit.vehicle_id)
+                .where(Visit.id.in_(visit_ids))
+            )
+            vehicles = {visit_id: (plate, f"{make} {model}") for visit_id, plate, make, model in rows.all()}
+        for item in items:
+            item.plate_number, item.make_model = vehicles.get(item.visit_id, (None, None))
+        return items
 
     async def list_for_visit(self, visit_id: uuid.UUID) -> list[VisitWorkItem]:
         visit = await self.session.get(Visit, visit_id)
