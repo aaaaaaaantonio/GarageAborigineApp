@@ -1,38 +1,42 @@
 from unittest.mock import AsyncMock
 
-from aiogram.fsm.context import FSMContext
-from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.fsm.storage.base import StorageKey
-
-from bot.handlers.consent import receive_paper_full_name, start_paper_consent
+from bot.handlers.consent import receive_paper_full_name, receive_paper_phone, start_paper_consent
+from bot.states import PaperConsentStates
+from tests.bot.helpers import MASTER, MECHANIC, fsm_context, make_callback, make_message, on_screens, shown
 
 
-def _fsm_context() -> FSMContext:
-    storage = MemoryStorage()
-    key = StorageKey(bot_id=1, chat_id=1, user_id=1)
-    return FSMContext(storage=storage, key=key)
+async def test_start_asks_for_phone():
+    state = fsm_context()
+    await on_screens(state)
+    callback = make_callback("wiz:paper_consent")
+
+    await start_paper_consent(callback, state, api=AsyncMock(), user=MASTER)
+
+    assert await state.get_state() == PaperConsentStates.waiting_for_phone.state
+    assert shown(callback)[0] == "Введите телефон клиента:"
 
 
-async def test_receive_paper_full_name_registers_via_api():
-    message = AsyncMock()
-    message.text = "Пётр Петров"
+async def test_start_refused_for_mechanic():
+    callback = make_callback("wiz:paper_consent")
+
+    await start_paper_consent(callback, fsm_context(), api=AsyncMock(), user=MECHANIC)
+
+    callback.answer.assert_awaited_once_with("Недостаточно прав")
+
+
+async def test_phone_then_name_registers_and_shows_menu():
+    state = fsm_context()
+    await on_screens(state)
+    await state.set_state(PaperConsentStates.waiting_for_phone)
+    await state.update_data(wiz_name="paper_consent", wiz_steps=[])
     api = AsyncMock()
-    api.register_paper_consent.return_value = {"client_id": "c1"}
-    state = _fsm_context()
-    await state.update_data(phone="79997654321")
 
-    await receive_paper_full_name(message, state, api=api)
+    message = make_message("79990000000")
+    await receive_paper_phone(message, state, api=api, user=MASTER)
+    assert shown(message)[0] == "Введите ФИО клиента:"
 
-    api.register_paper_consent.assert_awaited_once_with(full_name="Пётр Петров", phone="79997654321")
-    message.answer.assert_awaited_once_with("Клиент зарегистрирован (бумажное согласие): Пётр Петров")
-    assert (await state.get_state()) is None
+    message = make_message("Иван Иванов")
+    await receive_paper_full_name(message, state, api=api, user=MASTER)
 
-
-async def test_start_paper_consent_asks_for_phone():
-    message = AsyncMock()
-    state = _fsm_context()
-
-    await start_paper_consent(message, state)
-
-    message.answer.assert_awaited_once_with("Введите телефон клиента (/cancel — отмена):")
-    assert (await state.get_state()) is not None
+    api.register_paper_consent.assert_awaited_once_with(full_name="Иван Иванов", phone="79990000000")
+    assert shown(message)[0] == "Клиент зарегистрирован (бумажное согласие): Иван Иванов\n\nГлавное меню"
