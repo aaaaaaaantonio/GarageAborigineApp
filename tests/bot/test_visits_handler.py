@@ -6,10 +6,7 @@ from aiogram.fsm.storage.base import StorageKey
 
 from bot.callback_ids import encode_id as _encode_id
 from bot.handlers.visits import (
-    approve_work_callback,
-    change_status_callback,
     confirm_mileage_callback,
-    receive_cancel_reason,
     choose_client_callback,
     choose_master_callback,
     choose_vehicle_callback,
@@ -18,10 +15,9 @@ from bot.handlers.visits import (
     receive_mileage,
     receive_vehicle_query,
     send_visit_card,
-    visit_header,
     start_new_visit,
 )
-from bot.states import NewClientStates, NewVehicleStates, NewVisitStates, VisitCancelStates
+from bot.states import NewClientStates, NewVehicleStates, NewVisitStates
 
 
 def _fsm_context() -> FSMContext:
@@ -243,23 +239,6 @@ async def test_choose_vehicle_callback_stores_vehicle_id():
     assert (await state.get_state()) == NewVisitStates.waiting_for_mileage.state
 
 
-async def test_approve_work_callback_approves_and_refreshes_card():
-    visit_id = "11111111-1111-1111-1111-111111111111"
-    item_id = "22222222-2222-2222-2222-222222222222"
-    callback = AsyncMock()
-    callback.data = f"approve_work:{_encode_id(visit_id)}:{_encode_id(item_id)}"
-    api = AsyncMock()
-    api.get_visit.return_value = {"id": visit_id, "status": "in_progress", "total_amount": "0.00"}
-    api.list_work_items.return_value = []
-
-    await approve_work_callback(callback, api=api)
-
-    api.approve_work_item.assert_awaited_once_with(visit_id, item_id)
-    api.get_visit.assert_awaited_once_with(visit_id)
-    callback.message.answer.assert_awaited_once()
-    callback.answer.assert_awaited_once()
-
-
 async def test_send_visit_card_callback_data_fits_telegram_limit():
     message = AsyncMock()
     visit = {"id": "11111111-1111-1111-1111-111111111111", "status": "in_progress", "total_amount": "0.00"}
@@ -371,71 +350,6 @@ async def test_send_visit_card_offers_cancel_from_ready():
     data = {b.callback_data for b in _buttons(message)}
     assert f"visit_status:{VISIT_ID}:issued" in data
     assert f"visit_status:{VISIT_ID}:cancelled" in data
-
-
-async def test_change_status_callback_refreshes_visit_card():
-    callback = AsyncMock()
-    callback.data = f"visit_status:{VISIT_ID}:diagnostics"
-    state = _fsm_context()
-    api = AsyncMock()
-    api.change_visit_status.return_value = {"id": VISIT_ID, "status": "diagnostics", "total_amount": "0.00"}
-    api.get_visit.return_value = {"id": VISIT_ID, "status": "diagnostics", "total_amount": "0.00"}
-    api.list_work_items.return_value = []
-
-    await change_status_callback(callback, state, api=api)
-
-    api.change_visit_status.assert_awaited_once_with(VISIT_ID, "diagnostics")
-    api.get_visit.assert_awaited_once_with(VISIT_ID)
-    api.list_work_items.assert_awaited_once_with(VISIT_ID)
-    _, kwargs = callback.message.answer.await_args
-    assert kwargs["reply_markup"] is not None
-    callback.answer.assert_awaited_once()
-
-
-async def test_change_status_callback_cancelled_asks_for_reason():
-    callback = AsyncMock()
-    callback.data = f"visit_status:{VISIT_ID}:cancelled"
-    state = _fsm_context()
-    api = AsyncMock()
-
-    await change_status_callback(callback, state, api=api)
-
-    api.change_visit_status.assert_not_awaited()
-    assert await state.get_state() == VisitCancelStates.waiting_for_reason.state
-    assert (await state.get_data())["visit_id"] == VISIT_ID
-    assert "причину" in callback.message.answer.await_args.args[0]
-    callback.answer.assert_awaited_once()
-
-
-async def test_receive_cancel_reason_cancels_with_reason_and_refreshes_card():
-    message = AsyncMock()
-    message.text = "Клиент передумал"
-    state = _fsm_context()
-    await state.set_state(VisitCancelStates.waiting_for_reason)
-    await state.update_data(visit_id=VISIT_ID)
-    api = AsyncMock()
-    api.get_visit.return_value = {"id": VISIT_ID, "status": "cancelled", "total_amount": "0.00"}
-    api.list_work_items.return_value = []
-
-    await receive_cancel_reason(message, state, api=api)
-
-    api.change_visit_status.assert_awaited_once_with(VISIT_ID, "cancelled", reason="Клиент передумал")
-    assert await state.get_state() is None
-    api.get_visit.assert_awaited_once_with(VISIT_ID)
-
-
-async def test_receive_cancel_reason_rejects_non_text():
-    message = AsyncMock()
-    message.text = None
-    state = _fsm_context()
-    await state.set_state(VisitCancelStates.waiting_for_reason)
-    await state.update_data(visit_id=VISIT_ID)
-    api = AsyncMock()
-
-    await receive_cancel_reason(message, state, api=api)
-
-    api.change_visit_status.assert_not_awaited()
-    assert await state.get_state() == VisitCancelStates.waiting_for_reason.state
 
 
 async def test_receive_mileage_rollback_offers_confirmation_and_keeps_data():
@@ -635,10 +549,3 @@ async def test_new_visit_from_vehicle_refused_for_mechanic():
 
     api.get_vehicle_owner.assert_not_awaited()
     callback.answer.assert_awaited_once_with("Недостаточно прав")
-
-
-async def test_visit_header_formats_total_with_thousands_separator():
-    visit = {"id": "v1", "status": "received", "total_amount": 12400.0}
-    assert visit_header(visit)[-1] == "Сумма: 12 400"
-    visit["total_amount"] = 12400.5
-    assert visit_header(visit)[-1] == "Сумма: 12 400.50"

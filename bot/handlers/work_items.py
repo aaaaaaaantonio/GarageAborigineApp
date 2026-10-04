@@ -3,11 +3,14 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-from bot.api_client import ApiClient
+from bot import actions, nav
+from bot.api_client import ApiClient, ApiNotFound
 from bot.callback_ids import decode_id, encode_id
+from bot.handlers.navigation import STAFF_ROLES
 from bot.handlers.visits import refresh_visit_card
-from bot.states import AddWorkItemStates, ReassignMechanicStates
+from bot.states import AddWorkItemStates
 from bot.texts import CANCEL_HINT, TEXT_REQUIRED
+from bot.work_item_status import NEXT_WORK_ITEM_STATUSES, work_item_icon, work_item_status_label
 
 router = Router()
 
@@ -142,31 +145,79 @@ async def _create_work_item(message: Message, state: FSMContext, api: ApiClient,
     await refresh_visit_card(message, api, data["visit_id"])
 
 
-@router.callback_query(F.data.startswith("reassign:"))
-async def start_reassign_mechanic(callback: CallbackQuery, state: FSMContext, api: ApiClient, user: dict, **kwargs) -> None:
-    if user["role"] not in ("admin", "master"):
-        await callback.answer("Недостаточно прав")
+def _find(items: list[dict], item_id: str) -> dict | None:
+    return next((i for i in items if str(i["id"]) == str(item_id)), None)
+
+
+def _title(source: dict) -> str:
+    return " · ".join(p for p in (source.get("plate_number"), source.get("make_model")) if p)
+
+
+@nav.screen("work", params=("visit_id", "item_id"))
+async def render_work(api: ApiClient, user: dict, args: dict) -> nav.Rendered:
+    staff = user["role"] in STAFF_ROLES
+    if staff:
+        visit = await api.get_visit(args["visit_id"])
+        item = _find(await api.list_work_items(args["visit_id"]), args["item_id"])
+        if item is None:
+            raise ApiNotFound("Работа не найдена.")
+        title = _title(visit)
+    else:
+        # Mechanics can't read the visit; their own list carries the car.
+        item = _find(await api.list_my_work_items(), args["item_id"])
+        if item is None:
+            raise ApiNotFound("Работа больше не назначена вам.")
+        title = _title(item)
+    lines = [title] if title else []
+    lines += [f"{work_item_icon(item['status'])} {item['name']}", f"Статус: {work_item_status_label(item['status'])}"]
+    builder = InlineKeyboardBuilder()
+    if staff:
+        lines.append(f"Исполнитель: {item.get('assigned_mechanic_name') or 'без исполнителя'}")
+        lines.append(f"Согласовано клиентом: {'да' if item['approved_by_client'] else 'нет'}")
+        if not item["approved_by_client"]:
+            builder.button(text="✅ Согласовано клиентом", callback_data=actions.APPROVE)
+    for status in NEXT_WORK_ITEM_STATUSES.get(item["status"], []):
+        builder.button(text=f"→ {work_item_status_label(status)}", callback_data=f"{actions.WORK_STATUS}:{status}")
+    if staff:
+        builder.button(text="🔩 Добавить запчасть", callback_data=actions.ADD_PART)
+        builder.button(text="👤 Сменить исполнителя", callback_data=nav.go_data("reassign", args["visit_id"], args["item_id"]))
+    builder.adjust(1)
+    return "\n".join(lines), builder.as_markup()
+
+
+@router.callback_query(F.data.startswith(f"{actions.WORK_STATUS}:"))
+async def work_status_callback(callback: CallbackQuery, state: FSMContext, api: ApiClient, user: dict, **kwargs) -> None:
+    args = await nav.top_args(callback, state, "work")
+    if args is None:
         return
-    _, visit_b64, item_b64 = callback.data.split(":")
-    # visit + item + mechanic ids don't fit callback_data's 64 bytes together,
-    # so the item travels in FSM state and the next button carries the mechanic.
-    await state.clear()
-    await state.update_data(visit_id=decode_id(visit_b64), item_id=decode_id(item_b64))
-    await state.set_state(ReassignMechanicStates.choosing_mechanic)
+    await api.update_work_item_status(args["visit_id"], args["item_id"], callback.data.rsplit(":", 1)[1])
+    await nav.refresh(callback, state, api, user)
+
+
+@router.callback_query(F.data == actions.APPROVE)
+async def approve_callback(callback: CallbackQuery, state: FSMContext, api: ApiClient, user: dict, **kwargs) -> None:
+    args = await nav.top_args(callback, state, "work")
+    if args is None:
+        return
+    await api.approve_work_item(args["visit_id"], args["item_id"])
+    await nav.refresh(callback, state, api, user)
+
+
+@nav.screen("reassign", params=("visit_id", "item_id"))
+async def render_reassign(api: ApiClient, user: dict, args: dict) -> nav.Rendered:
     builder = InlineKeyboardBuilder()
     for mechanic in await api.list_mechanics():
-        builder.button(text=mechanic["full_name"], callback_data=f"reassign_to:{encode_id(mechanic['id'])}")
-    builder.button(text="Без исполнителя", callback_data="reassign_to:none")
+        builder.button(text=mechanic["full_name"], callback_data=f"{actions.REASSIGN}:{encode_id(mechanic['id'])}")
+    builder.button(text="Без исполнителя", callback_data=f"{actions.REASSIGN}:none")
     builder.adjust(1)
-    await callback.message.answer("Кому передать работу?", reply_markup=builder.as_markup())
-    await callback.answer()
+    return "Кому передать работу?", builder.as_markup()
 
 
-@router.callback_query(ReassignMechanicStates.choosing_mechanic, F.data.startswith("reassign_to:"))
-async def choose_new_mechanic_callback(callback: CallbackQuery, state: FSMContext, api: ApiClient, **kwargs) -> None:
-    _, picked = callback.data.split(":")
-    data = await state.get_data()
-    await api.assign_work_item_mechanic(data["visit_id"], data["item_id"], None if picked == "none" else decode_id(picked))
-    await state.clear()
-    await refresh_visit_card(callback.message, api, data["visit_id"])
-    await callback.answer()
+@router.callback_query(F.data.startswith(f"{actions.REASSIGN}:"))
+async def reassign_callback(callback: CallbackQuery, state: FSMContext, api: ApiClient, user: dict, **kwargs) -> None:
+    args = await nav.top_args(callback, state, "reassign")
+    if args is None:
+        return
+    picked = callback.data.rsplit(":", 1)[1]
+    await api.assign_work_item_mechanic(args["visit_id"], args["item_id"], None if picked == "none" else decode_id(picked))
+    await nav.pop(callback, state, api, user)

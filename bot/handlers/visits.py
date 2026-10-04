@@ -1,15 +1,16 @@
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
+from bot import actions, nav, wizard
 from bot.api_client import ApiClient, ApiMileageRollback
 from bot.callback_ids import decode_id, encode_id
 from bot.formatting import format_number
 from bot.states import NewClientStates, NewVehicleStates, NewVisitStates, VisitCancelStates
 from bot.texts import CANCEL_HINT, TEXT_REQUIRED
 from bot.visit_status import visit_status_label
-from bot.work_item_status import FROM_VISIT_CARD, add_work_status_buttons, work_item_status_label
+from bot.work_item_status import FROM_VISIT_CARD, add_work_status_buttons, work_item_icon, work_item_status_label
 
 router = Router()
 
@@ -215,36 +216,68 @@ async def new_visit_for_vehicle_callback(
     await callback.answer()
 
 
-@router.callback_query(F.data.startswith("visit_status:"))
-async def change_status_callback(callback: CallbackQuery, state: FSMContext, api: ApiClient, **kwargs) -> None:
-    _, visit_id, new_status = callback.data.split(":")
-    if new_status == "cancelled":
-        await state.clear()
-        await state.update_data(visit_id=visit_id)
-        await state.set_state(VisitCancelStates.waiting_for_reason)
-        await callback.message.answer(f"Укажите причину отмены заезда {CANCEL_HINT}:")
-        await callback.answer()
+def visit_card(visit: dict, work_items: list[dict]) -> nav.Rendered:
+    """Header + numbered work list; one button per work item opens its screen."""
+    lines = visit_header(visit)
+    builder = InlineKeyboardBuilder()
+    if work_items:
+        lines.append("Работы:")
+    for index, item in enumerate(work_items, start=1):
+        mechanic = item.get("assigned_mechanic_name") or "без исполнителя"
+        lines.append(f"{index}. {item['name']} — {work_item_status_label(item['status'])} · {mechanic}")
+        builder.button(
+            text=f"{work_item_icon(item['status'])} {index}. {item['name']} · {mechanic}",
+            callback_data=nav.go_data("work", visit["id"], item["id"]),
+        )
+    builder.button(text="➕ Добавить работу", callback_data=actions.ADD_WORK)
+    if visit["status"] in _NEXT_STATUS_BY_CURRENT:
+        builder.button(text="🔄 Статус заезда", callback_data=nav.go_data("visit_status", visit["id"]))
+    builder.button(text="📄 PDF", callback_data=actions.PDF)
+    builder.adjust(1)
+    return "\n".join(lines), builder.as_markup()
+
+
+@nav.screen("visit", params=("visit_id",))
+async def render_visit(api: ApiClient, user: dict, args: dict) -> nav.Rendered:
+    visit = await api.get_visit(args["visit_id"])
+    items = await api.list_work_items(args["visit_id"])
+    return visit_card(visit, items)
+
+
+@nav.screen("visit_status", params=("visit_id",))
+async def render_visit_status(api: ApiClient, user: dict, args: dict) -> nav.Rendered:
+    visit = await api.get_visit(args["visit_id"])
+    builder = InlineKeyboardBuilder()
+    for status in _NEXT_STATUS_BY_CURRENT.get(visit["status"], []):
+        builder.button(text=visit_status_label(status), callback_data=f"{actions.VISIT_STATUS}:{status}")
+    builder.adjust(1)
+    return f"Статус сейчас: {visit_status_label(visit['status'])}\nСменить на:", builder.as_markup()
+
+
+@router.callback_query(F.data.startswith(f"{actions.VISIT_STATUS}:"))
+async def visit_status_callback(callback: CallbackQuery, state: FSMContext, api: ApiClient, user: dict, **kwargs) -> None:
+    args = await nav.top_args(callback, state, "visit_status")
+    if args is None:
         return
-    await api.change_visit_status(visit_id, new_status)
-    await refresh_visit_card(callback.message, api, visit_id)
-    await callback.answer()
+    new_status = callback.data.rsplit(":", 1)[1]
+    if new_status == "cancelled":
+        await wizard.start(callback, state, api, user, "cancel_visit", VisitCancelStates.waiting_for_reason, visit_id=args["visit_id"])
+        return
+    await api.change_visit_status(args["visit_id"], new_status)
+    await nav.pop(callback, state, api, user)
+
+
+@wizard.step(VisitCancelStates.waiting_for_reason)
+async def cancel_reason_prompt(state: FSMContext, api: ApiClient, user: dict):
+    return "Укажите причину отмены заезда:", None
 
 
 @router.message(VisitCancelStates.waiting_for_reason)
-async def receive_cancel_reason(message: Message, state: FSMContext, api: ApiClient, **kwargs) -> None:
+async def receive_cancel_reason(message: Message, state: FSMContext, api: ApiClient, user: dict, **kwargs) -> None:
     if not message.text:
-        await message.answer(TEXT_REQUIRED)
+        await wizard.reprompt(message, state, api, user, TEXT_REQUIRED)
         return
     visit_id = (await state.get_data())["visit_id"]
     await api.change_visit_status(visit_id, "cancelled", reason=message.text)
-    await state.clear()
-    await refresh_visit_card(message, api, visit_id)
-
-
-@router.callback_query(F.data.startswith("approve_work:"))
-async def approve_work_callback(callback: CallbackQuery, api: ApiClient, **kwargs) -> None:
-    _, visit_b64, item_b64 = callback.data.split(":")
-    visit_id = decode_id(visit_b64)
-    await api.approve_work_item(visit_id, decode_id(item_b64))
-    await refresh_visit_card(callback.message, api, visit_id)
-    await callback.answer()
+    await wizard.finish(state)
+    await nav.pop(message, state, api, user)  # off the status screen, back to the card

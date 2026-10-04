@@ -30,10 +30,6 @@ class AddWorkItemStates(StatesGroup):
     choosing_mechanic = State()
 
 
-class ReassignMechanicStates(StatesGroup):
-    choosing_mechanic = State()
-
-
 class AddPartItemStates(StatesGroup):
     choosing_work_item = State()
     waiting_for_name = State()

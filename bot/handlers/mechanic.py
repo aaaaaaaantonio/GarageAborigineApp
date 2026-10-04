@@ -1,25 +1,20 @@
-from aiogram import Router
-from aiogram.fsm.context import FSMContext
-from aiogram.types import Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
+from bot import nav
 from bot.api_client import ApiClient
-from bot.work_item_status import FROM_MY_WORK_ITEMS, add_work_status_buttons, work_item_status_label
-
-router = Router()
+from bot.work_item_status import work_item_icon
 
 
-async def show_my_work_items(message: Message, state: FSMContext, api: ApiClient, **kwargs) -> None:
-    """Menu entry point (registered in bot/handlers/menu.py)."""
-    await state.clear()
+@nav.screen("my_works")
+async def render_my_works(api: ApiClient, user: dict, args: dict) -> nav.Rendered:
     items = await api.list_my_work_items()
+    builder = InlineKeyboardBuilder()
     if not items:
-        await message.answer("У вас нет назначенных работ.")
-        return
+        return "У вас нет назначенных работ.", builder.as_markup()
     for item in items:
-        builder = InlineKeyboardBuilder()
-        has_buttons = add_work_status_buttons(builder, item["visit_id"], item, FROM_MY_WORK_ITEMS)
-        await message.answer(
-            f"{item['name']} — {work_item_status_label(item['status'])} (заезд {item['visit_id']})",
-            reply_markup=builder.as_markup() if has_buttons else None,
-        )
+        label = f"{work_item_icon(item['status'])} {item['name']}"
+        if item.get("plate_number"):
+            label += f" · {item['plate_number']}"
+        builder.button(text=label, callback_data=nav.go_data("work", item["visit_id"], item["id"]))
+    builder.adjust(1)
+    return f"Мои работы ({len(items)})", builder.as_markup()

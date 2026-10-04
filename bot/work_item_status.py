@@ -22,6 +22,18 @@ WORK_ITEM_STATUS_LABELS: dict[str, str] = {
 }
 
 
+WORK_ITEM_STATUS_ICONS: dict[str, str] = {
+    "not_ready": "⏳",
+    "in_progress": "🔧",
+    "waiting_parts": "📦",
+    "ready": "✅",
+}
+
+
+def work_item_icon(code: str) -> str:
+    return WORK_ITEM_STATUS_ICONS.get(code, "•")
+
+
 def work_item_status_label(code: str) -> str:
     return WORK_ITEM_STATUS_LABELS.get(code, code)
 
