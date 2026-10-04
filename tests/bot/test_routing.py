@@ -113,8 +113,10 @@ async def test_state_bound_wizard_callbacks_do_not_fire_without_state(env, data)
 async def test_mileage_confirm_callback_routes_in_confirming_state(env):
     bot, dp, state, api, user = env
     await state.set_state(NewVisitStates.confirming_mileage)
-    await state.update_data(client_id="c1", vehicle_id="v1", mileage=900)
+    await state.update_data(client_id="c1", vehicle_id="v1", mileage=900, wiz_name="new_visit", wiz_steps=[])
     api.create_visit.return_value = {"id": "11111111-1111-1111-1111-111111111111", "status": "received"}
+    api.get_visit.return_value = {"id": "11111111-1111-1111-1111-111111111111", "status": "received", "total_amount": 0}
+    api.list_work_items.return_value = []
 
     await dp.feed_update(bot, _callback("mileage_confirm"), api=api, user=user)
 
