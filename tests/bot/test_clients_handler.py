@@ -18,7 +18,7 @@ async def test_start_new_client_asks_for_phone():
     message = AsyncMock()
     state = _fsm_context()
 
-    await start_new_client(message, state)
+    await start_new_client(message, state, user={"role": "master"})
 
     message.answer.assert_awaited_once()
     assert (await state.get_state()) == NewClientStates.waiting_for_phone.state
@@ -52,3 +52,13 @@ async def test_receive_full_name_continues_new_visit_wizard_when_return_flow_set
     assert (await state.get_state()) == NewVisitStates.waiting_for_vehicle_query.state
     data = await state.get_data()
     assert data["client_id"] == "c1"
+
+
+async def test_start_new_client_rejects_mechanic():
+    message = AsyncMock()
+    state = _fsm_context()
+
+    await start_new_client(message, state, user={"role": "mechanic"})
+
+    message.answer.assert_awaited_once_with("Недостаточно прав.")
+    assert (await state.get_state()) is None

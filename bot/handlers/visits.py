@@ -5,6 +5,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from bot.api_client import ApiClient, ApiMileageRollback
 from bot.callback_ids import decode_id, encode_id
+from bot.formatting import format_number
 from bot.states import NewClientStates, NewVehicleStates, NewVisitStates, VisitCancelStates
 from bot.texts import CANCEL_HINT, TEXT_REQUIRED
 from bot.visit_status import visit_status_label
@@ -33,7 +34,7 @@ def visit_header(visit: dict) -> list[str]:
     status_line = f"Статус: {visit_status_label(visit['status'])}"
     if visit.get("master_name"):
         status_line += f" · Мастер: {visit['master_name']}"
-    return [title or "Заезд", status_line, f"Сумма: {visit.get('total_amount', '—')}"]
+    return [title or "Заезд", status_line, f"Сумма: {format_number(visit['total_amount']) if 'total_amount' in visit else '—'}"]
 
 
 async def send_visit_card(message: Message, visit: dict, work_items: list[dict]) -> None:

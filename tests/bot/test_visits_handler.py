@@ -18,6 +18,7 @@ from bot.handlers.visits import (
     receive_mileage,
     receive_vehicle_query,
     send_visit_card,
+    visit_header,
     start_new_visit,
 )
 from bot.states import NewClientStates, NewVehicleStates, NewVisitStates, VisitCancelStates
@@ -634,3 +635,10 @@ async def test_new_visit_from_vehicle_refused_for_mechanic():
 
     api.get_vehicle_owner.assert_not_awaited()
     callback.answer.assert_awaited_once_with("Недостаточно прав")
+
+
+async def test_visit_header_formats_total_with_thousands_separator():
+    visit = {"id": "v1", "status": "received", "total_amount": 12400.0}
+    assert visit_header(visit)[-1] == "Сумма: 12 400"
+    visit["total_amount"] = 12400.5
+    assert visit_header(visit)[-1] == "Сумма: 12 400.50"

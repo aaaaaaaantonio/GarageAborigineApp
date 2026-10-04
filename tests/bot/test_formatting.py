@@ -1,4 +1,4 @@
-from bot.formatting import format_date, format_day
+from bot.formatting import format_date, format_day, format_number
 from bot.visit_status import visit_status_label
 from bot.work_item_status import work_item_status_label
 
@@ -15,3 +15,11 @@ def test_status_labels_are_russian_and_fall_back_to_code():
     assert visit_status_label("unknown") == "unknown"
     assert work_item_status_label("ready") == "Готово"
     assert work_item_status_label("not_ready") == "Не начата"
+
+
+def test_format_number_groups_thousands_and_trims_whole_decimals():
+    assert format_number(12400.0) == "12 400"
+    assert format_number(12400) == "12 400"
+    assert format_number(12400.5) == "12 400.50"
+    assert format_number(0) == "0"
+    assert format_number(950) == "950"

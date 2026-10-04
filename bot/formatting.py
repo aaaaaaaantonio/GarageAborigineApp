@@ -17,3 +17,11 @@ def format_date(value: str) -> str:
 
 def format_day(value: str) -> str:
     return _msk(value).strftime("%d.%m")
+
+
+def format_number(value: float) -> str:
+    """Space-grouped thousands; two decimals only when the value is fractional."""
+    number = float(value)
+    if number.is_integer():
+        return f"{int(number):,}".replace(",", " ")
+    return f"{number:,.2f}".replace(",", " ")

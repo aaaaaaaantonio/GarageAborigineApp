@@ -70,7 +70,11 @@ class VisitRepository:
             stmt = stmt.where(Visit.client_id == client_id)
         if vehicle_id is not None:
             stmt = stmt.where(Visit.vehicle_id == vehicle_id)
-        stmt = stmt.order_by(
-            (Visit.assigned_master_id == viewer_id).desc(), Visit.created_at.desc(), Visit.id
-        ).limit(limit)
+        if client_id is None and vehicle_id is None:
+            stmt = stmt.order_by(
+                (Visit.assigned_master_id == viewer_id).desc(), Visit.created_at.desc(), Visit.id
+            )
+        else:
+            stmt = stmt.order_by(Visit.created_at.desc(), Visit.id)
+        stmt = stmt.limit(limit)
         return list((await self.session.execute(stmt)).all())

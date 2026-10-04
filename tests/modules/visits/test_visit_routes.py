@@ -112,6 +112,19 @@ async def test_list_filters_by_client_and_vehicle(api_app, session):
     assert [i["id"] for i in by_vehicle.json()["items"]] == [str(second.id)]
 
 
+@pytest.mark.parametrize("filter_name", ["vehicle_id", "client_id"])
+async def test_filtered_list_is_chronological_not_own_first(api_app, session, filter_name):
+    admin, me, other, mechanic, client, vehicle = await _world(session)
+    mine_old = await _visit(session, admin, client, vehicle, me, hours=1)
+    theirs_new = await _visit(session, admin, client, vehicle, other, hours=2)
+    target = vehicle.id if filter_name == "vehicle_id" else client.id
+
+    resp = await _get(api_app, f"/visits?{filter_name}={target}", me)
+
+    ids = [item["id"] for item in resp.json()["items"]]
+    assert ids == [str(theirs_new.id), str(mine_old.id)]
+
+
 async def test_list_excludes_soft_deleted_visits_clients_vehicles(api_app, session):
     admin, me, other, mechanic, client, vehicle = await _world(session)
     deleted_visit = await _visit(session, admin, client, vehicle, me, hours=1)
@@ -180,6 +193,14 @@ async def test_get_visit_returns_summary(api_app, session):
     assert body["client_name"] == "Иванов Пётр"
     assert body["master_name"] == "Мастер Я"
     assert body["make_model"] == "Toyota Camry"
+
+
+async def test_get_unknown_visit_returns_404(api_app, session):
+    admin, me, other, mechanic, client, vehicle = await _world(session)
+
+    resp = await _get(api_app, f"/visits/{uuid.uuid4()}", me)
+
+    assert resp.status_code == 404
 
 
 async def test_create_and_change_status_routes_return_summary(api_app, session):

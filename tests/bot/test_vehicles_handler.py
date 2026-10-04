@@ -18,7 +18,7 @@ async def test_start_new_vehicle_asks_for_vin():
     message = AsyncMock()
     state = _fsm_context()
 
-    await start_new_vehicle(message, state)
+    await start_new_vehicle(message, state, user={"role": "master"})
 
     assert (await state.get_state()) == NewVehicleStates.waiting_for_vin.state
 
@@ -80,3 +80,13 @@ async def test_receive_make_model_standalone_does_not_attach_owner():
     await receive_make_model(message, state, api=api)
 
     api.attach_owner.assert_not_awaited()
+
+
+async def test_start_new_vehicle_rejects_mechanic():
+    message = AsyncMock()
+    state = _fsm_context()
+
+    await start_new_vehicle(message, state, user={"role": "mechanic"})
+
+    message.answer.assert_awaited_once_with("Недостаточно прав.")
+    assert (await state.get_state()) is None

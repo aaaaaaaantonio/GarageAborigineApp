@@ -10,7 +10,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from bot.api_client import ApiClient
 from bot.callback_ids import decode_id, encode_id
-from bot.formatting import format_date, format_day
+from bot.formatting import format_date, format_day, format_number
 from bot.handlers.visits import send_visit_card
 from bot.visit_status import visit_status_label
 from bot.work_item_status import work_item_status_label
@@ -66,10 +66,6 @@ async def open_visit_callback(callback: CallbackQuery, api: ApiClient, **kwargs)
 STAFF_ROLES = {"admin", "master"}
 
 
-def _km(value: int) -> str:
-    return f"{value:,}".replace(",", " ")
-
-
 async def send_client_card(message: Message, api: ApiClient, client_id: str) -> None:
     client = await api.get_client(client_id)
     vehicles = await api.list_client_vehicles(client_id)
@@ -100,7 +96,7 @@ async def send_vehicle_card(message: Message, api: ApiClient, user: dict, vehicl
     builder.adjust(1)
     text = (
         f"🚗 {vehicle['make']} {vehicle['model']} · {vehicle['plate_number']}\n"
-        f"VIN: {vehicle['vin']} · Пробег: {_km(vehicle['mileage_current'])} км"
+        f"VIN: {vehicle['vin']} · Пробег: {format_number(vehicle['mileage_current'])} км"
     )
     await message.answer(text, reply_markup=builder.as_markup())
 
@@ -151,7 +147,7 @@ async def work_history_callback(callback: CallbackQuery, api: ApiClient, **kwarg
     for item in history["items"]:
         if item["visit_id"] != current_visit:
             current_visit = item["visit_id"]
-            lines.append(f"{format_date(item['visit_at'])} · {_km(item['mileage'])} км")
+            lines.append(f"{format_date(item['visit_at'])} · {format_number(item['mileage'])} км")
         lines.append(f"  • {item['name']} — {work_item_status_label(item['status'])}")
     if history["has_more"]:
         lines.append("Показаны последние 30 работ.")
