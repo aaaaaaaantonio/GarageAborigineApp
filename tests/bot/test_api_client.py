@@ -213,3 +213,28 @@ async def test_list_mechanics_calls_users_mechanics():
     )
     client = ApiClient()
     assert await client.list_mechanics() == [{"id": "m1", "full_name": "Анна"}]
+
+
+@respx.mock
+async def test_list_visits_passes_filters_as_query():
+    route = respx.route(method="GET", host="localhost", path="/visits").mock(
+        return_value=httpx.Response(200, json={"items": [], "has_more": False})
+    )
+    result = await ApiClient(user_id="u1").list_visits(active=True, client_id="c1")
+    assert result == {"items": [], "has_more": False}
+    assert dict(route.calls.last.request.url.params) == {"active": "true", "client_id": "c1"}
+
+
+@respx.mock
+async def test_navigation_endpoints_hit_expected_paths():
+    respx.get("http://localhost:8000/clients/c1/vehicles").mock(return_value=httpx.Response(200, json=[]))
+    respx.get("http://localhost:8000/vehicles/v1/owner").mock(return_value=httpx.Response(200, content=b"null"))
+    respx.get("http://localhost:8000/users/masters").mock(return_value=httpx.Response(200, json=[]))
+    respx.get("http://localhost:8000/vehicles/v1/work-history").mock(
+        return_value=httpx.Response(200, json={"items": [], "has_more": False})
+    )
+    api = ApiClient(user_id="u1")
+    assert await api.list_client_vehicles("c1") == []
+    assert await api.get_vehicle_owner("v1") is None
+    assert await api.list_masters() == []
+    assert await api.get_vehicle_work_history("v1") == {"items": [], "has_more": False}

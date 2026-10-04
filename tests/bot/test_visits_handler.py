@@ -475,3 +475,40 @@ async def test_confirm_mileage_callback_resends_with_manual_confirmation():
     assert await state.get_state() is None
     callback.message.answer.assert_awaited_once()
     callback.answer.assert_awaited_once()
+
+
+async def test_send_visit_card_header_is_human_readable_and_statuses_russian():
+    message = AsyncMock()
+    visit = {
+        "id": "11111111-1111-1111-1111-111111111111",
+        "status": "in_progress",
+        "total_amount": 12400.0,
+        "plate_number": "А123ВС77",
+        "make_model": "Toyota Camry",
+        "client_name": "Иванов Пётр",
+        "master_name": "Петров",
+    }
+    work_items = [
+        {"id": "22222222-2222-2222-2222-222222222222", "name": "Замена масла", "status": "in_progress",
+         "approved_by_client": True},
+    ]
+
+    await send_visit_card(message, visit, work_items)
+
+    text = message.answer.await_args.args[0]
+    assert text.splitlines()[0] == "А123ВС77 · Toyota Camry · Иванов Пётр"
+    assert "Статус: Ремонт · Мастер: Петров" in text
+    assert "1. Замена масла — В работе" in text
+    markup = message.answer.await_args.kwargs["reply_markup"]
+    texts = [b.text for row in markup.inline_keyboard for b in row]
+    assert "Ждём запчасти" in texts
+    assert "🔄 Замена масла → Готово" in texts
+    assert "11111111-1111-1111-1111-111111111111" not in text
+
+
+async def test_send_visit_card_without_summary_falls_back_to_generic_title():
+    message = AsyncMock()
+
+    await send_visit_card(message, {"id": "visit1", "status": "received", "total_amount": "0.00"}, [])
+
+    assert message.answer.await_args.args[0].splitlines()[0] == "Заезд"

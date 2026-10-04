@@ -65,3 +65,13 @@ async def test_show_my_work_items_omits_button_when_no_next_status():
 
     _, kwargs = message.answer.await_args
     assert kwargs["reply_markup"] is None
+
+
+async def test_show_my_work_items_shows_russian_status():
+    message = AsyncMock()
+    api = AsyncMock()
+    api.list_my_work_items.return_value = [_item("waiting_parts")]
+
+    await show_my_work_items(message, _fsm_context(), api=api)
+
+    assert "Ждёт запчасти" in message.answer.await_args.args[0]

@@ -1,4 +1,4 @@
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 
 import httpx
 
@@ -207,3 +207,28 @@ class ApiClient:
         return await self.post(
             "/users", json={"role": role, "full_name": full_name, "telegram_id": telegram_id}
         )
+
+    async def list_visits(
+        self, active: bool = False, client_id: str | None = None, vehicle_id: str | None = None
+    ) -> dict:
+        params: dict[str, str] = {}
+        if active:
+            params["active"] = "true"
+        if client_id is not None:
+            params["client_id"] = client_id
+        if vehicle_id is not None:
+            params["vehicle_id"] = vehicle_id
+        path = f"/visits?{urlencode(params)}" if params else "/visits"
+        return await self.get(path)
+
+    async def list_client_vehicles(self, client_id: str) -> list[dict]:
+        return await self.get(f"/clients/{client_id}/vehicles")
+
+    async def get_vehicle_owner(self, vehicle_id: str) -> dict | None:
+        return await self.get(f"/vehicles/{vehicle_id}/owner")
+
+    async def list_masters(self) -> list[dict]:
+        return await self.get("/users/masters")
+
+    async def get_vehicle_work_history(self, vehicle_id: str) -> dict:
+        return await self.get(f"/vehicles/{vehicle_id}/work-history")

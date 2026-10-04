@@ -4,7 +4,7 @@ from aiogram.types import Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from bot.api_client import ApiClient
-from bot.work_item_status import FROM_MY_WORK_ITEMS, add_work_status_buttons
+from bot.work_item_status import FROM_MY_WORK_ITEMS, add_work_status_buttons, work_item_status_label
 
 router = Router()
 
@@ -20,6 +20,6 @@ async def show_my_work_items(message: Message, state: FSMContext, api: ApiClient
         builder = InlineKeyboardBuilder()
         has_buttons = add_work_status_buttons(builder, item["visit_id"], item, FROM_MY_WORK_ITEMS)
         await message.answer(
-            f"{item['name']} — {item['status']} (заезд {item['visit_id']})",
+            f"{item['name']} — {work_item_status_label(item['status'])} (заезд {item['visit_id']})",
             reply_markup=builder.as_markup() if has_buttons else None,
         )

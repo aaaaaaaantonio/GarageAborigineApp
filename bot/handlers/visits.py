@@ -7,7 +7,8 @@ from bot.api_client import ApiClient, ApiMileageRollback
 from bot.callback_ids import decode_id, encode_id
 from bot.states import NewClientStates, NewVehicleStates, NewVisitStates, VisitCancelStates
 from bot.texts import CANCEL_HINT, TEXT_REQUIRED
-from bot.work_item_status import FROM_VISIT_CARD, add_work_status_buttons
+from bot.visit_status import visit_status_label
+from bot.work_item_status import FROM_VISIT_CARD, add_work_status_buttons, work_item_status_label
 
 router = Router()
 
@@ -24,16 +25,27 @@ _NEXT_STATUS_BY_CURRENT = {
 MILEAGE_CONFIRM = "mileage_confirm"
 
 
+def visit_header(visit: dict) -> list[str]:
+    """Card title from the visit summary; tolerant of a partial dict."""
+    title = " · ".join(
+        part for part in (visit.get("plate_number"), visit.get("make_model"), visit.get("client_name")) if part
+    )
+    status_line = f"Статус: {visit_status_label(visit['status'])}"
+    if visit.get("master_name"):
+        status_line += f" · Мастер: {visit['master_name']}"
+    return [title or "Заезд", status_line, f"Сумма: {visit.get('total_amount', '—')}"]
+
+
 async def send_visit_card(message: Message, visit: dict, work_items: list[dict]) -> None:
     builder = InlineKeyboardBuilder()
     for status in _NEXT_STATUS_BY_CURRENT.get(visit["status"], []):
-        builder.button(text=status, callback_data=f"visit_status:{visit['id']}:{status}")
-    lines = [f"Заезд {visit['id']}", f"Статус: {visit['status']}", f"Сумма: {visit.get('total_amount', '—')}"]
+        builder.button(text=visit_status_label(status), callback_data=f"visit_status:{visit['id']}:{status}")
+    lines = visit_header(visit)
     if work_items:
         lines.append("Работы:")
     for index, item in enumerate(work_items, start=1):
         name = item["name"]
-        lines.append(f"{index}. {name} — {item['status']}")
+        lines.append(f"{index}. {name} — {work_item_status_label(item['status'])}")
         visit_b64, item_b64 = encode_id(visit["id"]), encode_id(item["id"])
         if item.get("approved_by_client") is False:
             builder.button(text=f"✅ {name}", callback_data=f"approve_work:{visit_b64}:{item_b64}")

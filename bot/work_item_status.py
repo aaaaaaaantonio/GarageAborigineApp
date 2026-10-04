@@ -14,6 +14,18 @@ NEXT_WORK_ITEM_STATUSES: dict[str, list[str]] = {
     "waiting_parts": ["in_progress", "ready"],
 }
 
+WORK_ITEM_STATUS_LABELS: dict[str, str] = {
+    "not_ready": "Не начата",
+    "in_progress": "В работе",
+    "waiting_parts": "Ждёт запчасти",
+    "ready": "Готово",
+}
+
+
+def work_item_status_label(code: str) -> str:
+    return WORK_ITEM_STATUS_LABELS.get(code, code)
+
+
 # callback_data prefixes: which screen the button lives on, so the shared
 # handler knows what to show after the change. Longest payload:
 # "wsc:" + 22 + ":" + 22 + ":waiting_parts" = 63 bytes.
@@ -28,7 +40,7 @@ def add_work_status_buttons(
     next_statuses = NEXT_WORK_ITEM_STATUSES.get(item["status"], [])
     for status in next_statuses:
         builder.button(
-            text=f"{label_prefix}→ {status}",
+            text=f"{label_prefix}→ {work_item_status_label(status)}",
             callback_data=f"{origin}:{encode_id(visit_id)}:{encode_id(item['id'])}:{status}",
         )
     return len(next_statuses)
