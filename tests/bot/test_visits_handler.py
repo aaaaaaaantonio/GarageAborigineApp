@@ -11,7 +11,9 @@ from bot.handlers.visits import (
     confirm_mileage_callback,
     receive_cancel_reason,
     choose_client_callback,
+    choose_master_callback,
     choose_vehicle_callback,
+    new_visit_for_vehicle_callback,
     receive_client_query,
     receive_mileage,
     receive_vehicle_query,
@@ -35,7 +37,7 @@ async def test_receive_mileage_uses_acting_user_as_master():
     await state.update_data(client_id="c1", vehicle_id="v1")
     api = AsyncMock()
     api.create_visit.return_value = {"id": "visit1", "status": "received"}
-    user = {"id": "m1"}
+    user = {"id": "m1", "role": "master"}
 
     await receive_mileage(message, state, api=api, user=user)
 
@@ -319,7 +321,7 @@ async def test_receive_mileage_reprompts_on_non_numeric_input():
     await state.update_data(client_id="c1", vehicle_id="v1")
     api = AsyncMock()
 
-    await receive_mileage(message, state, api=api, user={"id": "m1"})
+    await receive_mileage(message, state, api=api, user={"id": "m1", "role": "master"})
 
     api.create_visit.assert_not_awaited()
     message.answer.assert_awaited_once_with("Введите число (пробег в км).")
@@ -446,11 +448,11 @@ async def test_receive_mileage_rollback_offers_confirmation_and_keeps_data():
     api = AsyncMock()
     api.create_visit.side_effect = ApiMileageRollback("Пробег меньше последнего зафиксированного.")
 
-    await receive_mileage(message, state, api=api, user={"id": "m1"})
+    await receive_mileage(message, state, api=api, user={"id": "m1", "role": "master"})
 
     assert await state.get_state() == NewVisitStates.confirming_mileage.state
     data = await state.get_data()
-    assert data == {"client_id": "c1", "vehicle_id": "v1", "mileage": 1000}
+    assert data == {"client_id": "c1", "vehicle_id": "v1", "mileage": 1000, "mileage_confirmed": False}
     args, kwargs = message.answer.await_args
     assert "Пробег меньше" in args[0]
     buttons = [b for row in kwargs["reply_markup"].inline_keyboard for b in row]
@@ -462,11 +464,11 @@ async def test_confirm_mileage_callback_resends_with_manual_confirmation():
     callback.data = "mileage_confirm"
     state = _fsm_context()
     await state.set_state(NewVisitStates.confirming_mileage)
-    await state.update_data(client_id="c1", vehicle_id="v1", mileage=1000)
+    await state.update_data(client_id="c1", vehicle_id="v1", mileage=1000, mileage_confirmed=False)
     api = AsyncMock()
     api.create_visit.return_value = {"id": VISIT_ID, "status": "received", "total_amount": "0.00"}
 
-    await confirm_mileage_callback(callback, state, api=api, user={"id": "m1"})
+    await confirm_mileage_callback(callback, state, api=api, user={"id": "m1", "role": "master"})
 
     api.create_visit.assert_awaited_once_with(
         client_id="c1", vehicle_id="v1", assigned_master_id="m1", mileage_at_intake=1000,
@@ -512,3 +514,123 @@ async def test_send_visit_card_without_summary_falls_back_to_generic_title():
     await send_visit_card(message, {"id": "visit1", "status": "received", "total_amount": "0.00"}, [])
 
     assert message.answer.await_args.args[0].splitlines()[0] == "Заезд"
+
+
+MASTER_A = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+VEHICLE_ID = "44444444-4444-4444-4444-444444444444"
+ADMIN = {"id": "admin1", "role": "admin"}
+
+
+async def test_admin_is_asked_to_choose_master_after_mileage():
+    message = AsyncMock()
+    message.text = "45000"
+    state = _fsm_context()
+    await state.set_state(NewVisitStates.waiting_for_mileage)
+    await state.update_data(client_id="c1", vehicle_id="v1")
+    api = AsyncMock()
+    api.list_masters.return_value = [{"id": MASTER_A, "full_name": "Анна"}]
+
+    await receive_mileage(message, state, api=api, user=ADMIN)
+
+    api.create_visit.assert_not_awaited()
+    assert await state.get_state() == NewVisitStates.choosing_master.state
+    markup = message.answer.await_args.kwargs["reply_markup"]
+    assert [(b.text, b.callback_data) for row in markup.inline_keyboard for b in row] == [
+        ("Анна", f"master_pick:{_encode_id(MASTER_A)}")
+    ]
+
+
+async def test_admin_master_pick_creates_visit_with_that_master():
+    callback = AsyncMock()
+    callback.data = f"master_pick:{_encode_id(MASTER_A)}"
+    state = _fsm_context()
+    await state.set_state(NewVisitStates.choosing_master)
+    await state.update_data(client_id="c1", vehicle_id="v1", mileage=45000, mileage_confirmed=False)
+    api = AsyncMock()
+    api.create_visit.return_value = {"id": "visit1", "status": "received"}
+
+    await choose_master_callback(callback, state, api=api, user=ADMIN)
+
+    api.create_visit.assert_awaited_once_with(
+        client_id="c1", vehicle_id="v1", assigned_master_id=MASTER_A, mileage_at_intake=45000,
+        mileage_manually_confirmed=False,
+    )
+    assert await state.get_state() is None
+
+
+async def test_admin_without_masters_is_told_to_add_one():
+    message = AsyncMock()
+    message.text = "45000"
+    state = _fsm_context()
+    await state.set_state(NewVisitStates.waiting_for_mileage)
+    await state.update_data(client_id="c1", vehicle_id="v1")
+    api = AsyncMock()
+    api.list_masters.return_value = []
+
+    await receive_mileage(message, state, api=api, user=ADMIN)
+
+    message.answer.assert_awaited_once_with("Сначала добавьте мастера через «Добавить сотрудника».")
+    assert await state.get_state() is None
+    api.create_visit.assert_not_awaited()
+
+
+async def test_admin_mileage_rollback_keeps_chosen_master():
+    from bot.api_client import ApiMileageRollback
+
+    callback = AsyncMock()
+    callback.data = f"master_pick:{_encode_id(MASTER_A)}"
+    state = _fsm_context()
+    await state.set_state(NewVisitStates.choosing_master)
+    await state.update_data(client_id="c1", vehicle_id="v1", mileage=100, mileage_confirmed=False)
+    api = AsyncMock()
+    api.create_visit.side_effect = [ApiMileageRollback("Пробег меньше"), {"id": "visit1", "status": "received"}]
+
+    await choose_master_callback(callback, state, api=api, user=ADMIN)
+    assert await state.get_state() == NewVisitStates.confirming_mileage.state
+
+    confirm = AsyncMock()
+    await confirm_mileage_callback(confirm, state, api=api, user=ADMIN)
+
+    api.list_masters.assert_not_awaited()
+    assert api.create_visit.await_args_list[1].kwargs["assigned_master_id"] == MASTER_A
+    assert api.create_visit.await_args_list[1].kwargs["mileage_manually_confirmed"] is True
+
+
+async def test_new_visit_from_vehicle_card_starts_at_mileage():
+    callback = AsyncMock()
+    callback.data = f"new_visit_for:{_encode_id(VEHICLE_ID)}"
+    state = _fsm_context()
+    await state.update_data(stale="x")
+    api = AsyncMock()
+    api.get_vehicle_owner.return_value = {"id": "c9", "full_name": "Иванов"}
+
+    await new_visit_for_vehicle_callback(callback, state, api=api, user={"id": "m1", "role": "master"})
+
+    assert await state.get_state() == NewVisitStates.waiting_for_mileage.state
+    assert await state.get_data() == {"client_id": "c9", "vehicle_id": VEHICLE_ID}
+    callback.message.answer.assert_awaited_once_with("Новый заезд: Иванов. Введите пробег на приёмке (/cancel — отмена):")
+
+
+async def test_new_visit_from_vehicle_without_owner_is_refused():
+    callback = AsyncMock()
+    callback.data = f"new_visit_for:{_encode_id(VEHICLE_ID)}"
+    state = _fsm_context()
+    api = AsyncMock()
+    api.get_vehicle_owner.return_value = None
+
+    await new_visit_for_vehicle_callback(callback, state, api=api, user={"id": "m1", "role": "master"})
+
+    assert await state.get_state() is None
+    callback.message.answer.assert_awaited_once_with("У машины нет владельца — заведите заезд через «Новый заезд».")
+
+
+async def test_new_visit_from_vehicle_refused_for_mechanic():
+    callback = AsyncMock()
+    callback.data = f"new_visit_for:{_encode_id(VEHICLE_ID)}"
+    state = _fsm_context()
+    api = AsyncMock()
+
+    await new_visit_for_vehicle_callback(callback, state, api=api, user={"id": "k1", "role": "mechanic"})
+
+    api.get_vehicle_owner.assert_not_awaited()
+    callback.answer.assert_awaited_once_with("Недостаточно прав")

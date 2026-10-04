@@ -19,6 +19,7 @@ class NewVisitStates(StatesGroup):
     choosing_vehicle = State()
     waiting_for_mileage = State()
     confirming_mileage = State()
+    choosing_master = State()
 
 
 class AddWorkItemStates(StatesGroup):

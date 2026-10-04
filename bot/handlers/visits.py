@@ -124,22 +124,21 @@ async def choose_vehicle_callback(callback: CallbackQuery, state: FSMContext, **
     await callback.answer()
 
 
-async def _create_visit(
-    message: Message, state: FSMContext, api: ApiClient, user: dict, mileage: int, confirmed: bool
-) -> None:
+async def _create_visit(message: Message, state: FSMContext, api: ApiClient, user: dict) -> None:
+    """Create the visit from FSM data: client_id, vehicle_id, mileage, mileage_confirmed,
+    and assigned_master_id (ADMIN's pick; a MASTER is always the master)."""
     data = await state.get_data()
     try:
         visit = await api.create_visit(
             client_id=data["client_id"],
             vehicle_id=data["vehicle_id"],
-            assigned_master_id=user["id"],
-            mileage_at_intake=mileage,
-            mileage_manually_confirmed=confirmed,
+            assigned_master_id=data.get("assigned_master_id", user["id"]),
+            mileage_at_intake=data["mileage"],
+            mileage_manually_confirmed=data["mileage_confirmed"],
         )
     except ApiMileageRollback as e:
-        # Keep client/vehicle and the entered mileage until the master confirms
-        # (or types a different mileage — also accepted in this state).
-        await state.update_data(mileage=mileage)
+        # Keep everything (incl. the chosen master) until the mileage is confirmed
+        # or a different mileage is typed — also accepted in this state.
         await state.set_state(NewVisitStates.confirming_mileage)
         builder = InlineKeyboardBuilder()
         builder.button(text="Подтвердить пробег", callback_data=MILEAGE_CONFIRM)
@@ -147,6 +146,24 @@ async def _create_visit(
         return
     await state.clear()
     await send_visit_card(message, visit, [])
+
+
+async def _continue_after_mileage(message: Message, state: FSMContext, api: ApiClient, user: dict) -> None:
+    data = await state.get_data()
+    if user["role"] == "admin" and "assigned_master_id" not in data:
+        masters = await api.list_masters()
+        if not masters:
+            await state.clear()
+            await message.answer("Сначала добавьте мастера через «Добавить сотрудника».")
+            return
+        builder = InlineKeyboardBuilder()
+        for master in masters:
+            builder.button(text=master["full_name"], callback_data=f"master_pick:{encode_id(master['id'])}")
+        builder.adjust(1)
+        await state.set_state(NewVisitStates.choosing_master)
+        await message.answer("Выберите мастера:", reply_markup=builder.as_markup())
+        return
+    await _create_visit(message, state, api, user)
 
 
 @router.message(NewVisitStates.waiting_for_mileage)
@@ -157,13 +174,41 @@ async def receive_mileage(message: Message, state: FSMContext, api: ApiClient, u
     except (ValueError, TypeError):
         await message.answer("Введите число (пробег в км).")
         return
-    await _create_visit(message, state, api, user, mileage, confirmed=False)
+    await state.update_data(mileage=mileage, mileage_confirmed=False)
+    await _continue_after_mileage(message, state, api, user)
 
 
 @router.callback_query(NewVisitStates.confirming_mileage, F.data == MILEAGE_CONFIRM)
 async def confirm_mileage_callback(callback: CallbackQuery, state: FSMContext, api: ApiClient, user: dict, **kwargs) -> None:
-    data = await state.get_data()
-    await _create_visit(callback.message, state, api, user, data["mileage"], confirmed=True)
+    await state.update_data(mileage_confirmed=True)
+    await _continue_after_mileage(callback.message, state, api, user)
+    await callback.answer()
+
+
+@router.callback_query(NewVisitStates.choosing_master, F.data.startswith("master_pick:"))
+async def choose_master_callback(callback: CallbackQuery, state: FSMContext, api: ApiClient, user: dict, **kwargs) -> None:
+    await state.update_data(assigned_master_id=decode_id(callback.data.split(":", 1)[1]))
+    await _create_visit(callback.message, state, api, user)
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("new_visit_for:"))
+async def new_visit_for_vehicle_callback(
+    callback: CallbackQuery, state: FSMContext, api: ApiClient, user: dict, **kwargs
+) -> None:
+    if user["role"] not in ("admin", "master"):
+        await callback.answer("Недостаточно прав")
+        return
+    vehicle_id = decode_id(callback.data.split(":", 1)[1])
+    owner = await api.get_vehicle_owner(vehicle_id)
+    if owner is None:
+        await callback.message.answer("У машины нет владельца — заведите заезд через «Новый заезд».")
+        await callback.answer()
+        return
+    await state.clear()
+    await state.update_data(client_id=owner["id"], vehicle_id=vehicle_id)
+    await state.set_state(NewVisitStates.waiting_for_mileage)
+    await callback.message.answer(f"Новый заезд: {owner['full_name']}. Введите пробег на приёмке {CANCEL_HINT}:")
     await callback.answer()
 
 
