@@ -2,8 +2,9 @@ import asyncio
 import logging
 
 from aiogram import Bot, Dispatcher
-from aiogram.exceptions import TelegramUnauthorizedError
+from aiogram.exceptions import TelegramAPIError, TelegramUnauthorizedError
 from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.types import BotCommand
 from aiogram.utils.token import TokenValidationError
 
 from bot.config import settings
@@ -69,9 +70,26 @@ async def create_bot(token: str) -> Bot:
     return bot
 
 
+BOT_COMMANDS = [
+    BotCommand(command="start", description="Главное меню"),
+    BotCommand(command="cancel", description="Отменить текущее действие"),
+    BotCommand(command="new_client", description="Новый клиент"),
+    BotCommand(command="new_vehicle", description="Новая машина"),
+]
+
+
+async def set_commands(bot: Bot) -> None:
+    """Show commands in Telegram's menu button; a failure must not block polling."""
+    try:
+        await bot.set_my_commands(BOT_COMMANDS)
+    except TelegramAPIError:
+        logger.warning("Could not register bot commands", exc_info=True)
+
+
 async def main() -> None:
     logging.basicConfig(level=logging.INFO)
     bot = await create_bot(settings.bot_token)
+    await set_commands(bot)
     dp = Dispatcher(storage=MemoryStorage())
     dp.message.middleware(ErrorHandlingMiddleware())
     dp.message.middleware(AuthMiddleware())
