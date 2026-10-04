@@ -10,9 +10,10 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from bot.api_client import ApiClient
 from bot.callback_ids import decode_id, encode_id
-from bot.formatting import format_day
+from bot.formatting import format_date, format_day
 from bot.handlers.visits import send_visit_card
 from bot.visit_status import visit_status_label
+from bot.work_item_status import work_item_status_label
 
 router = Router()
 
@@ -59,4 +60,100 @@ async def open_visit_callback(callback: CallbackQuery, api: ApiClient, **kwargs)
     visit = await api.get_visit(visit_id)
     items = await api.list_work_items(visit_id)
     await send_visit_card(callback.message, visit, items)
+    await callback.answer()
+
+
+STAFF_ROLES = {"admin", "master"}
+
+
+def _km(value: int) -> str:
+    return f"{value:,}".replace(",", " ")
+
+
+async def send_client_card(message: Message, api: ApiClient, client_id: str) -> None:
+    client = await api.get_client(client_id)
+    vehicles = await api.list_client_vehicles(client_id)
+    builder = InlineKeyboardBuilder()
+    for v in vehicles:
+        builder.button(
+            text=f"🚗 {v['make']} {v['model']} ({v['plate_number']})",
+            callback_data=f"vehicle_open:{encode_id(v['id'])}",
+        )
+    builder.button(text="📋 Заезды клиента", callback_data=f"visits_by_client:{encode_id(client_id)}")
+    builder.adjust(1)
+    await message.answer(f"👤 {client['full_name']}\n{client['phone_display']}", reply_markup=builder.as_markup())
+
+
+async def send_vehicle_card(message: Message, api: ApiClient, user: dict, vehicle_id: str) -> None:
+    vehicle = await api.get_vehicle(vehicle_id)
+    vid = encode_id(vehicle_id)
+    builder = InlineKeyboardBuilder()
+    if user["role"] in STAFF_ROLES:
+        # Owner is personal data: mechanics never request it (the API would 403).
+        owner = await api.get_vehicle_owner(vehicle_id)
+        if owner is not None:
+            builder.button(text=f"👤 Владелец: {owner['full_name']}", callback_data=f"client_open:{encode_id(owner['id'])}")
+        builder.button(text="📋 Заезды по машине", callback_data=f"visits_by_vehicle:{vid}")
+        if owner is not None:
+            builder.button(text="➕ Новый заезд", callback_data=f"new_visit_for:{vid}")
+    builder.button(text="🔧 История работ", callback_data=f"work_history:{vid}")
+    builder.adjust(1)
+    text = (
+        f"🚗 {vehicle['make']} {vehicle['model']} · {vehicle['plate_number']}\n"
+        f"VIN: {vehicle['vin']} · Пробег: {_km(vehicle['mileage_current'])} км"
+    )
+    await message.answer(text, reply_markup=builder.as_markup())
+
+
+def _id_from(callback: CallbackQuery) -> str:
+    return decode_id(callback.data.split(":", 1)[1])
+
+
+@router.callback_query(F.data.startswith("client_open:"))
+async def client_open_callback(callback: CallbackQuery, api: ApiClient, **kwargs) -> None:
+    await send_client_card(callback.message, api, _id_from(callback))
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("vehicle_open:"))
+async def vehicle_open_callback(callback: CallbackQuery, api: ApiClient, user: dict, **kwargs) -> None:
+    await send_vehicle_card(callback.message, api, user, _id_from(callback))
+    await callback.answer()
+
+
+async def _send_history(callback: CallbackQuery, api: ApiClient, user: dict, **filters) -> None:
+    result = await api.list_visits(**filters)
+    await send_visit_list(callback.message, result, user["id"], "Заезды", "Заездов ещё не было.", with_date=True)
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("visits_by_client:"))
+async def visits_by_client_callback(callback: CallbackQuery, api: ApiClient, user: dict, **kwargs) -> None:
+    await _send_history(callback, api, user, client_id=_id_from(callback))
+
+
+@router.callback_query(F.data.startswith("visits_by_vehicle:"))
+async def visits_by_vehicle_callback(callback: CallbackQuery, api: ApiClient, user: dict, **kwargs) -> None:
+    await _send_history(callback, api, user, vehicle_id=_id_from(callback))
+
+
+@router.callback_query(F.data.startswith("work_history:"))
+async def work_history_callback(callback: CallbackQuery, api: ApiClient, **kwargs) -> None:
+    vehicle_id = _id_from(callback)
+    vehicle = await api.get_vehicle(vehicle_id)
+    history = await api.get_vehicle_work_history(vehicle_id)
+    if not history["items"]:
+        await callback.message.answer("Работ по машине ещё не было.")
+        await callback.answer()
+        return
+    lines = [f"🔧 История работ · {vehicle['plate_number']}"]
+    current_visit = None
+    for item in history["items"]:
+        if item["visit_id"] != current_visit:
+            current_visit = item["visit_id"]
+            lines.append(f"{format_date(item['visit_at'])} · {_km(item['mileage'])} км")
+        lines.append(f"  • {item['name']} — {work_item_status_label(item['status'])}")
+    if history["has_more"]:
+        lines.append("Показаны последние 30 работ.")
+    await callback.message.answer("\n".join(lines))
     await callback.answer()
