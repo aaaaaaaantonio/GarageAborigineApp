@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
@@ -47,3 +48,18 @@ class WorkItemMineOut(BaseModel):
     catalog_item_id: uuid.UUID | None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class VehicleWorkHistoryItemOut(BaseModel):
+    """Deliberately no prices, hours or client data: mechanics read this."""
+
+    visit_id: uuid.UUID
+    visit_at: datetime
+    mileage: int
+    name: str
+    status: WorkItemStatus
+
+
+class VehicleWorkHistoryOut(BaseModel):
+    items: list[VehicleWorkHistoryItemOut]
+    has_more: bool

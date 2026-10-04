@@ -1,16 +1,23 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.enums import ApprovedVia, UserRole, WorkItemStatus
+from app.core.enums import ApprovedVia, UserRole, VisitStatus, WorkItemStatus
 from app.core.exceptions import InvalidAssignedMechanic, NotAssignedMechanic, VisitNotFound, WorkItemNotFound
+from app.modules.catalog.models import WorkCatalog
 from app.modules.catalog.repository import CatalogRepository
 from app.modules.users.audit import record_audit
 from app.modules.users.models import User
 from app.modules.visits.models import Visit, VisitWorkItem
-from app.modules.visits.work_items_schemas import WorkItemCreate
+from app.modules.visits.work_items_schemas import (
+    VehicleWorkHistoryItemOut,
+    VehicleWorkHistoryOut,
+    WorkItemCreate,
+)
+
+WORK_HISTORY_LIMIT = 30
 
 
 class WorkItemService:
@@ -127,3 +134,33 @@ class WorkItemService:
             .order_by(VisitWorkItem.created_at, VisitWorkItem.id)
         )
         return await self._with_names(list(result.scalars()))
+
+    async def list_vehicle_history(self, vehicle_id: uuid.UUID) -> VehicleWorkHistoryOut:
+        stmt = (
+            select(
+                Visit.id.label("visit_id"),
+                Visit.created_at.label("visit_at"),
+                Visit.mileage_at_intake.label("mileage"),
+                func.coalesce(WorkCatalog.name, VisitWorkItem.free_text_name).label("name"),
+                VisitWorkItem.status,
+            )
+            .join(Visit, Visit.id == VisitWorkItem.visit_id)
+            .outerjoin(WorkCatalog, WorkCatalog.id == VisitWorkItem.catalog_item_id)
+            .where(
+                Visit.vehicle_id == vehicle_id,
+                Visit.deleted_at.is_(None),
+                Visit.status != VisitStatus.CANCELLED,
+            )
+            .order_by(Visit.created_at.desc(), Visit.id, VisitWorkItem.created_at, VisitWorkItem.id)
+            .limit(WORK_HISTORY_LIMIT + 1)
+        )
+        rows = (await self.session.execute(stmt)).all()
+        return VehicleWorkHistoryOut(
+            items=[
+                VehicleWorkHistoryItemOut(
+                    visit_id=r.visit_id, visit_at=r.visit_at, mileage=r.mileage, name=r.name or "—", status=r.status
+                )
+                for r in rows[:WORK_HISTORY_LIMIT]
+            ],
+            has_more=len(rows) > WORK_HISTORY_LIMIT,
+        )
