@@ -49,7 +49,7 @@ async def test_set_commands_registers_menu_commands():
     await set_commands(bot)
 
     bot.set_my_commands.assert_awaited_once_with(BOT_COMMANDS)
-    assert [c.command for c in BOT_COMMANDS] == ["start", "cancel", "new_client", "new_vehicle"]
+    assert [c.command for c in BOT_COMMANDS] == ["start", "menu", "cancel", "new_client", "new_vehicle"]
 
 
 async def test_set_commands_failure_does_not_stop_startup(caplog):

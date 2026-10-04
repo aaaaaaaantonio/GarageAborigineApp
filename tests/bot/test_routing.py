@@ -7,9 +7,9 @@ from unittest.mock import AsyncMock
 import pytest
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.types import CallbackQuery, Chat, Message, Update, User
+from aiogram.methods import SendMessage
+from aiogram.types import CallbackQuery, Chat, Message, MessageEntity, Update, User
 
-from bot.keyboards import ALL_MENU_BUTTONS
 from bot.main import setup_routers
 from bot.states import AddWorkItemStates, NewClientStates, NewVisitStates
 
@@ -23,6 +23,13 @@ class RecordingBot(Bot):
 
     async def __call__(self, method, request_timeout=None):
         self.sent.append(method)
+        if isinstance(method, SendMessage):
+            return Message(
+                message_id=100 + len(self.sent),
+                date=datetime.now(timezone.utc),
+                chat=Chat(id=CHAT_ID, type="private"),
+                text=method.text,
+            )
         return True
 
 
@@ -35,6 +42,7 @@ def _message(text: str) -> Update:
             chat=Chat(id=CHAT_ID, type="private"),
             from_user=User(id=USER_ID, is_bot=False, first_name="T"),
             text=text,
+            entities=[MessageEntity(type="bot_command", offset=0, length=len(text))] if text.startswith("/") else None,
         ),
     )
 
@@ -76,44 +84,6 @@ def env():
 
 def _texts(bot: RecordingBot) -> list[str]:
     return [getattr(m, "text", None) for m in bot.sent]
-
-
-async def test_menu_button_wins_over_wizard_state_and_resets_it(env):
-    bot, dp, state, api, user = env
-    await state.set_state(NewClientStates.waiting_for_full_name)
-    await state.update_data(phone="79990000000", return_flow="new_visit")
-
-    await dp.feed_update(bot, _message("Новый заезд"), api=api, user=user)
-
-    api.create_client.assert_not_awaited()
-    assert await state.get_state() == NewVisitStates.waiting_for_client_query.state
-    assert await state.get_data() == {}
-
-
-async def test_menu_button_wins_over_mileage_state(env):
-    bot, dp, state, api, user = env
-    await state.set_state(NewVisitStates.waiting_for_mileage)
-    await state.update_data(client_id="c1", vehicle_id="v1")
-    api.search.return_value = []
-
-    await dp.feed_update(bot, _message("Поиск"), api=api, user=user)
-
-    assert await state.get_state() is None
-    assert "Введите число (пробег в км)." not in _texts(bot)
-
-
-@pytest.mark.parametrize("text", ALL_MENU_BUTTONS)
-async def test_every_menu_button_clears_active_wizard(env, text):
-    bot, dp, state, api, user = env
-    api.list_my_work_items.return_value = []
-    await state.set_state(AddWorkItemStates.waiting_for_hours_and_rate)
-    await state.update_data(visit_id="stale")
-
-    await dp.feed_update(bot, _message(text), api=api, user=user)
-
-    api.add_work_item.assert_not_awaited()
-    assert (await state.get_data()).get("visit_id") is None
-    assert await state.get_state() != AddWorkItemStates.waiting_for_hours_and_rate.state
 
 
 async def test_wizard_callback_outside_its_state_is_answered_as_stale(env):
@@ -199,3 +169,25 @@ async def test_reassign_mechanic_buttons_route_end_to_end(env):
     await dp.feed_update(bot, _callback(f"reassign_to:{encode_id(mech_id)}"), api=api, user=user)
 
     api.assign_work_item_mechanic.assert_awaited_once_with(visit_id, item_id, mech_id)
+
+
+async def test_old_reply_keyboard_text_beats_wizard_and_opens_menu(env):
+    bot, dp, state, api, user = env
+    await state.set_state(NewVisitStates.waiting_for_mileage)
+    await state.update_data(client_id="c1", vehicle_id="v1")
+
+    await dp.feed_update(bot, _message("Поиск"), api=api, user=user)
+
+    assert await state.get_state() is None
+    assert "Главное меню" in _texts(bot)
+    api.search.assert_not_awaited()
+
+
+async def test_menu_command_beats_wizard(env):
+    bot, dp, state, api, user = env
+    await state.set_state(AddWorkItemStates.waiting_for_hours_and_rate)
+
+    await dp.feed_update(bot, _message("/menu"), api=api, user=user)
+
+    assert await state.get_state() is None
+    assert "Главное меню" in _texts(bot)

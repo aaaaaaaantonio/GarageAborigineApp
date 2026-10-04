@@ -1,22 +1,31 @@
 from aiogram import Router
 from aiogram.filters import Command, CommandStart
 from aiogram.fsm.context import FSMContext
-from aiogram.types import Message
+from aiogram.types import Message, ReplyKeyboardRemove
 
-from app.core.enums import UserRole
-from bot.keyboards import main_menu
+from bot import nav
+from bot.api_client import ApiClient
 
 router = Router()
 
+WELCOME = "Добро пожаловать в CRM-бот автосервиса."
+
 
 @router.message(CommandStart())
-async def cmd_start(message: Message, user: dict, state: FSMContext, **kwargs) -> None:
-    await state.clear()
-    role = UserRole(user["role"])
-    await message.answer("Добро пожаловать в CRM-бот автосервиса.", reply_markup=main_menu(role))
+async def cmd_start(message: Message, state: FSMContext, api: ApiClient, user: dict, **kwargs) -> None:
+    await nav.clear_wizard(state)
+    # Also takes the old reply keyboard away for users who still have it.
+    await message.answer(WELCOME, reply_markup=ReplyKeyboardRemove())
+    await nav.home(message, state, api, user)
+
+
+@router.message(Command("menu"))
+async def cmd_menu(message: Message, state: FSMContext, api: ApiClient, user: dict, **kwargs) -> None:
+    await nav.clear_wizard(state)
+    await nav.home(message, state, api, user)
 
 
 @router.message(Command("cancel"))
-async def cmd_cancel(message: Message, state: FSMContext, **kwargs) -> None:
-    await state.clear()
-    await message.answer("Действие отменено.")
+async def cmd_cancel(message: Message, state: FSMContext, api: ApiClient, user: dict, **kwargs) -> None:
+    await nav.clear_wizard(state)
+    await nav.refresh(message, state, api, user, notice="Действие отменено.")

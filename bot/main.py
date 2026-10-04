@@ -33,10 +33,11 @@ from bot.middlewares.error_handling import ErrorHandlingMiddleware
 
 
 def setup_routers(dp: Dispatcher) -> None:
-    # Order matters: start (commands) and menu (reply-keyboard buttons) come
-    # first so they win over any FSM-state handler; search catches all
-    # remaining text (and owns its page buttons); fallback, holding only a
-    # catch-all callback handler, answers stale buttons and must stay last.
+    # Order matters: start (commands) first so /start, /menu, /cancel win over
+    # any wizard; menu holds the temporary handler for old reply-keyboard texts;
+    # nav and wizard own go/back/home and wiz_back/wiz_cancel; feature routers
+    # follow; search catches all remaining text; fallback answers stale buttons
+    # and must stay last.
     dp.include_router(start.router)
     dp.include_router(menu.router)
     dp.include_router(nav.router)
@@ -78,7 +79,8 @@ async def create_bot(token: str) -> Bot:
 
 
 BOT_COMMANDS = [
-    BotCommand(command="start", description="Главное меню"),
+    BotCommand(command="start", description="Начать заново"),
+    BotCommand(command="menu", description="Главное меню"),
     BotCommand(command="cancel", description="Отменить текущее действие"),
     BotCommand(command="new_client", description="Новый клиент"),
     BotCommand(command="new_vehicle", description="Новая машина"),
