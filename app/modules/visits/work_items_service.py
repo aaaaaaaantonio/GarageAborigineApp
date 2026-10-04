@@ -25,22 +25,33 @@ class WorkItemService:
         self.session = session
 
     async def _with_names(self, items: list[VisitWorkItem]) -> list[VisitWorkItem]:
-        """Attach a display `name` to each item: catalog name, else free-text name."""
+        """Attach display names to each item: `name` (catalog name, else
+        free-text name) and `assigned_mechanic_name`."""
         catalog_names = await CatalogRepository(self.session).names_by_ids(
             {i.catalog_item_id for i in items if i.catalog_item_id is not None}
         )
+        mechanic_ids = {i.assigned_mechanic_id for i in items if i.assigned_mechanic_id is not None}
+        mechanic_names = (
+            dict((await self.session.execute(select(User.id, User.full_name).where(User.id.in_(mechanic_ids)))).all())
+            if mechanic_ids
+            else {}
+        )
         for item in items:
             item.name = catalog_names.get(item.catalog_item_id) or item.free_text_name
+            item.assigned_mechanic_name = mechanic_names.get(item.assigned_mechanic_id)
         return items
+
+    async def _check_mechanic(self, mechanic_id: uuid.UUID) -> None:
+        mechanic = await self.session.get(User, mechanic_id)
+        if mechanic is None or mechanic.deleted_at is not None or mechanic.role != UserRole.MECHANIC:
+            raise InvalidAssignedMechanic()
 
     async def add_item(self, visit_id: uuid.UUID, data: WorkItemCreate, acting_user: User) -> VisitWorkItem:
         visit = await self.session.get(Visit, visit_id)
         if visit is None:
             raise VisitNotFound()
         if data.assigned_mechanic_id is not None:
-            mechanic = await self.session.get(User, data.assigned_mechanic_id)
-            if mechanic is None or mechanic.deleted_at is not None or mechanic.role != UserRole.MECHANIC:
-                raise InvalidAssignedMechanic()
+            await self._check_mechanic(data.assigned_mechanic_id)
 
         item = VisitWorkItem(
             visit_id=visit_id,
@@ -61,10 +72,13 @@ class WorkItemService:
 
         await VisitService(self.session).recalculate_total(visit_id)
 
-        if item.is_extra_work:
-            from app.modules.notifications.factory import get_notification_sender
+        from app.modules.notifications.factory import get_notification_sender
 
-            await get_notification_sender(self.session).send_extra_work_approval_request(item)
+        notifier = get_notification_sender(self.session)
+        if item.is_extra_work:
+            await notifier.send_extra_work_approval_request(item)
+        if item.assigned_mechanic_id is not None:
+            await notifier.send_work_assigned(item, item.assigned_mechanic_id)
 
         await record_audit(
             self.session,
@@ -95,6 +109,42 @@ class WorkItemService:
             action="status_change",
             old_value={"status": old_status.value},
             new_value={"status": new_status.value},
+        )
+        return (await self._with_names([item]))[0]
+
+    async def assign_mechanic(
+        self, visit_id: uuid.UUID, item_id: uuid.UUID, mechanic_id: uuid.UUID | None, acting_user: User
+    ) -> VisitWorkItem:
+        """Reassign (or unassign, with None) the item's mechanic; notifies both
+        the new and the previous mechanic. Assigning the current one is a no-op."""
+        item = await self.session.get(VisitWorkItem, item_id)
+        if item is None or item.visit_id != visit_id:
+            raise WorkItemNotFound()
+        old_mechanic_id = item.assigned_mechanic_id
+        if mechanic_id == old_mechanic_id:
+            return (await self._with_names([item]))[0]
+        if mechanic_id is not None:
+            await self._check_mechanic(mechanic_id)
+
+        item.assigned_mechanic_id = mechanic_id
+        await self.session.flush()
+
+        from app.modules.notifications.factory import get_notification_sender
+
+        notifier = get_notification_sender(self.session)
+        if mechanic_id is not None:
+            await notifier.send_work_assigned(item, mechanic_id)
+        if old_mechanic_id is not None:
+            await notifier.send_work_unassigned(item, old_mechanic_id)
+
+        await record_audit(
+            self.session,
+            user=acting_user,
+            entity_type="visit_work_item",
+            entity_id=item.id,
+            action="assign_mechanic",
+            old_value={"assigned_mechanic_id": str(old_mechanic_id) if old_mechanic_id else None},
+            new_value={"assigned_mechanic_id": str(mechanic_id) if mechanic_id else None},
         )
         return (await self._with_names([item]))[0]
 

@@ -72,3 +72,68 @@ async def test_send_status_changed_swallows_telegram_failure(session, caplog):
     rows = list((await session.execute(select(NotificationOutbox))).scalars())
     assert any(r.kind == "status_changed" for r in rows)
     assert "chat not found" in caplog.text
+
+
+async def _work_item_for(session, visit, name="Замена масла"):
+    from app.core.enums import WorkCategory, WorkItemStatus
+    from app.modules.visits.models import VisitWorkItem
+
+    item = VisitWorkItem(
+        visit_id=visit.id,
+        free_text_name=name,
+        category=WorkCategory.MAINTENANCE,
+        norm_hours=1.0,
+        hourly_rate=1500,
+        status=WorkItemStatus.NOT_READY,
+    )
+    session.add(item)
+    await session.flush()
+    return item
+
+
+async def _mechanic(session, telegram_id):
+    mechanic = User(role=UserRole.MECHANIC, full_name="Механик", telegram_id=telegram_id, branch_id=uuid.uuid4())
+    session.add(mechanic)
+    await session.flush()
+    return mechanic
+
+
+async def test_send_work_assigned_messages_mechanic_with_name_and_plate(session):
+    visit = await _make_visit_with_master(session, telegram_id=None)
+    item = await _work_item_for(session, visit)
+    mechanic = await _mechanic(session, telegram_id=901)
+    bot = AsyncMock()
+
+    await TelegramNotificationSender(session, bot).send_work_assigned(item, mechanic.id)
+
+    rows = list((await session.execute(select(NotificationOutbox))).scalars())
+    assert any(r.kind == "work_assigned" for r in rows)
+    kwargs = bot.send_message.await_args.kwargs
+    assert kwargs["chat_id"] == 901
+    assert kwargs["text"] == "Вам назначена работа «Замена масла» · А123"
+
+
+async def test_send_work_unassigned_messages_old_mechanic(session):
+    visit = await _make_visit_with_master(session, telegram_id=None)
+    item = await _work_item_for(session, visit)
+    mechanic = await _mechanic(session, telegram_id=902)
+    bot = AsyncMock()
+
+    await TelegramNotificationSender(session, bot).send_work_unassigned(item, mechanic.id)
+
+    rows = list((await session.execute(select(NotificationOutbox))).scalars())
+    assert any(r.kind == "work_unassigned" for r in rows)
+    kwargs = bot.send_message.await_args.kwargs
+    assert kwargs["chat_id"] == 902
+    assert kwargs["text"] == "Работа «Замена масла» · А123 снята с вас"
+
+
+async def test_send_work_assigned_skips_mechanic_without_telegram_id(session):
+    visit = await _make_visit_with_master(session, telegram_id=None)
+    item = await _work_item_for(session, visit)
+    mechanic = await _mechanic(session, telegram_id=None)
+    bot = AsyncMock()
+
+    await TelegramNotificationSender(session, bot).send_work_assigned(item, mechanic.id)
+
+    bot.send_message.assert_not_awaited()

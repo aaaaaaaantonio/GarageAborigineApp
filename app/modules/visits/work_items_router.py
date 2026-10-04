@@ -8,7 +8,12 @@ from app.core.enums import UserRole
 from app.core.exceptions import InvalidAssignedMechanic, NotAssignedMechanic, VisitNotFound, WorkItemNotFound
 from app.modules.users.auth import require_role
 from app.modules.users.models import User
-from app.modules.visits.work_items_schemas import WorkItemCreate, WorkItemOut, WorkItemStatusChange
+from app.modules.visits.work_items_schemas import (
+    WorkItemCreate,
+    WorkItemMechanicChange,
+    WorkItemOut,
+    WorkItemStatusChange,
+)
 from app.modules.visits.work_items_service import WorkItemService
 
 router = APIRouter(prefix="/visits/{visit_id}/work-items", tags=["visit-work-items"])
@@ -60,6 +65,25 @@ async def change_work_item_status(
         raise HTTPException(404, "Work item not found")
     except NotAssignedMechanic:
         raise HTTPException(403, "Можно менять статус только своих назначенных работ")
+    await session.commit()
+    return item
+
+
+@router.patch("/{item_id}/mechanic", response_model=WorkItemOut)
+async def change_work_item_mechanic(
+    visit_id: uuid.UUID,
+    item_id: uuid.UUID,
+    data: WorkItemMechanicChange,
+    session: AsyncSession = Depends(get_session),
+    acting_user: User = Depends(require_role(UserRole.ADMIN, UserRole.MASTER)),
+):
+    service = WorkItemService(session)
+    try:
+        item = await service.assign_mechanic(visit_id, item_id, data.assigned_mechanic_id, acting_user)
+    except WorkItemNotFound:
+        raise HTTPException(404, "Work item not found")
+    except InvalidAssignedMechanic:
+        raise HTTPException(422, "assigned_mechanic_id должен ссылаться на активного пользователя с ролью MECHANIC")
     await session.commit()
     return item
 

@@ -6,7 +6,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from bot.api_client import ApiClient
 from bot.callback_ids import decode_id, encode_id
 from bot.handlers.visits import refresh_visit_card
-from bot.states import AddWorkItemStates
+from bot.states import AddWorkItemStates, ReassignMechanicStates
 from bot.texts import CANCEL_HINT, TEXT_REQUIRED
 
 router = Router()
@@ -140,3 +140,33 @@ async def _create_work_item(message: Message, state: FSMContext, api: ApiClient,
     )
     await state.clear()
     await refresh_visit_card(message, api, data["visit_id"])
+
+
+@router.callback_query(F.data.startswith("reassign:"))
+async def start_reassign_mechanic(callback: CallbackQuery, state: FSMContext, api: ApiClient, user: dict, **kwargs) -> None:
+    if user["role"] not in ("admin", "master"):
+        await callback.answer("Недостаточно прав")
+        return
+    _, visit_b64, item_b64 = callback.data.split(":")
+    # visit + item + mechanic ids don't fit callback_data's 64 bytes together,
+    # so the item travels in FSM state and the next button carries the mechanic.
+    await state.clear()
+    await state.update_data(visit_id=decode_id(visit_b64), item_id=decode_id(item_b64))
+    await state.set_state(ReassignMechanicStates.choosing_mechanic)
+    builder = InlineKeyboardBuilder()
+    for mechanic in await api.list_mechanics():
+        builder.button(text=mechanic["full_name"], callback_data=f"reassign_to:{encode_id(mechanic['id'])}")
+    builder.button(text="Без исполнителя", callback_data="reassign_to:none")
+    builder.adjust(1)
+    await callback.message.answer("Кому передать работу?", reply_markup=builder.as_markup())
+    await callback.answer()
+
+
+@router.callback_query(ReassignMechanicStates.choosing_mechanic, F.data.startswith("reassign_to:"))
+async def choose_new_mechanic_callback(callback: CallbackQuery, state: FSMContext, api: ApiClient, **kwargs) -> None:
+    _, picked = callback.data.split(":")
+    data = await state.get_data()
+    await api.assign_work_item_mechanic(data["visit_id"], data["item_id"], None if picked == "none" else decode_id(picked))
+    await state.clear()
+    await refresh_visit_card(callback.message, api, data["visit_id"])
+    await callback.answer()

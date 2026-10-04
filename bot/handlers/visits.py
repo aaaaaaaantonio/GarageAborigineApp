@@ -46,12 +46,14 @@ async def send_visit_card(message: Message, visit: dict, work_items: list[dict])
         lines.append("Работы:")
     for index, item in enumerate(work_items, start=1):
         name = item["name"]
-        lines.append(f"{index}. {name} — {work_item_status_label(item['status'])}")
+        mechanic = item.get("assigned_mechanic_name") or "без исполнителя"
+        lines.append(f"{index}. {name} — {work_item_status_label(item['status'])} · {mechanic}")
         visit_b64, item_b64 = encode_id(visit["id"]), encode_id(item["id"])
         if item.get("approved_by_client") is False:
             builder.button(text=f"✅ {name}", callback_data=f"approve_work:{visit_b64}:{item_b64}")
         add_work_status_buttons(builder, visit["id"], item, FROM_VISIT_CARD, label_prefix=f"🔄 {name} ")
         builder.button(text=f"🔧 {name}", callback_data=f"add_part:{visit_b64}:{item_b64}")
+        builder.button(text=f"👤 {name}", callback_data=f"reassign:{visit_b64}:{item_b64}")
     builder.button(text="➕ Добавить работу", callback_data=f"add_work:{visit['id']}")
     builder.button(text="Сформировать PDF", callback_data=f"gen_doc:{visit['id']}")
     builder.adjust(1)

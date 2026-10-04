@@ -1,3 +1,4 @@
+import uuid
 from datetime import datetime
 
 from sqlalchemy import JSON, DateTime, String, func
@@ -46,5 +47,24 @@ class LoggingNotificationSender:
     async def send_document(self, visit: Visit, url: str) -> None:
         self.session.add(
             NotificationOutbox(kind="document_ready", payload={"visit_id": str(visit.id), "url": url})
+        )
+        await self.session.flush()
+
+    async def send_work_assigned(self, work_item: VisitWorkItem, mechanic_id: uuid.UUID) -> None:
+        await self._add_work_assignment("work_assigned", work_item, mechanic_id)
+
+    async def send_work_unassigned(self, work_item: VisitWorkItem, mechanic_id: uuid.UUID) -> None:
+        await self._add_work_assignment("work_unassigned", work_item, mechanic_id)
+
+    async def _add_work_assignment(self, kind: str, work_item: VisitWorkItem, mechanic_id: uuid.UUID) -> None:
+        self.session.add(
+            NotificationOutbox(
+                kind=kind,
+                payload={
+                    "work_item_id": str(work_item.id),
+                    "visit_id": str(work_item.visit_id),
+                    "mechanic_id": str(mechanic_id),
+                },
+            )
         )
         await self.session.flush()

@@ -27,6 +27,10 @@ class WorkItemStatusChange(BaseModel):
     new_status: WorkItemStatus
 
 
+class WorkItemMechanicChange(BaseModel):
+    assigned_mechanic_id: uuid.UUID | None
+
+
 class WorkItemOut(BaseModel):
     id: uuid.UUID
     visit_id: uuid.UUID
@@ -35,6 +39,8 @@ class WorkItemOut(BaseModel):
     approved_by_client: bool
     free_text_name: str | None
     catalog_item_id: uuid.UUID | None
+    assigned_mechanic_id: uuid.UUID | None
+    assigned_mechanic_name: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

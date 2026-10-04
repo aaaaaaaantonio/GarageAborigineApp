@@ -133,6 +133,11 @@ class ApiClient:
     async def update_work_item_status(self, visit_id: str, item_id: str, new_status: str) -> dict:
         return await self.patch(f"/visits/{visit_id}/work-items/{item_id}/status", json={"new_status": new_status})
 
+    async def assign_work_item_mechanic(self, visit_id: str, item_id: str, mechanic_id: str | None) -> dict:
+        return await self.patch(
+            f"/visits/{visit_id}/work-items/{item_id}/mechanic", json={"assigned_mechanic_id": mechanic_id}
+        )
+
     async def search(self, query: str) -> list[dict]:
         result = await self.get(f"/search?q={quote(query, safe='')}")
         return result
