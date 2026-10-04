@@ -1,7 +1,7 @@
 # CRM Telegram-бот — навигация: поиск-карточки, списки заездов, заезд от админа: спецификация
 
 Дата: 2026-10-02
-Статус: на ревью
+Статус: реализовано
 Дополняет: `docs/superpowers/specs/2026-09-19-crm-bot-design.md`,
 `docs/superpowers/specs/2026-09-23-crm-bot-gaps-design.md`
 
