@@ -4,18 +4,16 @@ from aiogram.utils.keyboard import ReplyKeyboardBuilder
 from app.core.enums import UserRole
 
 NEW_VISIT = "Новый заезд"
+ACTIVE_VISITS = "Заезды в работе"
 SEARCH = "Поиск"
 PAPER_CONSENT = "Регистрация клиента (бумага)"
 ADD_STAFF = "Добавить сотрудника"
 MY_WORK_ITEMS = "Мои работы"
 
-# A visit's assigned master must have role MASTER (backend rule), and an ADMIN
-# has no UI to choose one, so "Новый заезд" is offered to masters only.
-MASTER_ONLY_BUTTONS = [NEW_VISIT]
-SHARED_STAFF_BUTTONS = [SEARCH, PAPER_CONSENT]
-ADMIN_ONLY_BUTTONS = [ADD_STAFF]
-MECHANIC_BUTTONS = [MY_WORK_ITEMS]
-ALL_MENU_BUTTONS = MASTER_ONLY_BUTTONS + SHARED_STAFF_BUTTONS + ADMIN_ONLY_BUTTONS + MECHANIC_BUTTONS
+MASTER_BUTTONS = [NEW_VISIT, ACTIVE_VISITS, SEARCH, PAPER_CONSENT]
+ADMIN_BUTTONS = MASTER_BUTTONS + [ADD_STAFF]
+MECHANIC_BUTTONS = [MY_WORK_ITEMS, SEARCH]
+ALL_MENU_BUTTONS = ADMIN_BUTTONS + [MY_WORK_ITEMS]
 
 
 def main_menu(role: UserRole) -> ReplyKeyboardMarkup:
@@ -23,9 +21,9 @@ def main_menu(role: UserRole) -> ReplyKeyboardMarkup:
     if role == UserRole.MECHANIC:
         buttons = MECHANIC_BUTTONS
     elif role == UserRole.ADMIN:
-        buttons = SHARED_STAFF_BUTTONS + ADMIN_ONLY_BUTTONS
+        buttons = ADMIN_BUTTONS
     else:
-        buttons = MASTER_ONLY_BUTTONS + SHARED_STAFF_BUTTONS
+        buttons = MASTER_BUTTONS
     for text in buttons:
         builder.button(text=text)
     builder.adjust(1)

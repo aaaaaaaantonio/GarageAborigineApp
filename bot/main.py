@@ -14,6 +14,7 @@ from bot.handlers import (
     documents,
     fallback,
     menu,
+    navigation,
     part_items,
     search,
     start,
@@ -41,6 +42,7 @@ def setup_routers(dp: Dispatcher) -> None:
     dp.include_router(documents.router)
     dp.include_router(consent.router)
     dp.include_router(admin.router)
+    dp.include_router(navigation.router)
     dp.include_router(fallback.router)
     dp.include_router(search.router)
 

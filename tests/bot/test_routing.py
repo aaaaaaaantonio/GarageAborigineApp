@@ -69,6 +69,7 @@ def env():
     dp.fsm.storage = MemoryStorage()
     state = dp.fsm.get_context(bot=bot, chat_id=CHAT_ID, user_id=USER_ID)
     api = AsyncMock()
+    api.list_visits.return_value = {"items": [], "has_more": False}
     user = {"id": "m1", "role": "master"}
     return bot, dp, state, api, user
 

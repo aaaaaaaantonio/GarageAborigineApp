@@ -7,12 +7,13 @@ wizard. Every entry handler clears the FSM state before starting its flow.
 from aiogram import F, Router
 
 from bot import keyboards
-from bot.handlers import admin, consent, mechanic, search, visits
+from bot.handlers import admin, consent, mechanic, navigation, search, visits
 
 router = Router()
 
 _ENTRY_POINTS = {
     keyboards.NEW_VISIT: visits.start_new_visit,
+    keyboards.ACTIVE_VISITS: navigation.show_active_visits,
     keyboards.SEARCH: search.start_search,
     keyboards.PAPER_CONSENT: consent.start_paper_consent,
     keyboards.ADD_STAFF: admin.start_new_staff,
