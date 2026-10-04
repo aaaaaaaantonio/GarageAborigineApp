@@ -10,6 +10,7 @@ from aiogram.fsm.storage.redis import RedisStorage
 from aiogram.types import BotCommand
 from aiogram.utils.token import TokenValidationError
 
+from bot import nav
 from bot.config import settings
 from bot.handlers import (
     admin,
@@ -38,6 +39,7 @@ def setup_routers(dp: Dispatcher) -> None:
     # catch-all callback handler, answers stale buttons and must stay last.
     dp.include_router(start.router)
     dp.include_router(menu.router)
+    dp.include_router(nav.router)
     dp.include_router(clients.router)
     dp.include_router(vehicles.router)
     dp.include_router(visits.router)
