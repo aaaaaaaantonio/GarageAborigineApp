@@ -31,7 +31,6 @@ class AddWorkItemStates(StatesGroup):
 
 
 class AddPartItemStates(StatesGroup):
-    choosing_work_item = State()
     waiting_for_name = State()
     waiting_for_quantity_and_price = State()
 

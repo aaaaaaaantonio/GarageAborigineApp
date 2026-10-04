@@ -11,7 +11,7 @@ from bot.handlers.navigation import STAFF_ROLES
 from bot.states import NewClientStates, NewVehicleStates, NewVisitStates, VisitCancelStates
 from bot.texts import TEXT_REQUIRED
 from bot.visit_status import visit_status_label
-from bot.work_item_status import FROM_VISIT_CARD, add_work_status_buttons, work_item_icon, work_item_status_label
+from bot.work_item_status import work_item_icon, work_item_status_label
 
 router = Router()
 
@@ -37,35 +37,6 @@ def visit_header(visit: dict) -> list[str]:
     if visit.get("master_name"):
         status_line += f" · Мастер: {visit['master_name']}"
     return [title or "Заезд", status_line, f"Сумма: {format_number(visit['total_amount']) if 'total_amount' in visit else '—'}"]
-
-
-async def send_visit_card(message: Message, visit: dict, work_items: list[dict]) -> None:
-    builder = InlineKeyboardBuilder()
-    for status in _NEXT_STATUS_BY_CURRENT.get(visit["status"], []):
-        builder.button(text=visit_status_label(status), callback_data=f"visit_status:{visit['id']}:{status}")
-    lines = visit_header(visit)
-    if work_items:
-        lines.append("Работы:")
-    for index, item in enumerate(work_items, start=1):
-        name = item["name"]
-        mechanic = item.get("assigned_mechanic_name") or "без исполнителя"
-        lines.append(f"{index}. {name} — {work_item_status_label(item['status'])} · {mechanic}")
-        visit_b64, item_b64 = encode_id(visit["id"]), encode_id(item["id"])
-        if item.get("approved_by_client") is False:
-            builder.button(text=f"✅ {name}", callback_data=f"approve_work:{visit_b64}:{item_b64}")
-        add_work_status_buttons(builder, visit["id"], item, FROM_VISIT_CARD, label_prefix=f"🔄 {name} ")
-        builder.button(text=f"🔧 {name}", callback_data=f"add_part:{visit_b64}:{item_b64}")
-        builder.button(text=f"👤 {name}", callback_data=f"reassign:{visit_b64}:{item_b64}")
-    builder.button(text="➕ Добавить работу", callback_data=f"add_work:{visit['id']}")
-    builder.button(text="Сформировать PDF", callback_data=f"gen_doc:{visit['id']}")
-    builder.adjust(1)
-    await message.answer("\n".join(lines), reply_markup=builder.as_markup())
-
-
-async def refresh_visit_card(message: Message, api: ApiClient, visit_id: str) -> None:
-    visit = await api.get_visit(visit_id)
-    items = await api.list_work_items(visit_id)
-    await send_visit_card(message, visit, items)
 
 
 def visit_card(visit: dict, work_items: list[dict]) -> nav.Rendered:

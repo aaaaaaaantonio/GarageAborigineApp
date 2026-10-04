@@ -1,9 +1,6 @@
 from unittest.mock import AsyncMock
 
-from aiogram.fsm.context import FSMContext
-from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.fsm.storage.base import StorageKey
-
+from bot import wizard
 from bot.callback_ids import encode_id
 from bot.handlers.work_items import (
     choose_catalog_callback,
@@ -14,241 +11,148 @@ from bot.handlers.work_items import (
     start_add_work_item,
 )
 from bot.states import AddWorkItemStates
+from tests.bot.helpers import MASTER, buttons, fsm_context, make_callback, make_message, on_screens, shown
+
+VISIT = "11111111-1111-1111-1111-111111111111"
+MECH = "33333333-3333-3333-3333-333333333333"
+SUGGESTION = {"id": "cat1", "name": "Замена масла", "category": "maintenance", "default_norm_hours": 1.0}
 
 
-def _fsm_context() -> FSMContext:
-    storage = MemoryStorage()
-    key = StorageKey(bot_id=1, chat_id=1, user_id=1)
-    return FSMContext(storage=storage, key=key)
-
-
-async def test_start_add_work_item_asks_for_name_and_stores_visit_id():
-    callback = AsyncMock()
-    callback.data = "add_work:visit1"
-    state = _fsm_context()
-    await state.update_data(stale_key="from_previous_wizard")
-    await state.set_state(AddWorkItemStates.choosing_category)
-
-    await start_add_work_item(callback, state)
-
-    data = await state.get_data()
-    assert data == {"visit_id": "visit1"}
-    assert (await state.get_state()) == AddWorkItemStates.waiting_for_name.state
-    callback.message.answer.assert_awaited_once_with("Введите название работы (/cancel — отмена):")
-    callback.answer.assert_awaited_once()
-
-
-async def test_receive_work_name_shows_catalog_suggestions():
-    message = AsyncMock()
-    message.text = "замена масла"
-    state = _fsm_context()
-    await state.set_state(AddWorkItemStates.waiting_for_name)
-    await state.update_data(visit_id="visit1")
+def _api():
     api = AsyncMock()
-    api.suggest_catalog.return_value = [
-        {"id": "cat1", "name": "Замена масла", "category": "maintenance", "default_norm_hours": 1.0}
-    ]
+    api.get_visit.return_value = {"id": VISIT, "status": "in_progress", "total_amount": 0, "plate_number": "А1"}
+    api.list_work_items.return_value = []
+    api.suggest_catalog.return_value = [SUGGESTION]
+    api.list_mechanics.return_value = [{"id": MECH, "full_name": "Петров"}]
+    return api
 
-    await receive_work_name(message, state, api=api)
+
+async def _at(state, step, **data):
+    await on_screens(state, ("visit", {"visit_id": VISIT}))
+    await state.set_state(step)
+    await state.update_data(wiz_name="add_work", wiz_steps=[], visit_id=VISIT, **data)
+
+
+async def test_start_from_visit_card_asks_for_name():
+    state = fsm_context()
+    await on_screens(state, ("visit", {"visit_id": VISIT}))
+    callback = make_callback("act:add_work")
+
+    await start_add_work_item(callback, state, api=_api(), user=MASTER)
+
+    assert await state.get_state() == AddWorkItemStates.waiting_for_name.state
+    assert (await state.get_data())["visit_id"] == VISIT
+    assert shown(callback)[0] == "Введите название работы:"
+
+
+async def test_name_offers_catalog_suggestions():
+    state = fsm_context()
+    await _at(state, AddWorkItemStates.waiting_for_name)
+    api = _api()
+    message = make_message("замена масла")
+
+    await receive_work_name(message, state, api=api, user=MASTER)
 
     api.suggest_catalog.assert_awaited_once_with("замена масла")
-    assert (await state.get_state()) == AddWorkItemStates.choosing_suggestion.state
+    text, markup = shown(message)
+    assert text == "Выберите работу из справочника или укажите свою:"
+    assert buttons(markup)[:2] == [("Замена масла", "catalog_pick:cat1"), ("Своя формулировка", "catalog_pick:none")]
+    assert buttons(markup)[-2:] == [("‹ Назад", "wiz_back"), ("✖ Отмена", "wiz_cancel")]
+
+
+async def test_catalog_pick_asks_only_rate():
+    state = fsm_context()
+    await _at(state, AddWorkItemStates.choosing_suggestion, suggestions={"cat1": SUGGESTION}, free_text_name="масло")
+    callback = make_callback("catalog_pick:cat1")
+
+    await choose_catalog_callback(callback, state, api=_api(), user=MASTER)
+
     data = await state.get_data()
-    assert data["suggestions"]["cat1"]["category"] == "maintenance"
+    assert (data["catalog_item_id"], data["category"], data["norm_hours"]) == ("cat1", "maintenance", 1.0)
+    assert shown(callback)[0] == "Введите часовую ставку:"
 
 
-async def test_choose_catalog_callback_carries_category_and_hours():
-    callback = AsyncMock()
-    callback.data = "catalog_pick:cat1"
-    state = _fsm_context()
-    await state.update_data(
-        visit_id="visit1",
-        suggestions={"cat1": {"id": "cat1", "category": "maintenance", "default_norm_hours": 1.0}},
+async def test_back_from_rate_then_own_wording_asks_hours_and_rate():
+    state = fsm_context()
+    await _at(state, AddWorkItemStates.choosing_suggestion, suggestions={"cat1": SUGGESTION}, free_text_name="масло")
+    api = _api()
+    await choose_catalog_callback(make_callback("catalog_pick:cat1"), state, api=api, user=MASTER)
+    await wizard.back_callback(make_callback("wiz_back"), state, api=api, user=MASTER)
+    await choose_catalog_callback(make_callback("catalog_pick:none"), state, api=api, user=MASTER)
+    callback = make_callback("category_pick:body")
+
+    await choose_category_callback(callback, state, api=api, user=MASTER)
+
+    assert (await state.get_data())["catalog_item_id"] is None
+    assert shown(callback)[0] == "Введите нормо-часы и ставку через пробел (например: 1.5 800):"
+
+
+async def test_rate_then_mechanic_choice_then_create_and_back_to_card():
+    state = fsm_context()
+    await _at(state, AddWorkItemStates.waiting_for_hours_and_rate, catalog_item_id="cat1", category="maintenance", norm_hours=1.0)
+    api = _api()
+    message = make_message("1500")
+
+    await receive_hours_and_rate(message, state, api=api, user=MASTER)
+
+    assert buttons(shown(message)[1])[:2] == [("Петров", f"assign_mech:{encode_id(MECH)}"), ("Без исполнителя", "assign_mech:none")]
+
+    callback = make_callback(f"assign_mech:{encode_id(MECH)}")
+    await choose_mechanic_callback(callback, state, api=api, user=MASTER)
+
+    api.add_work_item.assert_awaited_once_with(
+        VISIT, catalog_item_id="cat1", free_text_name=None, category="maintenance",
+        norm_hours=1.0, hourly_rate=1500.0, assigned_mechanic_id=MECH,
     )
-
-    await choose_catalog_callback(callback, state)
-
-    data = await state.get_data()
-    assert data["category"] == "maintenance"
-    assert data["norm_hours"] == 1.0
-    assert (await state.get_state()) == AddWorkItemStates.waiting_for_hours_and_rate.state
+    assert await state.get_state() is None
+    assert (await state.get_data())["nav_stack"][-1] == ["visit", {"visit_id": VISIT}]
 
 
-async def test_choose_catalog_callback_none_asks_for_category():
-    callback = AsyncMock()
-    callback.data = "catalog_pick:none"
-    state = _fsm_context()
+async def test_free_text_path_parses_hours_and_rate_and_unassigned():
+    state = fsm_context()
+    await _at(state, AddWorkItemStates.waiting_for_hours_and_rate, catalog_item_id=None, free_text_name="Покраска", category="body")
+    api = _api()
+    await receive_hours_and_rate(make_message("1.5 800"), state, api=api, user=MASTER)
 
-    await choose_catalog_callback(callback, state)
+    await choose_mechanic_callback(make_callback("assign_mech:none"), state, api=api, user=MASTER)
 
-    assert (await state.get_state()) == AddWorkItemStates.choosing_category.state
-
-
-async def test_choose_category_callback_stores_category():
-    callback = AsyncMock()
-    callback.data = "category_pick:body"
-    state = _fsm_context()
-
-    await choose_category_callback(callback, state)
-
-    data = await state.get_data()
-    assert data["category"] == "body"
-    assert (await state.get_state()) == AddWorkItemStates.waiting_for_hours_and_rate.state
+    kwargs = api.add_work_item.await_args.kwargs
+    assert (kwargs["free_text_name"], kwargs["norm_hours"], kwargs["hourly_rate"], kwargs["assigned_mechanic_id"]) == (
+        "Покраска", 1.5, 800.0, None,
+    )
+    assert (await state.get_data())["nav_stack"][-1] == ["visit", {"visit_id": VISIT}]
 
 
-async def test_receive_hours_and_rate_from_catalog_path_asks_only_rate():
-    message = AsyncMock()
-    message.text = "800"
-    state = _fsm_context()
-    await state.update_data(visit_id="visit1", catalog_item_id="cat1", category="maintenance", norm_hours=1.0)
-    api = AsyncMock()
-    api.get_visit.return_value = {"id": "visit1", "status": "received", "total_amount": "0.00"}
-    api.list_work_items.return_value = []
+async def test_no_mechanics_creates_immediately():
+    state = fsm_context()
+    await _at(state, AddWorkItemStates.waiting_for_hours_and_rate, catalog_item_id="cat1", category="maintenance", norm_hours=1.0)
+    api = _api()
     api.list_mechanics.return_value = []
 
-    await receive_hours_and_rate(message, state, api=api)
-
-    api.add_work_item.assert_awaited_once_with(
-        "visit1", catalog_item_id="cat1", free_text_name=None, category="maintenance",
-        norm_hours=1.0, hourly_rate=800.0, assigned_mechanic_id=None,
-    )
-    assert (await state.get_state()) is None
-
-
-async def test_receive_hours_and_rate_from_free_text_path_parses_both():
-    message = AsyncMock()
-    message.text = "1.5 900"
-    state = _fsm_context()
-    await state.update_data(visit_id="visit1", free_text_name="Своя работа", category="body")
-    api = AsyncMock()
-    api.get_visit.return_value = {"id": "visit1", "status": "received", "total_amount": "0.00"}
-    api.list_work_items.return_value = []
-    api.list_mechanics.return_value = []
-
-    await receive_hours_and_rate(message, state, api=api)
-
-    api.add_work_item.assert_awaited_once_with(
-        "visit1", catalog_item_id=None, free_text_name="Своя работа", category="body",
-        norm_hours=1.5, hourly_rate=900.0, assigned_mechanic_id=None,
-    )
-
-
-async def test_receive_hours_and_rate_reprompts_on_bad_rate_from_catalog_path():
-    message = AsyncMock()
-    message.text = "дорого"
-    state = _fsm_context()
-    await state.update_data(visit_id="visit1", catalog_item_id="cat1", category="maintenance", norm_hours=1.0)
-    api = AsyncMock()
-
-    await receive_hours_and_rate(message, state, api=api)
-
-    api.add_work_item.assert_not_awaited()
-    message.answer.assert_awaited_once_with("Введите число (часовую ставку).")
-
-
-async def test_receive_hours_and_rate_reprompts_on_malformed_free_text_input():
-    message = AsyncMock()
-    message.text = "полтора"
-    state = _fsm_context()
-    await state.update_data(visit_id="visit1", free_text_name="Своя работа", category="body")
-    api = AsyncMock()
-
-    await receive_hours_and_rate(message, state, api=api)
-
-    api.add_work_item.assert_not_awaited()
-    message.answer.assert_awaited_once_with(
-        "Введите нормо-часы и ставку через пробел, например: 1.5 800."
-    )
-
-
-async def test_receive_hours_and_rate_asks_for_text_on_non_text_message():
-    message = AsyncMock()
-    message.text = None
-    state = _fsm_context()
-    await state.set_state(AddWorkItemStates.waiting_for_hours_and_rate)
-    await state.update_data(visit_id="visit1", free_text_name="Своя работа", category="body")
-    api = AsyncMock()
-
-    await receive_hours_and_rate(message, state, api=api)
-
-    api.add_work_item.assert_not_awaited()
-    message.answer.assert_awaited_once_with("Пожалуйста, отправьте ответ текстом.")
-    assert (await state.get_state()) == AddWorkItemStates.waiting_for_hours_and_rate.state
-
-
-async def test_receive_work_name_asks_for_text_on_non_text_message():
-    message = AsyncMock()
-    message.text = None
-    state = _fsm_context()
-    await state.set_state(AddWorkItemStates.waiting_for_name)
-    api = AsyncMock()
-
-    await receive_work_name(message, state, api=api)
-
-    api.suggest_catalog.assert_not_awaited()
-    message.answer.assert_awaited_once_with("Пожалуйста, отправьте ответ текстом.")
-
-
-MECH_ID = "11111111-1111-1111-1111-111111111111"
-
-
-async def test_receive_hours_and_rate_offers_mechanics_before_creating():
-    message = AsyncMock()
-    message.text = "1.5 900"
-    state = _fsm_context()
-    await state.set_state(AddWorkItemStates.waiting_for_hours_and_rate)
-    await state.update_data(visit_id="visit1", free_text_name="Своя работа", category="body")
-    api = AsyncMock()
-    api.list_mechanics.return_value = [{"id": MECH_ID, "full_name": "Анна"}]
-
-    await receive_hours_and_rate(message, state, api=api)
-
-    api.add_work_item.assert_not_awaited()
-    assert (await state.get_state()) == AddWorkItemStates.choosing_mechanic.state
-    data = await state.get_data()
-    assert (data["norm_hours"], data["hourly_rate"]) == (1.5, 900.0)
-    markup = message.answer.await_args.kwargs["reply_markup"]
-    buttons = [(b.text, b.callback_data) for row in markup.inline_keyboard for b in row]
-    assert buttons == [("Анна", f"assign_mech:{encode_id(MECH_ID)}"), ("Без исполнителя", "assign_mech:none")]
-
-
-async def _state_choosing_mechanic():
-    state = _fsm_context()
-    await state.set_state(AddWorkItemStates.choosing_mechanic)
-    await state.update_data(
-        visit_id="visit1", free_text_name="Своя работа", category="body", norm_hours=1.5, hourly_rate=900.0
-    )
-    return state
-
-
-async def test_choose_mechanic_callback_creates_item_assigned_to_mechanic():
-    callback = AsyncMock()
-    callback.data = f"assign_mech:{encode_id(MECH_ID)}"
-    state = await _state_choosing_mechanic()
-    api = AsyncMock()
-    api.get_visit.return_value = {"id": "visit1", "status": "received", "total_amount": "0.00"}
-    api.list_work_items.return_value = []
-
-    await choose_mechanic_callback(callback, state, api=api)
-
-    api.add_work_item.assert_awaited_once_with(
-        "visit1", catalog_item_id=None, free_text_name="Своя работа", category="body",
-        norm_hours=1.5, hourly_rate=900.0, assigned_mechanic_id=MECH_ID,
-    )
-    assert (await state.get_state()) is None
-    api.get_visit.assert_awaited_once_with("visit1")
-    callback.answer.assert_awaited_once()
-
-
-async def test_choose_mechanic_callback_none_creates_unassigned_item():
-    callback = AsyncMock()
-    callback.data = "assign_mech:none"
-    state = await _state_choosing_mechanic()
-    api = AsyncMock()
-    api.get_visit.return_value = {"id": "visit1", "status": "received", "total_amount": "0.00"}
-    api.list_work_items.return_value = []
-
-    await choose_mechanic_callback(callback, state, api=api)
+    await receive_hours_and_rate(make_message("1500"), state, api=api, user=MASTER)
 
     assert api.add_work_item.await_args.kwargs["assigned_mechanic_id"] is None
-    assert (await state.get_state()) is None
+    assert (await state.get_data())["nav_stack"][-1] == ["visit", {"visit_id": VISIT}]
+
+
+async def test_bad_rate_and_bad_pair_reprompt():
+    state = fsm_context()
+    await _at(state, AddWorkItemStates.waiting_for_hours_and_rate, catalog_item_id="cat1", category="maintenance", norm_hours=1.0)
+    message = make_message("дорого")
+    await receive_hours_and_rate(message, state, api=_api(), user=MASTER)
+    assert shown(message)[0] == "Введите число (часовую ставку).\n\nВведите часовую ставку:"
+
+    await state.update_data(catalog_item_id=None)
+    message = make_message("полтора")
+    await receive_hours_and_rate(message, state, api=_api(), user=MASTER)
+    assert shown(message)[0].startswith("Введите нормо-часы и ставку через пробел, например: 1.5 800.\n\n")
+
+
+async def test_name_must_be_text():
+    state = fsm_context()
+    await _at(state, AddWorkItemStates.waiting_for_name)
+    message = make_message(None)
+
+    await receive_work_name(message, state, api=_api(), user=MASTER)
+
+    assert shown(message)[0] == "Пожалуйста, отправьте ответ текстом.\n\nВведите название работы:"
