@@ -47,7 +47,7 @@ def _message(text: str) -> Update:
     )
 
 
-def _callback(data: str) -> Update:
+def _callback(data: str, message_id: int = 5) -> Update:
     return Update(
         update_id=2,
         callback_query=CallbackQuery(
@@ -56,7 +56,7 @@ def _callback(data: str) -> Update:
             from_user=User(id=USER_ID, is_bot=False, first_name="T"),
             data=data,
             message=Message(
-                message_id=5,
+                message_id=message_id,
                 date=datetime.now(timezone.utc),
                 chat=Chat(id=CHAT_ID, type="private"),
                 text="old",
@@ -162,3 +162,49 @@ async def test_menu_command_beats_wizard(env):
 
     assert await state.get_state() is None
     assert "Главное меню" in _texts(bot)
+
+
+async def test_full_flow_menu_to_work_and_back(env):
+    from bot.callback_ids import encode_id
+
+    bot, dp, state, api, user = env
+    visit_id, item_id = "11111111-1111-1111-1111-111111111111", "22222222-2222-2222-2222-222222222222"
+    api.list_visits.return_value = {"items": [], "has_more": False}
+    api.get_visit.return_value = {"id": visit_id, "status": "in_progress", "total_amount": 0, "plate_number": "А1"}
+    api.list_work_items.return_value = [
+        {"id": item_id, "name": "Масло", "status": "in_progress", "approved_by_client": True, "assigned_mechanic_name": None},
+    ]
+
+    await dp.feed_update(bot, _message("/start"), api=api, user=user)
+    live = (await state.get_data())["nav_msg_id"]
+    for data in ("go:active_visits", f"go:visit:{encode_id(visit_id)}", f"go:work:{encode_id(visit_id)}:{encode_id(item_id)}"):
+        await dp.feed_update(bot, _callback(data, message_id=live), api=api, user=user)
+    assert [s[0] for s in (await state.get_data())["nav_stack"]] == ["menu", "active_visits", "visit", "work"]
+
+    await dp.feed_update(bot, _callback("act:wstatus:ready", message_id=live), api=api, user=user)
+    api.update_work_item_status.assert_awaited_once_with(visit_id, item_id, "ready")
+
+    await dp.feed_update(bot, _callback("back", message_id=live), api=api, user=user)
+    assert [s[0] for s in (await state.get_data())["nav_stack"]] == ["menu", "active_visits", "visit"]
+
+
+async def test_wizard_back_and_cancel_route_through_dispatcher(env):
+    bot, dp, state, api, user = env
+    await state.update_data(nav_stack=[["menu", {}]], nav_msg_id=5)
+
+    await dp.feed_update(bot, _callback("wiz:new_visit"), api=api, user=user)
+    assert await state.get_state() == NewVisitStates.waiting_for_client_query.state
+
+    await dp.feed_update(bot, _callback("wiz_cancel"), api=api, user=user)
+    assert await state.get_state() is None
+    assert (await state.get_data())["nav_stack"] == [["menu", {}]]
+
+
+async def test_old_format_buttons_are_stale(env):
+    bot, dp, state, api, user = env
+
+    for data in ("visit_open:AAAAAAAAAAAAAAAAAAAAAA", "wsc:a:b:ready", "add_work:x", "search_page:1"):
+        await dp.feed_update(bot, _callback(data), api=api, user=user)
+
+    answers = [m.text for m in bot.sent if type(m).__name__ == "AnswerCallbackQuery"]
+    assert answers == ["Кнопка устарела — начните действие заново."] * 4
