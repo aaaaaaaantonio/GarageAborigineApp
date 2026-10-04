@@ -17,7 +17,9 @@ async def search(
     acting_user: User = Depends(require_role(UserRole.ADMIN, UserRole.MASTER, UserRole.MECHANIC)),
 ):
     service = SearchService(session)
-    return await service.search(q)
+    # Mechanics see vehicle data only: client results would expose personal data.
+    entities = {"vehicle"} if acting_user.role == UserRole.MECHANIC else None
+    return await service.search(q, entities=entities)
 
 
 @router.get("/recent")
