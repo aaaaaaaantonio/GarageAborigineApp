@@ -37,15 +37,20 @@ class SearchService:
                 else:
                     stmt = select(model).where(column == query.upper(), model.deleted_at.is_(None))
             elif field.match_type == MatchType.FUZZY:
+                # word_similarity compares the query with the best-matching part
+                # of the column, so "Никитин" finds "Никитин Антон Александрович";
+                # plain similarity() scores it against the whole string and misses.
                 stmt = (
                     select(model)
                     .where(
                         model.deleted_at.is_(None),
-                        text(f"similarity({field.field}, :q) > :threshold"),
+                        text(f"word_similarity(:q, {field.field}) >= :threshold"),
+                    )
+                    .order_by(
+                        text(f"word_similarity(:q, {field.field}) DESC"),
+                        text(f"similarity({field.field}, :q) DESC"),
                     )
                     .params(q=query, threshold=settings.search_fuzzy_threshold)
-                    .order_by(text(f"similarity({field.field}, :q) DESC"))
-                    .params(q=query)
                 )
             else:
                 continue

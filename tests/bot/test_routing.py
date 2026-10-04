@@ -168,3 +168,34 @@ async def test_work_status_button_from_card_routes_to_shared_handler(env):
 
     api.update_work_item_status.assert_awaited_once_with(visit_id, item_id, "ready")
     api.get_visit.assert_awaited_once_with(visit_id)
+
+
+async def test_search_page_button_routes_to_search_not_stale_fallback(env):
+    bot, dp, state, api, user = env
+    await state.update_data(search_query="Toyota")
+    api.search.return_value = [
+        {"entity": "vehicle", "id": f"{n:08d}-0000-0000-0000-000000000000", "matched_field": "make"} for n in range(12)
+    ]
+    api.get_vehicle.return_value = {"make": "Toyota", "model": "Camry", "plate_number": "А1"}
+
+    await dp.feed_update(bot, _callback("search_page:1"), api=api, user=user)
+
+    api.search.assert_awaited_once_with("Toyota")
+    edits = [m for m in bot.sent if type(m).__name__ == "EditMessageText"]
+    assert edits and edits[0].text.startswith("Найдено: 12 · стр. 2/2")
+
+
+async def test_reassign_mechanic_buttons_route_end_to_end(env):
+    from bot.callback_ids import encode_id
+
+    bot, dp, state, api, user = env
+    visit_id, item_id = "11111111-1111-1111-1111-111111111111", "22222222-2222-2222-2222-222222222222"
+    mech_id = "33333333-3333-3333-3333-333333333333"
+    api.list_mechanics.return_value = [{"id": mech_id, "full_name": "Петров"}]
+    api.get_visit.return_value = {"id": visit_id, "status": "in_progress", "total_amount": "0.00"}
+    api.list_work_items.return_value = []
+
+    await dp.feed_update(bot, _callback(f"reassign:{encode_id(visit_id)}:{encode_id(item_id)}"), api=api, user=user)
+    await dp.feed_update(bot, _callback(f"reassign_to:{encode_id(mech_id)}"), api=api, user=user)
+
+    api.assign_work_item_mechanic.assert_awaited_once_with(visit_id, item_id, mech_id)

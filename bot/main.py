@@ -30,8 +30,9 @@ from bot.middlewares.error_handling import ErrorHandlingMiddleware
 
 def setup_routers(dp: Dispatcher) -> None:
     # Order matters: start (commands) and menu (reply-keyboard buttons) come
-    # first so they win over any FSM-state handler; fallback answers stale
-    # callbacks; search catches all remaining text and must stay last.
+    # first so they win over any FSM-state handler; search catches all
+    # remaining text (and owns its page buttons); fallback, holding only a
+    # catch-all callback handler, answers stale buttons and must stay last.
     dp.include_router(start.router)
     dp.include_router(menu.router)
     dp.include_router(clients.router)
@@ -44,8 +45,8 @@ def setup_routers(dp: Dispatcher) -> None:
     dp.include_router(consent.router)
     dp.include_router(admin.router)
     dp.include_router(navigation.router)
-    dp.include_router(fallback.router)
     dp.include_router(search.router)
+    dp.include_router(fallback.router)
 
 
 logger = logging.getLogger(__name__)
