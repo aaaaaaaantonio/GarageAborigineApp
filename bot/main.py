@@ -1,9 +1,12 @@
 import asyncio
 import logging
+from datetime import timedelta
 
 from aiogram import Bot, Dispatcher
 from aiogram.exceptions import TelegramAPIError, TelegramUnauthorizedError
+from aiogram.fsm.storage.base import BaseStorage
 from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.fsm.storage.redis import RedisStorage
 from aiogram.types import BotCommand
 from aiogram.utils.token import TokenValidationError
 
@@ -87,11 +90,22 @@ async def set_commands(bot: Bot) -> None:
         logger.warning("Could not register bot commands", exc_info=True)
 
 
+# Abandoned stacks and wizards expire instead of piling up in Redis.
+STORAGE_TTL = timedelta(days=30)
+
+
+def build_storage(redis_url: str) -> BaseStorage:
+    """Redis keeps screen stacks and wizards across restarts; memory is for tests and local runs."""
+    if not redis_url:
+        return MemoryStorage()
+    return RedisStorage.from_url(redis_url, state_ttl=STORAGE_TTL, data_ttl=STORAGE_TTL)
+
+
 async def main() -> None:
     logging.basicConfig(level=logging.INFO)
     bot = await create_bot(settings.bot_token)
     await set_commands(bot)
-    dp = Dispatcher(storage=MemoryStorage())
+    dp = Dispatcher(storage=build_storage(settings.redis_url))
     dp.message.middleware(ErrorHandlingMiddleware())
     dp.message.middleware(AuthMiddleware())
     dp.callback_query.middleware(ErrorHandlingMiddleware())

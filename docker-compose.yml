@@ -16,6 +16,17 @@ services:
       interval: 2s
       retries: 30
 
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      retries: 30
+    restart: unless-stopped
+
   api:
     build: .
     image: garage-crm
@@ -39,14 +50,18 @@ services:
     env_file: .env
     environment:
       API_BASE_URL: http://api:8000
+      REDIS_URL: redis://redis:6379/0
     # The image's HEALTHCHECK probes the API's HTTP port; the bot has none.
     healthcheck:
       disable: true
     depends_on:
       api:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     restart: unless-stopped
 
 volumes:
   pgdata:
   storage:
+  redisdata:

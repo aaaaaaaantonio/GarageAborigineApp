@@ -59,3 +59,26 @@ async def test_set_commands_failure_does_not_stop_startup(caplog):
     await set_commands(bot)
 
     assert "Could not register bot commands" in caplog.text
+
+
+async def test_build_storage_without_url_is_in_memory():
+    from aiogram.fsm.storage.memory import MemoryStorage
+
+    from bot.main import build_storage
+
+    assert isinstance(build_storage(""), MemoryStorage)
+
+
+async def test_build_storage_with_url_is_redis_with_30_day_ttl():
+    from datetime import timedelta
+
+    from aiogram.fsm.storage.redis import RedisStorage
+
+    from bot.main import build_storage
+
+    storage = build_storage("redis://localhost:6379/0")  # from_url does not connect
+
+    assert isinstance(storage, RedisStorage)
+    assert storage.state_ttl == timedelta(days=30)
+    assert storage.data_ttl == timedelta(days=30)
+    await storage.close()
