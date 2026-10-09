@@ -11,6 +11,10 @@ class ClientPhoneTaken(Exception):
     """Телефон уже принадлежит активному (не удалённому) клиенту."""
 
 
+class VehicleVinTaken(Exception):
+    """VIN уже принадлежит активной (не удалённой) машине."""
+
+
 class InvalidAssignedMechanic(Exception):
     """assigned_mechanic_id не ссылается на активного пользователя с ролью MECHANIC."""
 

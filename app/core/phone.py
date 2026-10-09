@@ -10,3 +10,9 @@ def normalize_phone(raw: str) -> str:
     if len(digits) == 10:
         digits = "7" + digits
     return digits
+
+
+def is_valid_phone(raw: str) -> bool:
+    """Российский номер: после нормализации — 11 цифр, начиная с 7."""
+    digits = normalize_phone(raw)
+    return len(digits) == 11 and digits[0] == "7"

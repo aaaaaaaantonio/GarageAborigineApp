@@ -2,7 +2,7 @@ import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import VehicleNotFound
+from app.core.exceptions import VehicleNotFound, VehicleVinTaken
 from app.core.plate import normalize_plate
 from app.modules.clients.models import Client
 from app.modules.users.audit import record_audit
@@ -18,6 +18,8 @@ class VehicleService:
         self.repo = VehicleRepository(session)
 
     async def create_vehicle(self, data: VehicleCreate, acting_user: User) -> Vehicle:
+        if await self.repo.get_by_vin(data.vin) is not None:
+            raise VehicleVinTaken()
         payload = data.model_dump()
         payload["plate_number"] = normalize_plate(payload["plate_number"])
         vehicle = Vehicle(**payload)

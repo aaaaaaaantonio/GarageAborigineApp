@@ -1,6 +1,6 @@
 import pytest
 
-from app.core.phone import normalize_phone
+from app.core.phone import is_valid_phone, normalize_phone
 
 
 @pytest.mark.parametrize(
@@ -14,3 +14,13 @@ from app.core.phone import normalize_phone
 )
 def test_normalize_phone_variants_match(raw, expected):
     assert normalize_phone(raw) == expected
+
+
+@pytest.mark.parametrize("raw", ["+7 (999) 123-45-67", "89991234567", "9991234567"])
+def test_valid_russian_phones(raw):
+    assert is_valid_phone(raw)
+
+
+@pytest.mark.parametrize("raw", ["", "123", "+380 99 123 45 67", "79991234", "799912345678", "телефон"])
+def test_invalid_phones(raw):
+    assert not is_valid_phone(raw)
