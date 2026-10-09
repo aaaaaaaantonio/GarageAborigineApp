@@ -1,85 +1,81 @@
 from unittest.mock import AsyncMock
 
-from aiogram.fsm.context import FSMContext
-from aiogram.fsm.storage.base import StorageKey
-from aiogram.fsm.storage.memory import MemoryStorage
-
 from bot.callback_ids import encode_id
-from bot.handlers.search import SEARCH_RESULTS_LIMIT, receive_search_query, start_search
+from bot.handlers.search import SEARCH_RESULTS_LIMIT, receive_search_query, render_search, render_search_results, search_page_callback
+from tests.bot.helpers import MASTER, MECHANIC, buttons, fsm_context, make_callback, make_message, on_screens, shown
 
 C1 = "11111111-1111-1111-1111-111111111111"
 V1 = "22222222-2222-2222-2222-222222222222"
-MASTER = {"id": "m1", "role": "master"}
-MECHANIC = {"id": "k1", "role": "mechanic"}
 
 
-def _buttons(message):
-    markup = message.answer.await_args.kwargs["reply_markup"]
-    return [(b.text, b.callback_data) for row in markup.inline_keyboard for b in row]
+def _vehicles(n):
+    return [{"entity": "vehicle", "id": f"{i:08d}-0000-0000-0000-000000000000", "matched_field": "make"} for i in range(n)]
 
 
-async def test_search_results_are_buttons_to_cards():
-    message = AsyncMock()
-    message.text = "Иванов"
+def _api(results):
     api = AsyncMock()
-    api.search.return_value = [
-        {"entity": "client", "id": C1, "matched_field": "full_name"},
-        {"entity": "vehicle", "id": V1, "matched_field": "plate_number"},
-    ]
+    api.search.return_value = results
     api.get_client.return_value = {"id": C1, "full_name": "Иван Иванов", "phone_display": "+7 999 123-45-67"}
     api.get_vehicle.return_value = {"id": V1, "make": "Toyota", "model": "Camry", "plate_number": "А123ВС77"}
+    return api
 
-    await receive_search_query(message, api=api, user=MASTER)
 
-    assert message.answer.await_args.args[0] == "Найдено: 2"
-    assert _buttons(message) == [
-        ("👤 Иван Иванов — +7 999 123-45-67", f"client_open:{encode_id(C1)}"),
-        ("🚗 Toyota Camry (А123ВС77)", f"vehicle_open:{encode_id(V1)}"),
+async def test_search_prompt_depends_on_role():
+    assert (await render_search(AsyncMock(), MASTER, {}))[0] == "Введите телефон, VIN, гос.номер или имя клиента:"
+    assert (await render_search(AsyncMock(), MECHANIC, {}))[0] == "Введите VIN или гос.номер:"
+
+
+async def test_typed_text_pushes_results_screen():
+    state = fsm_context()
+    await on_screens(state, ("search", {}))
+    api = _api([{"entity": "client", "id": C1}, {"entity": "vehicle", "id": V1}])
+    message = make_message("Иванов")
+
+    await receive_search_query(message, state, api=api, user=MASTER)
+
+    assert (await state.get_data())["nav_stack"][-1] == ["search_results", {"query": "Иванов", "page": 0}]
+    text, markup = shown(message)
+    assert text == "Найдено: 2"
+    assert buttons(markup)[:2] == [
+        ("👤 Иван Иванов — +7 999 123-45-67", f"go:client:{encode_id(C1)}"),
+        ("🚗 Toyota Camry (А123ВС77)", f"go:vehicle:{encode_id(V1)}"),
     ]
 
 
-async def test_search_shows_first_results_and_asks_to_refine():
-    message = AsyncMock()
-    message.text = "Toyota"
-    ids = [f"{n:08d}-0000-0000-0000-000000000000" for n in range(SEARCH_RESULTS_LIMIT + 3)]
-    api = AsyncMock()
-    api.search.return_value = [{"entity": "vehicle", "id": i, "matched_field": "make"} for i in ids]
-    api.get_vehicle.return_value = {"make": "Toyota", "model": "Camry", "plate_number": "А1"}
+async def test_results_over_limit_show_first_page_with_next():
+    text, markup = await render_search_results(_api(_vehicles(12)), MASTER, {"query": "Toyota", "page": 0})
 
-    await receive_search_query(message, api=api, user=MASTER)
-
-    assert api.get_vehicle.await_count == SEARCH_RESULTS_LIMIT
-    assert message.answer.await_args.args[0] == "Найдено: 13\nПоказаны первые 10 — уточните запрос."
+    assert text == "Найдено: 12 · стр. 1/2\nМожно уточнить запрос."
+    assert len(buttons(markup)) == SEARCH_RESULTS_LIMIT + 1
+    assert buttons(markup)[-1] == ("Далее ›", "act:spage:1")
 
 
-async def test_search_handles_no_matches():
-    message = AsyncMock()
-    message.text = "неизвестно"
-    api = AsyncMock()
-    api.search.return_value = []
+async def test_middle_page_has_both_arrows_in_one_row():
+    _, markup = await render_search_results(_api(_vehicles(25)), MASTER, {"query": "Toyota", "page": 1})
 
-    await receive_search_query(message, api=api, user=MASTER)
-
-    message.answer.assert_awaited_once_with("Ничего не найдено.")
+    assert [(b.text, b.callback_data) for b in markup.inline_keyboard[-1]] == [("‹ Пред.", "act:spage:0"), ("Далее ›", "act:spage:2")]
 
 
-async def test_mechanic_no_matches_hint_mentions_vin_and_plate():
-    message = AsyncMock()
-    message.text = "Сидоров"
-    api = AsyncMock()
-    api.search.return_value = []
+async def test_page_out_of_range_is_clamped():
+    text, _ = await render_search_results(_api(_vehicles(12)), MASTER, {"query": "Toyota", "page": 9})
 
-    await receive_search_query(message, api=api, user=MECHANIC)
-
-    message.answer.assert_awaited_once_with("Ничего не найдено. Механик может искать машину по VIN или госномеру.")
+    assert text.startswith("Найдено: 12 · стр. 2/2")
 
 
-async def test_start_search_prompt_depends_on_role():
-    state = FSMContext(storage=MemoryStorage(), key=StorageKey(bot_id=1, chat_id=1, user_id=1))
-    master_msg, mechanic_msg = AsyncMock(), AsyncMock()
+async def test_page_button_replaces_results_in_place():
+    state = fsm_context()
+    await on_screens(state, ("search_results", {"query": "Toyota", "page": 0}))
+    callback = make_callback("act:spage:1")
 
-    await start_search(master_msg, state, user=MASTER)
-    await start_search(mechanic_msg, state, user=MECHANIC)
+    await search_page_callback(callback, state, api=_api(_vehicles(12)), user=MASTER)
 
-    master_msg.answer.assert_awaited_once_with("Введите телефон, VIN, гос.номер или имя клиента:")
-    mechanic_msg.answer.assert_awaited_once_with("Введите VIN или гос.номер:")
+    stack = (await state.get_data())["nav_stack"]
+    assert stack == [["menu", {}], ["search_results", {"query": "Toyota", "page": 1}]]
+    assert shown(callback)[0].startswith("Найдено: 12 · стр. 2/2")
+
+
+async def test_no_matches_texts_by_role():
+    assert (await render_search_results(_api([]), MASTER, {"query": "x", "page": 0}))[0] == "Ничего не найдено."
+    assert (await render_search_results(_api([]), MECHANIC, {"query": "x", "page": 0}))[0] == (
+        "Ничего не найдено. Механик может искать машину по VIN или госномеру."
+    )

@@ -1,644 +1,258 @@
+import json
 from unittest.mock import AsyncMock
 
-from aiogram.fsm.context import FSMContext
-from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.fsm.storage.base import StorageKey
-
-from bot.callback_ids import encode_id as _encode_id
+from bot.api_client import ApiMileageRollback
+from bot.callback_ids import encode_id
 from bot.handlers.visits import (
-    approve_work_callback,
-    change_status_callback,
-    confirm_mileage_callback,
-    receive_cancel_reason,
     choose_client_callback,
     choose_master_callback,
     choose_vehicle_callback,
-    new_visit_for_vehicle_callback,
+    confirm_mileage_callback,
+    new_visit_for_callback,
     receive_client_query,
     receive_mileage,
     receive_vehicle_query,
-    send_visit_card,
-    visit_header,
     start_new_visit,
 )
-from bot.states import NewClientStates, NewVehicleStates, NewVisitStates, VisitCancelStates
+from bot.states import NewClientStates, NewVehicleStates, NewVisitStates
+from tests.bot.helpers import ADMIN, MASTER, MECHANIC, buttons, fsm_context, make_callback, make_message, on_screens, shown
+
+C1 = "11111111-1111-1111-1111-111111111111"
+CAR = "44444444-4444-4444-4444-444444444444"
+VISIT = "55555555-5555-5555-5555-555555555555"
+MASTER_B = "66666666-6666-6666-6666-666666666666"
 
 
-def _fsm_context() -> FSMContext:
-    storage = MemoryStorage()
-    key = StorageKey(bot_id=1, chat_id=1, user_id=1)
-    return FSMContext(storage=storage, key=key)
-
-
-async def test_receive_mileage_uses_acting_user_as_master():
-    message = AsyncMock()
-    message.text = "45000"
-    state = _fsm_context()
-    await state.set_state(NewVisitStates.waiting_for_mileage)
-    await state.update_data(client_id="c1", vehicle_id="v1")
+def _api():
     api = AsyncMock()
-    api.create_visit.return_value = {"id": "visit1", "status": "received"}
-    user = {"id": "m1", "role": "master"}
-
-    await receive_mileage(message, state, api=api, user=user)
-
-    api.create_visit.assert_awaited_once_with(
-        client_id="c1", vehicle_id="v1", assigned_master_id="m1", mileage_at_intake=45000,
-        mileage_manually_confirmed=False,
-    )
-    assert (await state.get_state()) is None
-
-
-async def test_send_visit_card_shows_status_buttons():
-    message = AsyncMock()
-    visit = {"id": "visit1", "status": "received", "total_amount": "0.00"}
-
-    await send_visit_card(message, visit, [])
-
-    message.answer.assert_awaited_once()
-    _, kwargs = message.answer.await_args
-    assert kwargs["reply_markup"] is not None
-
-
-async def test_send_visit_card_shows_approve_button_for_unapproved_item():
-    message = AsyncMock()
-    visit = {"id": "11111111-1111-1111-1111-111111111111", "status": "in_progress", "total_amount": "0.00"}
-    work_items = [
-        {
-            "id": "22222222-2222-2222-2222-222222222222",
-            "name": "Замена масла",
-            "status": "not_ready",
-            "approved_by_client": False,
-        }
-    ]
-
-    await send_visit_card(message, visit, work_items)
-
-    _, kwargs = message.answer.await_args
-    markup = kwargs["reply_markup"]
-    texts = [button.text for row in markup.inline_keyboard for button in row]
-    assert "✅ Замена масла" in texts
-
-
-async def test_send_visit_card_skips_approve_button_for_approved_item():
-    message = AsyncMock()
-    visit = {"id": "11111111-1111-1111-1111-111111111111", "status": "in_progress", "total_amount": "0.00"}
-    work_items = [
-        {
-            "id": "22222222-2222-2222-2222-222222222222",
-            "name": "Замена масла",
-            "status": "not_ready",
-            "approved_by_client": True,
-        }
-    ]
-
-    await send_visit_card(message, visit, work_items)
-
-    _, kwargs = message.answer.await_args
-    markup = kwargs["reply_markup"]
-    texts = [button.text for row in markup.inline_keyboard for button in row]
-    assert not any(t.startswith("✅") for t in texts)
-
-
-async def test_send_visit_card_shows_add_part_button_for_unapproved_item():
-    message = AsyncMock()
-    visit_id = "11111111-1111-1111-1111-111111111111"
-    item_id = "22222222-2222-2222-2222-222222222222"
-    visit = {"id": visit_id, "status": "in_progress", "total_amount": "0.00"}
-    work_items = [
-        {
-            "id": item_id,
-            "name": "Замена масла",
-            "status": "not_ready",
-            "approved_by_client": False,
-        }
-    ]
-
-    await send_visit_card(message, visit, work_items)
-
-    _, kwargs = message.answer.await_args
-    markup = kwargs["reply_markup"]
-    add_part_buttons = [
-        b for row in markup.inline_keyboard for b in row if b.text == "🔧 Замена масла"
-    ]
-    assert len(add_part_buttons) == 1
-    assert add_part_buttons[0].callback_data == f"add_part:{_encode_id(visit_id)}:{_encode_id(item_id)}"
-
-
-async def test_send_visit_card_shows_add_part_button_for_approved_item():
-    message = AsyncMock()
-    visit_id = "11111111-1111-1111-1111-111111111111"
-    item_id = "22222222-2222-2222-2222-222222222222"
-    visit = {"id": visit_id, "status": "in_progress", "total_amount": "0.00"}
-    work_items = [
-        {
-            "id": item_id,
-            "name": "Замена масла",
-            "status": "not_ready",
-            "approved_by_client": True,
-        }
-    ]
-
-    await send_visit_card(message, visit, work_items)
-
-    _, kwargs = message.answer.await_args
-    markup = kwargs["reply_markup"]
-    add_part_buttons = [
-        b for row in markup.inline_keyboard for b in row if b.text == "🔧 Замена масла"
-    ]
-    assert len(add_part_buttons) == 1
-    assert add_part_buttons[0].callback_data == f"add_part:{_encode_id(visit_id)}:{_encode_id(item_id)}"
-
-
-async def test_start_new_visit_asks_for_client():
-    message = AsyncMock()
-    state = _fsm_context()
-
-    await start_new_visit(message, state)
-
-    assert (await state.get_state()) == NewVisitStates.waiting_for_client_query.state
-
-
-async def test_receive_client_query_shows_candidates():
-    message = AsyncMock()
-    message.text = "Иван"
-    state = _fsm_context()
-    await state.set_state(NewVisitStates.waiting_for_client_query)
-    api = AsyncMock()
-    api.search.return_value = [{"entity": "client", "id": "c1", "matched_field": "full_name"}]
-    api.get_client.return_value = {"id": "c1", "full_name": "Иван Иванов"}
-
-    await receive_client_query(message, state, api=api)
-
-    api.get_client.assert_awaited_once_with("c1")
-    assert (await state.get_state()) == NewVisitStates.choosing_client.state
-
-
-async def test_receive_client_query_falls_back_to_creation_when_no_matches():
-    message = AsyncMock()
-    message.text = "неизвестный"
-    state = _fsm_context()
-    await state.set_state(NewVisitStates.waiting_for_client_query)
-    api = AsyncMock()
-    api.search.return_value = []
-
-    await receive_client_query(message, state, api=api)
-
-    assert (await state.get_state()) == NewClientStates.waiting_for_phone.state
-    data = await state.get_data()
-    assert data["return_flow"] == "new_visit"
-
-
-async def test_choose_client_callback_stores_client_id():
-    callback = AsyncMock()
-    callback.data = "client_pick:c1"
-    state = _fsm_context()
-
-    await choose_client_callback(callback, state)
-
-    data = await state.get_data()
-    assert data["client_id"] == "c1"
-    assert (await state.get_state()) == NewVisitStates.waiting_for_vehicle_query.state
-
-
-async def test_receive_vehicle_query_shows_candidates():
-    message = AsyncMock()
-    message.text = "А123"
-    state = _fsm_context()
-    await state.set_state(NewVisitStates.waiting_for_vehicle_query)
-    api = AsyncMock()
-    api.search.return_value = [{"entity": "vehicle", "id": "v1", "matched_field": "plate_number"}]
-    api.get_vehicle.return_value = {"id": "v1", "plate_number": "А123"}
-
-    await receive_vehicle_query(message, state, api=api)
-
-    api.get_vehicle.assert_awaited_once_with("v1")
-    assert (await state.get_state()) == NewVisitStates.choosing_vehicle.state
-
-
-async def test_receive_vehicle_query_falls_back_to_creation_when_no_matches():
-    message = AsyncMock()
-    message.text = "неизвестный VIN"
-    state = _fsm_context()
-    await state.set_state(NewVisitStates.waiting_for_vehicle_query)
-    api = AsyncMock()
-    api.search.return_value = []
-
-    await receive_vehicle_query(message, state, api=api)
-
-    assert (await state.get_state()) == NewVehicleStates.waiting_for_vin.state
-    data = await state.get_data()
-    assert data["return_flow"] == "new_visit"
-
-
-async def test_choose_vehicle_callback_stores_vehicle_id():
-    callback = AsyncMock()
-    callback.data = "vehicle_pick:v1"
-    state = _fsm_context()
-
-    await choose_vehicle_callback(callback, state)
-
-    data = await state.get_data()
-    assert data["vehicle_id"] == "v1"
-    assert (await state.get_state()) == NewVisitStates.waiting_for_mileage.state
-
-
-async def test_approve_work_callback_approves_and_refreshes_card():
-    visit_id = "11111111-1111-1111-1111-111111111111"
-    item_id = "22222222-2222-2222-2222-222222222222"
-    callback = AsyncMock()
-    callback.data = f"approve_work:{_encode_id(visit_id)}:{_encode_id(item_id)}"
-    api = AsyncMock()
-    api.get_visit.return_value = {"id": visit_id, "status": "in_progress", "total_amount": "0.00"}
+    api.create_visit.return_value = {"id": VISIT, "status": "received", "total_amount": 0}
+    api.get_visit.return_value = {"id": VISIT, "status": "received", "total_amount": 0, "plate_number": "А123ВС77"}
     api.list_work_items.return_value = []
+    return api
 
-    await approve_work_callback(callback, api=api)
 
-    api.approve_work_item.assert_awaited_once_with(visit_id, item_id)
-    api.get_visit.assert_awaited_once_with(visit_id)
-    callback.message.answer.assert_awaited_once()
-    callback.answer.assert_awaited_once()
+async def _at(state, step, **data):
+    await on_screens(state)
+    await state.set_state(step)
+    await state.update_data(wiz_name="new_visit", wiz_steps=[], **data)
 
 
-async def test_send_visit_card_callback_data_fits_telegram_limit():
-    message = AsyncMock()
-    visit = {"id": "11111111-1111-1111-1111-111111111111", "status": "in_progress", "total_amount": "0.00"}
-    work_items = [
-        {
-            "id": "22222222-2222-2222-2222-222222222222",
-            "name": "Замена масла",
-            "status": "not_ready",
-            "approved_by_client": False,
-        }
-    ]
+async def test_start_from_menu_asks_for_client():
+    state = fsm_context()
+    await on_screens(state)
+    callback = make_callback("wiz:new_visit")
 
-    await send_visit_card(message, visit, work_items)
+    await start_new_visit(callback, state, api=_api(), user=MASTER)
 
-    _, kwargs = message.answer.await_args
-    markup = kwargs["reply_markup"]
-    assert all(len(b.callback_data.encode()) <= 64 for row in markup.inline_keyboard for b in row)
+    assert await state.get_state() == NewVisitStates.waiting_for_client_query.state
+    assert shown(callback)[0] == "Введите телефон или ФИО клиента:"
 
 
-async def test_send_visit_card_uses_resolved_work_item_name():
-    message = AsyncMock()
-    visit = {"id": "11111111-1111-1111-1111-111111111111", "status": "in_progress", "total_amount": "0.00"}
-    work_items = [
-        {
-            "id": "22222222-2222-2222-2222-222222222222",
-            "name": "Диагностика ходовой",
-            "free_text_name": None,
-            "status": "not_ready",
-            "approved_by_client": False,
-        },
-    ]
+async def test_start_refused_for_mechanic():
+    state = fsm_context()
+    callback = make_callback("wiz:new_visit")
 
-    await send_visit_card(message, visit, work_items)
-
-    args, kwargs = message.answer.await_args
-    texts = [button.text for row in kwargs["reply_markup"].inline_keyboard for button in row]
-    assert "✅ Диагностика ходовой" in texts
-    assert "Диагностика ходовой" in args[0]
-
-
-async def test_send_visit_card_shows_add_work_button():
-    message = AsyncMock()
-    visit = {"id": "11111111-1111-1111-1111-111111111111", "status": "in_progress", "total_amount": "0.00"}
-
-    await send_visit_card(message, visit, [])
-
-    _, kwargs = message.answer.await_args
-    markup = kwargs["reply_markup"]
-    buttons = [b for row in markup.inline_keyboard for b in row]
-    add_work_buttons = [b for b in buttons if b.text == "➕ Добавить работу"]
-    assert len(add_work_buttons) == 1
-    assert add_work_buttons[0].callback_data == f"add_work:{visit['id']}"
-
-
-async def test_receive_mileage_reprompts_on_non_numeric_input():
-    message = AsyncMock()
-    message.text = "много"
-    state = _fsm_context()
-    await state.set_state(NewVisitStates.waiting_for_mileage)
-    await state.update_data(client_id="c1", vehicle_id="v1")
-    api = AsyncMock()
-
-    await receive_mileage(message, state, api=api, user={"id": "m1", "role": "master"})
-
-    api.create_visit.assert_not_awaited()
-    message.answer.assert_awaited_once_with("Введите число (пробег в км).")
-    assert (await state.get_state()) == NewVisitStates.waiting_for_mileage.state
-
-
-VISIT_ID = "11111111-1111-1111-1111-111111111111"
-ITEM_ID = "22222222-2222-2222-2222-222222222222"
-
-
-def _buttons(message) -> list:
-    _, kwargs = message.answer.await_args
-    return [b for row in kwargs["reply_markup"].inline_keyboard for b in row]
-
-
-async def test_send_visit_card_offers_waiting_parts_and_ready_for_in_progress_item():
-    message = AsyncMock()
-    visit = {"id": VISIT_ID, "status": "in_progress", "total_amount": "0.00"}
-    items = [{"id": ITEM_ID, "name": "Замена масла", "status": "in_progress", "approved_by_client": True}]
-
-    await send_visit_card(message, visit, items)
-
-    data = {b.callback_data for b in _buttons(message)}
-    prefix = f"wsc:{_encode_id(VISIT_ID)}:{_encode_id(ITEM_ID)}"
-    assert f"{prefix}:waiting_parts" in data
-    assert f"{prefix}:ready" in data
-    assert all(len(d.encode()) <= 64 for d in data)
-
-
-async def test_send_visit_card_has_no_status_button_for_ready_item():
-    message = AsyncMock()
-    visit = {"id": VISIT_ID, "status": "in_progress", "total_amount": "0.00"}
-    items = [{"id": ITEM_ID, "name": "Замена масла", "status": "ready", "approved_by_client": True}]
-
-    await send_visit_card(message, visit, items)
-
-    assert not any(b.callback_data.startswith("wsc:") for b in _buttons(message))
-
-
-async def test_send_visit_card_offers_cancel_from_ready():
-    message = AsyncMock()
-    visit = {"id": VISIT_ID, "status": "ready", "total_amount": "0.00"}
-
-    await send_visit_card(message, visit, [])
-
-    data = {b.callback_data for b in _buttons(message)}
-    assert f"visit_status:{VISIT_ID}:issued" in data
-    assert f"visit_status:{VISIT_ID}:cancelled" in data
-
-
-async def test_change_status_callback_refreshes_visit_card():
-    callback = AsyncMock()
-    callback.data = f"visit_status:{VISIT_ID}:diagnostics"
-    state = _fsm_context()
-    api = AsyncMock()
-    api.change_visit_status.return_value = {"id": VISIT_ID, "status": "diagnostics", "total_amount": "0.00"}
-    api.get_visit.return_value = {"id": VISIT_ID, "status": "diagnostics", "total_amount": "0.00"}
-    api.list_work_items.return_value = []
-
-    await change_status_callback(callback, state, api=api)
-
-    api.change_visit_status.assert_awaited_once_with(VISIT_ID, "diagnostics")
-    api.get_visit.assert_awaited_once_with(VISIT_ID)
-    api.list_work_items.assert_awaited_once_with(VISIT_ID)
-    _, kwargs = callback.message.answer.await_args
-    assert kwargs["reply_markup"] is not None
-    callback.answer.assert_awaited_once()
-
-
-async def test_change_status_callback_cancelled_asks_for_reason():
-    callback = AsyncMock()
-    callback.data = f"visit_status:{VISIT_ID}:cancelled"
-    state = _fsm_context()
-    api = AsyncMock()
-
-    await change_status_callback(callback, state, api=api)
-
-    api.change_visit_status.assert_not_awaited()
-    assert await state.get_state() == VisitCancelStates.waiting_for_reason.state
-    assert (await state.get_data())["visit_id"] == VISIT_ID
-    assert "причину" in callback.message.answer.await_args.args[0]
-    callback.answer.assert_awaited_once()
-
-
-async def test_receive_cancel_reason_cancels_with_reason_and_refreshes_card():
-    message = AsyncMock()
-    message.text = "Клиент передумал"
-    state = _fsm_context()
-    await state.set_state(VisitCancelStates.waiting_for_reason)
-    await state.update_data(visit_id=VISIT_ID)
-    api = AsyncMock()
-    api.get_visit.return_value = {"id": VISIT_ID, "status": "cancelled", "total_amount": "0.00"}
-    api.list_work_items.return_value = []
-
-    await receive_cancel_reason(message, state, api=api)
-
-    api.change_visit_status.assert_awaited_once_with(VISIT_ID, "cancelled", reason="Клиент передумал")
-    assert await state.get_state() is None
-    api.get_visit.assert_awaited_once_with(VISIT_ID)
-
-
-async def test_receive_cancel_reason_rejects_non_text():
-    message = AsyncMock()
-    message.text = None
-    state = _fsm_context()
-    await state.set_state(VisitCancelStates.waiting_for_reason)
-    await state.update_data(visit_id=VISIT_ID)
-    api = AsyncMock()
-
-    await receive_cancel_reason(message, state, api=api)
-
-    api.change_visit_status.assert_not_awaited()
-    assert await state.get_state() == VisitCancelStates.waiting_for_reason.state
-
-
-async def test_receive_mileage_rollback_offers_confirmation_and_keeps_data():
-    from bot.api_client import ApiMileageRollback
-
-    message = AsyncMock()
-    message.text = "1000"
-    state = _fsm_context()
-    await state.set_state(NewVisitStates.waiting_for_mileage)
-    await state.update_data(client_id="c1", vehicle_id="v1")
-    api = AsyncMock()
-    api.create_visit.side_effect = ApiMileageRollback("Пробег меньше последнего зафиксированного.")
-
-    await receive_mileage(message, state, api=api, user={"id": "m1", "role": "master"})
-
-    assert await state.get_state() == NewVisitStates.confirming_mileage.state
-    data = await state.get_data()
-    assert data == {"client_id": "c1", "vehicle_id": "v1", "mileage": 1000, "mileage_confirmed": False}
-    args, kwargs = message.answer.await_args
-    assert "Пробег меньше" in args[0]
-    buttons = [b for row in kwargs["reply_markup"].inline_keyboard for b in row]
-    assert [b.callback_data for b in buttons] == ["mileage_confirm"]
-
-
-async def test_confirm_mileage_callback_resends_with_manual_confirmation():
-    callback = AsyncMock()
-    callback.data = "mileage_confirm"
-    state = _fsm_context()
-    await state.set_state(NewVisitStates.confirming_mileage)
-    await state.update_data(client_id="c1", vehicle_id="v1", mileage=1000, mileage_confirmed=False)
-    api = AsyncMock()
-    api.create_visit.return_value = {"id": VISIT_ID, "status": "received", "total_amount": "0.00"}
-
-    await confirm_mileage_callback(callback, state, api=api, user={"id": "m1", "role": "master"})
-
-    api.create_visit.assert_awaited_once_with(
-        client_id="c1", vehicle_id="v1", assigned_master_id="m1", mileage_at_intake=1000,
-        mileage_manually_confirmed=True,
-    )
-    assert await state.get_state() is None
-    callback.message.answer.assert_awaited_once()
-    callback.answer.assert_awaited_once()
-
-
-async def test_send_visit_card_header_is_human_readable_and_statuses_russian():
-    message = AsyncMock()
-    visit = {
-        "id": "11111111-1111-1111-1111-111111111111",
-        "status": "in_progress",
-        "total_amount": 12400.0,
-        "plate_number": "А123ВС77",
-        "make_model": "Toyota Camry",
-        "client_name": "Иванов Пётр",
-        "master_name": "Петров",
-    }
-    work_items = [
-        {"id": "22222222-2222-2222-2222-222222222222", "name": "Замена масла", "status": "in_progress",
-         "approved_by_client": True},
-    ]
-
-    await send_visit_card(message, visit, work_items)
-
-    text = message.answer.await_args.args[0]
-    assert text.splitlines()[0] == "А123ВС77 · Toyota Camry · Иванов Пётр"
-    assert "Статус: Ремонт · Мастер: Петров" in text
-    assert "1. Замена масла — В работе" in text
-    markup = message.answer.await_args.kwargs["reply_markup"]
-    texts = [b.text for row in markup.inline_keyboard for b in row]
-    assert "Ждём запчасти" in texts
-    assert "🔄 Замена масла → Готово" in texts
-    assert "11111111-1111-1111-1111-111111111111" not in text
-
-
-async def test_send_visit_card_without_summary_falls_back_to_generic_title():
-    message = AsyncMock()
-
-    await send_visit_card(message, {"id": "visit1", "status": "received", "total_amount": "0.00"}, [])
-
-    assert message.answer.await_args.args[0].splitlines()[0] == "Заезд"
-
-
-MASTER_A = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
-VEHICLE_ID = "44444444-4444-4444-4444-444444444444"
-ADMIN = {"id": "admin1", "role": "admin"}
-
-
-async def test_admin_is_asked_to_choose_master_after_mileage():
-    message = AsyncMock()
-    message.text = "45000"
-    state = _fsm_context()
-    await state.set_state(NewVisitStates.waiting_for_mileage)
-    await state.update_data(client_id="c1", vehicle_id="v1")
-    api = AsyncMock()
-    api.list_masters.return_value = [{"id": MASTER_A, "full_name": "Анна"}]
-
-    await receive_mileage(message, state, api=api, user=ADMIN)
-
-    api.create_visit.assert_not_awaited()
-    assert await state.get_state() == NewVisitStates.choosing_master.state
-    markup = message.answer.await_args.kwargs["reply_markup"]
-    assert [(b.text, b.callback_data) for row in markup.inline_keyboard for b in row] == [
-        ("Анна", f"master_pick:{_encode_id(MASTER_A)}")
-    ]
-
-
-async def test_admin_master_pick_creates_visit_with_that_master():
-    callback = AsyncMock()
-    callback.data = f"master_pick:{_encode_id(MASTER_A)}"
-    state = _fsm_context()
-    await state.set_state(NewVisitStates.choosing_master)
-    await state.update_data(client_id="c1", vehicle_id="v1", mileage=45000, mileage_confirmed=False)
-    api = AsyncMock()
-    api.create_visit.return_value = {"id": "visit1", "status": "received"}
-
-    await choose_master_callback(callback, state, api=api, user=ADMIN)
-
-    api.create_visit.assert_awaited_once_with(
-        client_id="c1", vehicle_id="v1", assigned_master_id=MASTER_A, mileage_at_intake=45000,
-        mileage_manually_confirmed=False,
-    )
-    assert await state.get_state() is None
-
-
-async def test_admin_without_masters_is_told_to_add_one():
-    message = AsyncMock()
-    message.text = "45000"
-    state = _fsm_context()
-    await state.set_state(NewVisitStates.waiting_for_mileage)
-    await state.update_data(client_id="c1", vehicle_id="v1")
-    api = AsyncMock()
-    api.list_masters.return_value = []
-
-    await receive_mileage(message, state, api=api, user=ADMIN)
-
-    message.answer.assert_awaited_once_with("Сначала добавьте мастера через «Добавить сотрудника».")
-    assert await state.get_state() is None
-    api.create_visit.assert_not_awaited()
-
-
-async def test_admin_mileage_rollback_keeps_chosen_master():
-    from bot.api_client import ApiMileageRollback
-
-    callback = AsyncMock()
-    callback.data = f"master_pick:{_encode_id(MASTER_A)}"
-    state = _fsm_context()
-    await state.set_state(NewVisitStates.choosing_master)
-    await state.update_data(client_id="c1", vehicle_id="v1", mileage=100, mileage_confirmed=False)
-    api = AsyncMock()
-    api.create_visit.side_effect = [ApiMileageRollback("Пробег меньше"), {"id": "visit1", "status": "received"}]
-
-    await choose_master_callback(callback, state, api=api, user=ADMIN)
-    assert await state.get_state() == NewVisitStates.confirming_mileage.state
-
-    confirm = AsyncMock()
-    await confirm_mileage_callback(confirm, state, api=api, user=ADMIN)
-
-    api.list_masters.assert_not_awaited()
-    assert api.create_visit.await_args_list[1].kwargs["assigned_master_id"] == MASTER_A
-    assert api.create_visit.await_args_list[1].kwargs["mileage_manually_confirmed"] is True
-
-
-async def test_new_visit_from_vehicle_card_starts_at_mileage():
-    callback = AsyncMock()
-    callback.data = f"new_visit_for:{_encode_id(VEHICLE_ID)}"
-    state = _fsm_context()
-    await state.update_data(stale="x")
-    api = AsyncMock()
-    api.get_vehicle_owner.return_value = {"id": "c9", "full_name": "Иванов"}
-
-    await new_visit_for_vehicle_callback(callback, state, api=api, user={"id": "m1", "role": "master"})
-
-    assert await state.get_state() == NewVisitStates.waiting_for_mileage.state
-    assert await state.get_data() == {"client_id": "c9", "vehicle_id": VEHICLE_ID}
-    callback.message.answer.assert_awaited_once_with("Новый заезд: Иванов. Введите пробег на приёмке (/cancel — отмена):")
-
-
-async def test_new_visit_from_vehicle_without_owner_is_refused():
-    callback = AsyncMock()
-    callback.data = f"new_visit_for:{_encode_id(VEHICLE_ID)}"
-    state = _fsm_context()
-    api = AsyncMock()
-    api.get_vehicle_owner.return_value = None
-
-    await new_visit_for_vehicle_callback(callback, state, api=api, user={"id": "m1", "role": "master"})
+    await start_new_visit(callback, state, api=_api(), user=MECHANIC)
 
     assert await state.get_state() is None
-    callback.message.answer.assert_awaited_once_with("У машины нет владельца — заведите заезд через «Новый заезд».")
-
-
-async def test_new_visit_from_vehicle_refused_for_mechanic():
-    callback = AsyncMock()
-    callback.data = f"new_visit_for:{_encode_id(VEHICLE_ID)}"
-    state = _fsm_context()
-    api = AsyncMock()
-
-    await new_visit_for_vehicle_callback(callback, state, api=api, user={"id": "k1", "role": "mechanic"})
-
-    api.get_vehicle_owner.assert_not_awaited()
     callback.answer.assert_awaited_once_with("Недостаточно прав")
 
 
-async def test_visit_header_formats_total_with_thousands_separator():
-    visit = {"id": "v1", "status": "received", "total_amount": 12400.0}
-    assert visit_header(visit)[-1] == "Сумма: 12 400"
-    visit["total_amount"] = 12400.5
-    assert visit_header(visit)[-1] == "Сумма: 12 400.50"
+async def test_client_query_offers_candidates_and_data_is_json():
+    state = fsm_context()
+    await _at(state, NewVisitStates.waiting_for_client_query)
+    api = _api()
+    api.search.return_value = [{"entity": "client", "id": C1}, {"entity": "vehicle", "id": CAR}]
+    api.get_client.return_value = {"id": C1, "full_name": "Иван Иванов"}
+    message = make_message("Иван")
+
+    await receive_client_query(message, state, api=api, user=MASTER)
+
+    assert await state.get_state() == NewVisitStates.choosing_client.state
+    text, markup = shown(message)
+    assert text == "Выберите клиента:"
+    assert buttons(markup)[0] == ("Иван Иванов", f"client_pick:{C1}")
+    json.dumps(await state.get_data())  # survives RedisStorage
+
+
+async def test_client_not_found_offers_add_button():
+    state = fsm_context()
+    await _at(state, NewVisitStates.waiting_for_client_query)
+    api = _api()
+    api.search.return_value = []
+    message = make_message("Петров")
+
+    await receive_client_query(message, state, api=api, user=MASTER)
+
+    assert await state.get_state() == NewVisitStates.client_not_found.state
+    text, markup = shown(message)
+    assert text.startswith("Клиент «Петров» не найден.")
+    assert ("➕ Добавить клиента", "client_add") in buttons(markup)
+
+
+async def test_choose_client_then_vehicle_query():
+    state = fsm_context()
+    await _at(state, NewVisitStates.choosing_client, client_choices=[[C1, "Иван"]])
+    callback = make_callback(f"client_pick:{C1}")
+
+    await choose_client_callback(callback, state, api=_api(), user=MASTER)
+
+    assert (await state.get_data())["client_id"] == C1
+    assert await state.get_state() == NewVisitStates.waiting_for_vehicle_query.state
+    assert shown(callback)[0] == "Введите VIN или госномер авто:"
+
+
+async def test_vehicle_query_offers_candidates():
+    state = fsm_context()
+    await _at(state, NewVisitStates.waiting_for_vehicle_query, client_id=C1)
+    api = _api()
+    api.search.return_value = [{"entity": "vehicle", "id": CAR}]
+    api.get_vehicle.return_value = {"id": CAR, "plate_number": "А123ВС77"}
+    message = make_message("А123")
+
+    await receive_vehicle_query(message, state, api=api, user=MASTER)
+
+    assert await state.get_state() == NewVisitStates.choosing_vehicle.state
+    assert buttons(shown(message)[1])[0] == ("А123ВС77", f"vehicle_pick:{CAR}")
+
+
+async def test_vehicle_not_found_offers_add_button():
+    state = fsm_context()
+    await _at(state, NewVisitStates.waiting_for_vehicle_query, client_id=C1)
+    api = _api()
+    api.search.return_value = []
+    message = make_message("Х000")
+
+    await receive_vehicle_query(message, state, api=api, user=MASTER)
+
+    assert await state.get_state() == NewVisitStates.vehicle_not_found.state
+    text, markup = shown(message)
+    assert text.startswith("Автомобиль «Х000» не найден.")
+    assert ("➕ Добавить автомобиль", "vehicle_add") in buttons(markup)
+
+
+async def test_choose_vehicle_then_mileage():
+    state = fsm_context()
+    await _at(state, NewVisitStates.choosing_vehicle, client_id=C1, vehicle_choices=[[CAR, "А123ВС77"]])
+    callback = make_callback(f"vehicle_pick:{CAR}")
+
+    await choose_vehicle_callback(callback, state, api=_api(), user=MASTER)
+
+    assert (await state.get_data())["vehicle_id"] == CAR
+    assert shown(callback)[0] == "Введите пробег на приёмке:"
+
+
+async def test_master_mileage_creates_visit_and_opens_card_over_source():
+    state = fsm_context()
+    await _at(state, NewVisitStates.waiting_for_mileage, client_id=C1, vehicle_id=CAR)
+    api = _api()
+    message = make_message("45000")
+
+    await receive_mileage(message, state, api=api, user=MASTER)
+
+    api.create_visit.assert_awaited_once_with(
+        client_id=C1, vehicle_id=CAR, assigned_master_id=MASTER["id"], mileage_at_intake=45000,
+        mileage_manually_confirmed=False,
+    )
+    assert await state.get_state() is None
+    assert (await state.get_data())["nav_stack"] == [["menu", {}], ["visit", {"visit_id": VISIT}]]
+
+
+async def test_mileage_must_be_a_number():
+    state = fsm_context()
+    await _at(state, NewVisitStates.waiting_for_mileage, client_id=C1, vehicle_id=CAR)
+    message = make_message("много")
+
+    await receive_mileage(message, state, api=_api(), user=MASTER)
+
+    assert shown(message)[0] == "Введите число (пробег в км).\n\nВведите пробег на приёмке:"
+
+
+async def test_mileage_rollback_asks_confirmation_then_confirm_creates():
+    state = fsm_context()
+    await _at(state, NewVisitStates.waiting_for_mileage, client_id=C1, vehicle_id=CAR)
+    api = _api()
+    api.create_visit.side_effect = [ApiMileageRollback("Пробег меньше последнего (50 000)."), api.create_visit.return_value]
+    message = make_message("900")
+
+    await receive_mileage(message, state, api=api, user=MASTER)
+
+    assert await state.get_state() == NewVisitStates.confirming_mileage.state
+    text, markup = shown(message)
+    assert text == "Пробег меньше последнего (50 000).\nИли введите другой пробег."
+    assert buttons(markup)[0] == ("Подтвердить пробег", "mileage_confirm")
+
+    await confirm_mileage_callback(make_callback("mileage_confirm"), state, api=api, user=MASTER)
+
+    assert api.create_visit.await_args.kwargs["mileage_manually_confirmed"] is True
+    assert await state.get_state() is None
+
+
+async def test_admin_chooses_master_then_visit_is_created_with_them():
+    state = fsm_context()
+    await _at(state, NewVisitStates.waiting_for_mileage, client_id=C1, vehicle_id=CAR)
+    api = _api()
+    api.list_masters.return_value = [{"id": MASTER_B, "full_name": "Петров"}]
+    message = make_message("45000")
+
+    await receive_mileage(message, state, api=api, user=ADMIN)
+
+    assert await state.get_state() == NewVisitStates.choosing_master.state
+    assert buttons(shown(message)[1])[0] == ("Петров", f"master_pick:{encode_id(MASTER_B)}")
+
+    await choose_master_callback(make_callback(f"master_pick:{encode_id(MASTER_B)}"), state, api=api, user=ADMIN)
+
+    assert api.create_visit.await_args.kwargs["assigned_master_id"] == MASTER_B
+
+
+async def test_admin_without_masters_is_told_to_add_one():
+    state = fsm_context()
+    await _at(state, NewVisitStates.waiting_for_mileage, client_id=C1, vehicle_id=CAR)
+    api = _api()
+    api.list_masters.return_value = []
+    message = make_message("45000")
+
+    await receive_mileage(message, state, api=api, user=ADMIN)
+
+    assert await state.get_state() is None
+    assert shown(message)[0].startswith("Сначала добавьте мастера через «Добавить сотрудника».")
+    api.create_visit.assert_not_awaited()
+
+
+async def test_new_visit_from_vehicle_card_starts_at_mileage_with_owner():
+    state = fsm_context()
+    await on_screens(state, ("vehicle", {"vehicle_id": CAR}))
+    api = _api()
+    api.get_vehicle_owner.return_value = {"id": C1, "full_name": "Иван Иванов"}
+    callback = make_callback("act:new_visit_for")
+
+    await new_visit_for_callback(callback, state, api=api, user=MASTER)
+
+    data = await state.get_data()
+    assert (data["client_id"], data["vehicle_id"]) == (C1, CAR)
+    assert shown(callback)[0] == "Новый заезд: Иван Иванов. Введите пробег на приёмке:"
+
+
+async def test_new_visit_from_vehicle_without_owner_is_refused():
+    state = fsm_context()
+    await on_screens(state, ("vehicle", {"vehicle_id": CAR}))
+    api = _api()
+    api.get_vehicle_owner.return_value = None
+    callback = make_callback("act:new_visit_for")
+
+    await new_visit_for_callback(callback, state, api=api, user=MASTER)
+
+    assert await state.get_state() is None
+    callback.answer.assert_awaited_once_with("У машины нет владельца — заведите заезд через «Новый заезд».", show_alert=True)
+
+
+async def test_new_visit_from_vehicle_refused_for_mechanic():
+    state = fsm_context()
+    await on_screens(state, ("vehicle", {"vehicle_id": CAR}))
+    api = _api()
+    callback = make_callback("act:new_visit_for")
+
+    await new_visit_for_callback(callback, state, api=api, user=MECHANIC)
+
+    api.get_vehicle_owner.assert_not_awaited()
+    callback.answer.assert_awaited_once_with("Недостаточно прав")

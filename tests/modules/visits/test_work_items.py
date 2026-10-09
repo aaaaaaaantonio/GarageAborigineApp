@@ -244,3 +244,15 @@ async def test_approve_is_audited(session):
     assert len(rows) == 1
     assert rows[0].user_id == admin.id
     assert rows[0].new_value == {"approved_via": ApprovedVia.CRM_STATUS.value}
+
+
+async def test_list_mine_includes_vehicle_plate_and_make_model(session):
+    from app.modules.visits.work_items_schemas import WorkItemMineOut
+
+    admin, mechanic_a, mechanic_b, item = await _setup_visit_with_mechanic(session)
+
+    mine = await WorkItemService(session).list_mine(mechanic_a)
+
+    out = WorkItemMineOut.model_validate(mine[0])
+    assert out.plate_number == "А123"
+    assert out.make_model == "Toyota Camry"

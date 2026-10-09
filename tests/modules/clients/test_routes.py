@@ -34,3 +34,19 @@ async def test_duplicate_phone_returns_409(api_app, session, path):
     assert first.status_code in (200, 201)
     assert second.status_code == 409
     assert "телефон" in second.json()["detail"].lower()
+
+
+@pytest.mark.parametrize("path", ["/clients", "/consent/paper"])
+async def test_invalid_phone_returns_422(api_app, session, path):
+    admin = User(role=UserRole.ADMIN, full_name="Админ", branch_id=uuid.uuid4())
+    session.add(admin)
+    await session.flush()
+
+    transport = ASGITransport(app=api_app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            path, json={"full_name": "Иван", "phone": "12345"}, headers={"X-User-Id": str(admin.id)}
+        )
+
+    assert response.status_code == 422
+    assert "телефон" in response.text.lower()

@@ -1,25 +1,27 @@
-from aiogram import Router
-from aiogram.fsm.context import FSMContext
-from aiogram.types import Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
+from bot import nav
 from bot.api_client import ApiClient
-from bot.work_item_status import FROM_MY_WORK_ITEMS, add_work_status_buttons, work_item_status_label
+from bot.work_item_status import work_item_icon
 
-router = Router()
+MY_WORKS_LIMIT = 30
 
 
-async def show_my_work_items(message: Message, state: FSMContext, api: ApiClient, **kwargs) -> None:
-    """Menu entry point (registered in bot/handlers/menu.py)."""
-    await state.clear()
-    items = await api.list_my_work_items()
+@nav.screen("my_works")
+async def render_my_works(api: ApiClient, user: dict, args: dict) -> nav.Rendered:
+    # Finished work stays assigned forever; without the filter and the cap the
+    # list would outgrow Telegram's inline-keyboard limit.
+    items = [i for i in await api.list_my_work_items() if i["status"] != "ready"]
+    builder = InlineKeyboardBuilder()
     if not items:
-        await message.answer("У вас нет назначенных работ.")
-        return
-    for item in items:
-        builder = InlineKeyboardBuilder()
-        has_buttons = add_work_status_buttons(builder, item["visit_id"], item, FROM_MY_WORK_ITEMS)
-        await message.answer(
-            f"{item['name']} — {work_item_status_label(item['status'])} (заезд {item['visit_id']})",
-            reply_markup=builder.as_markup() if has_buttons else None,
-        )
+        return "У вас нет назначенных работ.", builder.as_markup()
+    for item in items[:MY_WORKS_LIMIT]:
+        label = f"{work_item_icon(item['status'])} {item['name']}"
+        if item.get("plate_number"):
+            label += f" · {item['plate_number']}"
+        builder.button(text=label, callback_data=nav.go_data("work", item["visit_id"], item["id"]))
+    builder.adjust(1)
+    text = f"Мои работы ({len(items)})"
+    if len(items) > MY_WORKS_LIMIT:
+        text += f"\nПоказаны первые {MY_WORKS_LIMIT}."
+    return text, builder.as_markup()

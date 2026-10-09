@@ -132,3 +132,43 @@ async def test_mechanic_can_read_vehicle_but_not_owner_or_client_data(api_app, s
     assert owner_resp.status_code == 403
     assert client_resp.status_code == 403
     assert vehicles_resp.status_code == 403
+
+
+async def _post_vehicle(api_app, user, vin):
+    transport = ASGITransport(app=api_app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        return await client.post(
+            "/vehicles",
+            json={"vin": vin, "plate_number": "А123ВС77", "make": "Toyota", "model": "Camry"},
+            headers={"X-User-Id": str(user.id)},
+        )
+
+
+async def test_create_vehicle_normalizes_vin_and_accepts_frame_number(api_app, session):
+    admin, _, _ = await _world(session)
+
+    strict = await _post_vehicle(api_app, admin, "jtdbr32e 720012345")
+    frame = await _post_vehicle(api_app, admin, "GX110-6012345")
+
+    assert strict.status_code == 201
+    assert strict.json()["vin"] == "JTDBR32E720012345"
+    assert frame.status_code == 201
+
+
+async def test_create_vehicle_rejects_invalid_vin(api_app, session):
+    admin, _, _ = await _world(session)
+
+    response = await _post_vehicle(api_app, admin, "А123ВС77")
+
+    assert response.status_code == 422
+    assert "vin" in response.text.lower()
+
+
+async def test_create_vehicle_duplicate_vin_returns_409(api_app, session):
+    admin, _, _ = await _world(session)
+
+    await _post_vehicle(api_app, admin, "JTDBR32E720012345")
+    second = await _post_vehicle(api_app, admin, "JTDBR32E720012345")
+
+    assert second.status_code == 409
+    assert "VIN" in second.json()["detail"]

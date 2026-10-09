@@ -1,5 +1,7 @@
 import uuid
 
+import pytest
+
 from app.core.enums import UserRole
 from app.modules.clients.schemas import ClientCreate
 from app.modules.clients.service import ClientService
@@ -43,6 +45,30 @@ async def test_search_by_name_typo_fuzzy(session):
     assert any(r["entity"] == "client" for r in results)
 
 
+async def _client_named(session, full_name):
+    admin = User(role=UserRole.ADMIN, full_name="Админ", branch_id=uuid.uuid4())
+    session.add(admin)
+    await session.flush()
+    return await ClientService(session).create_client(ClientCreate(full_name=full_name, phone="79991234567"), admin)
+
+
+@pytest.mark.parametrize("query", ["Никитин", "никитин", "Антон", "Никтин", "Анто"])
+async def test_search_finds_client_by_one_word_of_full_name(session, query):
+    client = await _client_named(session, "Никитин Антон Александрович")
+
+    results = await SearchService(session).search(query)
+
+    assert {"entity": "client", "id": client.id, "matched_field": "full_name"} in results
+
+
+async def test_search_by_one_word_skips_unrelated_names(session):
+    await _client_named(session, "Иванов Пётр Сергеевич")
+
+    results = await SearchService(session).search("Петров")
+
+    assert not any(r["entity"] == "client" for r in results)
+
+
 async def test_recent_views_returns_last_n_for_user(session):
     admin = User(role=UserRole.ADMIN, full_name="Админ", branch_id=uuid.uuid4())
     session.add(admin)
@@ -54,3 +80,16 @@ async def test_recent_views_returns_last_n_for_user(session):
     recent = await SearchService(session).recent(admin.id)
     assert len(recent) == 1
     assert recent[0].entity_id == entity_id
+
+
+@pytest.mark.parametrize("stored,query", [("А123ВС77", "a123bc77"), ("A777MM50", "а 777 мм 50")])
+async def test_search_plate_ignores_latin_vs_cyrillic(session, stored, query):
+    admin = User(role=UserRole.ADMIN, full_name="Админ", branch_id=uuid.uuid4())
+    session.add(admin)
+    await session.flush()
+    await VehicleService(session).create_vehicle(
+        VehicleCreate(vin="JTDBR32E720012345", plate_number=stored, make="Toyota", model="Camry"), admin
+    )
+
+    results = await SearchService(session).search(query)
+    assert any(r["entity"] == "vehicle" for r in results)

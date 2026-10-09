@@ -238,3 +238,15 @@ async def test_navigation_endpoints_hit_expected_paths():
     assert await api.get_vehicle_owner("v1") is None
     assert await api.list_masters() == []
     assert await api.get_vehicle_work_history("v1") == {"items": [], "has_more": False}
+
+
+@respx.mock
+async def test_api_client_assign_work_item_mechanic_patches_endpoint():
+    visit_id, item_id = "11111111-1111-1111-1111-111111111111", "22222222-2222-2222-2222-222222222222"
+    route = respx.patch(f"http://localhost:8000/visits/{visit_id}/work-items/{item_id}/mechanic").mock(
+        return_value=httpx.Response(200, json={"id": item_id})
+    )
+
+    await ApiClient().assign_work_item_mechanic(visit_id, item_id, None)
+
+    assert route.calls.last.request.content == b'{"assigned_mechanic_id":null}'

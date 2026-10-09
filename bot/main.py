@@ -1,12 +1,16 @@
 import asyncio
 import logging
+from datetime import timedelta
 
 from aiogram import Bot, Dispatcher
 from aiogram.exceptions import TelegramAPIError, TelegramUnauthorizedError
-from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.fsm.storage.base import BaseStorage
+from aiogram.fsm.storage.memory import MemoryStorage, SimpleEventIsolation
+from aiogram.fsm.storage.redis import RedisStorage
 from aiogram.types import BotCommand
 from aiogram.utils.token import TokenValidationError
 
+from bot import nav, wizard
 from bot.config import settings
 from bot.handlers import (
     admin,
@@ -14,6 +18,7 @@ from bot.handlers import (
     consent,
     documents,
     fallback,
+    mechanic,  # mechanic, navigation: imported to register their screens
     menu,
     navigation,
     part_items,
@@ -22,30 +27,31 @@ from bot.handlers import (
     vehicles,
     visits,
     work_items,
-    work_status,
 )
 from bot.middlewares.auth import AuthMiddleware
 from bot.middlewares.error_handling import ErrorHandlingMiddleware
 
 
 def setup_routers(dp: Dispatcher) -> None:
-    # Order matters: start (commands) and menu (reply-keyboard buttons) come
-    # first so they win over any FSM-state handler; fallback answers stale
-    # callbacks; search catches all remaining text and must stay last.
+    # Order matters: start (commands) first so /start, /menu, /cancel win over
+    # any wizard; menu holds the temporary handler for old reply-keyboard texts;
+    # nav and wizard own go/back/home and wiz_back/wiz_cancel; feature routers
+    # follow; search catches all remaining text; fallback answers stale buttons
+    # and must stay last.
     dp.include_router(start.router)
     dp.include_router(menu.router)
+    dp.include_router(nav.router)
+    dp.include_router(wizard.router)
     dp.include_router(clients.router)
     dp.include_router(vehicles.router)
     dp.include_router(visits.router)
     dp.include_router(work_items.router)
     dp.include_router(part_items.router)
-    dp.include_router(work_status.router)
     dp.include_router(documents.router)
     dp.include_router(consent.router)
     dp.include_router(admin.router)
-    dp.include_router(navigation.router)
-    dp.include_router(fallback.router)
     dp.include_router(search.router)
+    dp.include_router(fallback.router)
 
 
 logger = logging.getLogger(__name__)
@@ -71,7 +77,8 @@ async def create_bot(token: str) -> Bot:
 
 
 BOT_COMMANDS = [
-    BotCommand(command="start", description="Главное меню"),
+    BotCommand(command="start", description="Начать заново"),
+    BotCommand(command="menu", description="Главное меню"),
     BotCommand(command="cancel", description="Отменить текущее действие"),
     BotCommand(command="new_client", description="Новый клиент"),
     BotCommand(command="new_vehicle", description="Новая машина"),
@@ -86,16 +93,35 @@ async def set_commands(bot: Bot) -> None:
         logger.warning("Could not register bot commands", exc_info=True)
 
 
+# Abandoned stacks and wizards expire instead of piling up in Redis.
+STORAGE_TTL = timedelta(days=30)
+
+
+def build_storage(redis_url: str) -> BaseStorage:
+    """Redis keeps screen stacks and wizards across restarts; memory is for tests and local runs."""
+    if not redis_url:
+        return MemoryStorage()
+    return RedisStorage.from_url(redis_url, state_ttl=STORAGE_TTL, data_ttl=STORAGE_TTL)
+
+
+def build_dispatcher(storage: BaseStorage) -> Dispatcher:
+    # One update per user at a time: a double tap on a wizard's last button
+    # runs after the first finished the wizard and lands in fallback as stale,
+    # instead of creating the record twice. One bot process, so in-memory locks suffice.
+    dp = Dispatcher(storage=storage, events_isolation=SimpleEventIsolation())
+    setup_routers(dp)
+    return dp
+
+
 async def main() -> None:
     logging.basicConfig(level=logging.INFO)
     bot = await create_bot(settings.bot_token)
     await set_commands(bot)
-    dp = Dispatcher(storage=MemoryStorage())
+    dp = build_dispatcher(build_storage(settings.redis_url))
     dp.message.middleware(ErrorHandlingMiddleware())
     dp.message.middleware(AuthMiddleware())
     dp.callback_query.middleware(ErrorHandlingMiddleware())
     dp.callback_query.middleware(AuthMiddleware())
-    setup_routers(dp)
     await dp.start_polling(bot)
 
 

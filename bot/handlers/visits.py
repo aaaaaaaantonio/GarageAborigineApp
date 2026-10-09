@@ -1,15 +1,18 @@
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
+from bot import actions, nav, wizard
 from bot.api_client import ApiClient, ApiMileageRollback
 from bot.callback_ids import decode_id, encode_id
 from bot.formatting import format_number
+from bot.handlers.navigation import STAFF_ROLES
 from bot.states import NewClientStates, NewVehicleStates, NewVisitStates, VisitCancelStates
-from bot.texts import CANCEL_HINT, TEXT_REQUIRED
+from bot.texts import TEXT_REQUIRED
+from bot.validators import is_valid_phone, is_valid_vin, looks_like_plate, normalize_plate, normalize_vin
 from bot.visit_status import visit_status_label
-from bot.work_item_status import FROM_VISIT_CARD, add_work_status_buttons, work_item_status_label
+from bot.work_item_status import work_item_icon, work_item_status_label
 
 router = Router()
 
@@ -24,6 +27,8 @@ _NEXT_STATUS_BY_CURRENT = {
 }
 
 MILEAGE_CONFIRM = "mileage_confirm"
+CLIENT_ADD = "client_add"
+VEHICLE_ADD = "vehicle_add"
 
 
 def visit_header(visit: dict) -> list[str]:
@@ -37,99 +42,281 @@ def visit_header(visit: dict) -> list[str]:
     return [title or "Заезд", status_line, f"Сумма: {format_number(visit['total_amount']) if 'total_amount' in visit else '—'}"]
 
 
-async def send_visit_card(message: Message, visit: dict, work_items: list[dict]) -> None:
-    builder = InlineKeyboardBuilder()
-    for status in _NEXT_STATUS_BY_CURRENT.get(visit["status"], []):
-        builder.button(text=visit_status_label(status), callback_data=f"visit_status:{visit['id']}:{status}")
+def visit_card(visit: dict, work_items: list[dict]) -> nav.Rendered:
+    """Header + numbered work list; one button per work item opens its screen."""
     lines = visit_header(visit)
+    builder = InlineKeyboardBuilder()
     if work_items:
         lines.append("Работы:")
     for index, item in enumerate(work_items, start=1):
-        name = item["name"]
         mechanic = item.get("assigned_mechanic_name") or "без исполнителя"
-        lines.append(f"{index}. {name} — {work_item_status_label(item['status'])} · {mechanic}")
-        visit_b64, item_b64 = encode_id(visit["id"]), encode_id(item["id"])
-        if item.get("approved_by_client") is False:
-            builder.button(text=f"✅ {name}", callback_data=f"approve_work:{visit_b64}:{item_b64}")
-        add_work_status_buttons(builder, visit["id"], item, FROM_VISIT_CARD, label_prefix=f"🔄 {name} ")
-        builder.button(text=f"🔧 {name}", callback_data=f"add_part:{visit_b64}:{item_b64}")
-        builder.button(text=f"👤 {name}", callback_data=f"reassign:{visit_b64}:{item_b64}")
-    builder.button(text="➕ Добавить работу", callback_data=f"add_work:{visit['id']}")
-    builder.button(text="Сформировать PDF", callback_data=f"gen_doc:{visit['id']}")
+        lines.append(f"{index}. {item['name']} — {work_item_status_label(item['status'])} · {mechanic}")
+        builder.button(
+            text=f"{work_item_icon(item['status'])} {index}. {item['name']} · {mechanic}",
+            callback_data=nav.go_data("work", visit["id"], item["id"]),
+        )
+    builder.button(text="➕ Добавить работу", callback_data=actions.ADD_WORK)
+    if visit["status"] in _NEXT_STATUS_BY_CURRENT:
+        builder.button(text="🔄 Статус заезда", callback_data=nav.go_data("visit_status", visit["id"]))
+    builder.button(text="📄 PDF", callback_data=actions.PDF)
     builder.adjust(1)
-    await message.answer("\n".join(lines), reply_markup=builder.as_markup())
+    return "\n".join(lines), builder.as_markup()
 
 
-async def refresh_visit_card(message: Message, api: ApiClient, visit_id: str) -> None:
-    visit = await api.get_visit(visit_id)
-    items = await api.list_work_items(visit_id)
-    await send_visit_card(message, visit, items)
+@nav.screen("visit", params=("visit_id",))
+async def render_visit(api: ApiClient, user: dict, args: dict) -> nav.Rendered:
+    visit = await api.get_visit(args["visit_id"])
+    items = await api.list_work_items(args["visit_id"])
+    return visit_card(visit, items)
 
 
-async def start_new_visit(message: Message, state: FSMContext, **kwargs) -> None:
-    """Menu entry point (registered in bot/handlers/menu.py)."""
-    await state.clear()
-    await state.set_state(NewVisitStates.waiting_for_client_query)
-    await message.answer(f"Введите телефон или ФИО клиента {CANCEL_HINT}:")
+@nav.screen("visit_status", params=("visit_id",))
+async def render_visit_status(api: ApiClient, user: dict, args: dict) -> nav.Rendered:
+    visit = await api.get_visit(args["visit_id"])
+    builder = InlineKeyboardBuilder()
+    for status in _NEXT_STATUS_BY_CURRENT.get(visit["status"], []):
+        builder.button(text=visit_status_label(status), callback_data=f"{actions.VISIT_STATUS}:{status}")
+    builder.adjust(1)
+    return f"Статус сейчас: {visit_status_label(visit['status'])}\nСменить на:", builder.as_markup()
+
+
+@router.callback_query(F.data.startswith(f"{actions.VISIT_STATUS}:"))
+async def visit_status_callback(callback: CallbackQuery, state: FSMContext, api: ApiClient, user: dict, **kwargs) -> None:
+    args = await nav.top_args(callback, state, "visit_status")
+    if args is None:
+        return
+    new_status = callback.data.rsplit(":", 1)[1]
+    if new_status == "cancelled":
+        await wizard.start(callback, state, api, user, "cancel_visit", VisitCancelStates.waiting_for_reason, visit_id=args["visit_id"])
+        return
+    await api.change_visit_status(args["visit_id"], new_status)
+    await nav.pop(callback, state, api, user)
+
+
+@wizard.step(VisitCancelStates.waiting_for_reason)
+async def cancel_reason_prompt(state: FSMContext, api: ApiClient, user: dict):
+    return "Укажите причину отмены заезда:", None
+
+
+@router.message(VisitCancelStates.waiting_for_reason)
+async def receive_cancel_reason(message: Message, state: FSMContext, api: ApiClient, user: dict, **kwargs) -> None:
+    if not message.text:
+        await wizard.reprompt(message, state, api, user, TEXT_REQUIRED)
+        return
+    visit_id = (await state.get_data())["visit_id"]
+    await api.change_visit_status(visit_id, "cancelled", reason=message.text)
+    await wizard.finish(state)
+    await nav.pop(message, state, api, user)  # off the status screen, back to the card
+
+
+# --- New-visit wizard. Its client/vehicle creation steps live in clients.py
+# and vehicles.py; they continue this wizard when wiz_name == "new_visit".
+
+
+def _choices(rows: list[list[str]], prefix: str) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    for value, label in rows:
+        builder.button(text=label, callback_data=f"{prefix}:{value}")
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+@wizard.step(NewVisitStates.waiting_for_client_query)
+async def client_query_prompt(state: FSMContext, api: ApiClient, user: dict):
+    return "Введите телефон или ФИО клиента:", None
+
+
+@wizard.step(NewVisitStates.client_not_found)
+async def client_not_found_prompt(state: FSMContext, api: ApiClient, user: dict):
+    query = (await state.get_data())["client_query"]
+    builder = InlineKeyboardBuilder()
+    builder.button(text="➕ Добавить клиента", callback_data=CLIENT_ADD)
+    text = f"Клиент «{query}» не найден.\nВведите другой телефон или ФИО либо добавьте нового клиента."
+    return text, builder.as_markup()
+
+
+@wizard.step(NewVisitStates.choosing_client)
+async def choosing_client_prompt(state: FSMContext, api: ApiClient, user: dict):
+    return "Выберите клиента:", _choices((await state.get_data())["client_choices"], "client_pick")
+
+
+@wizard.step(NewVisitStates.waiting_for_vehicle_query)
+async def vehicle_query_prompt(state: FSMContext, api: ApiClient, user: dict):
+    created = (await state.get_data()).get("created_client")
+    prefix = f"Клиент создан: {created}\n" if created else ""
+    return f"{prefix}Введите VIN или госномер авто:", None
+
+
+@wizard.step(NewVisitStates.vehicle_not_found)
+async def vehicle_not_found_prompt(state: FSMContext, api: ApiClient, user: dict):
+    query = (await state.get_data())["vehicle_query"]
+    builder = InlineKeyboardBuilder()
+    builder.button(text="➕ Добавить автомобиль", callback_data=VEHICLE_ADD)
+    text = f"Автомобиль «{query}» не найден.\nВведите другой VIN или госномер либо добавьте автомобиль."
+    return text, builder.as_markup()
+
+
+@wizard.step(NewVisitStates.choosing_vehicle)
+async def choosing_vehicle_prompt(state: FSMContext, api: ApiClient, user: dict):
+    return "Выберите автомобиль:", _choices((await state.get_data())["vehicle_choices"], "vehicle_pick")
+
+
+@wizard.step(NewVisitStates.waiting_for_mileage)
+async def mileage_prompt(state: FSMContext, api: ApiClient, user: dict):
+    data = await state.get_data()
+    if data.get("owner_name"):
+        return f"Новый заезд: {data['owner_name']}. Введите пробег на приёмке:", None
+    if data.get("created_vehicle"):
+        return f"Автомобиль создан: {data['created_vehicle']}\nВведите пробег на приёмке:", None
+    return "Введите пробег на приёмке:", None
+
+
+@wizard.step(NewVisitStates.confirming_mileage)
+async def confirm_mileage_prompt(state: FSMContext, api: ApiClient, user: dict):
+    builder = InlineKeyboardBuilder()
+    builder.button(text="Подтвердить пробег", callback_data=MILEAGE_CONFIRM)
+    return f"{(await state.get_data())['rollback_message']}\nИли введите другой пробег.", builder.as_markup()
+
+
+@wizard.step(NewVisitStates.choosing_master)
+async def choosing_master_prompt(state: FSMContext, api: ApiClient, user: dict):
+    return "Выберите мастера:", _choices((await state.get_data())["master_choices"], "master_pick")
+
+
+@router.callback_query(F.data == actions.NEW_VISIT)
+async def start_new_visit(callback: CallbackQuery, state: FSMContext, api: ApiClient, user: dict, **kwargs) -> None:
+    if user["role"] not in STAFF_ROLES:
+        await callback.answer("Недостаточно прав")
+        return
+    await wizard.start(callback, state, api, user, "new_visit", NewVisitStates.waiting_for_client_query)
+
+
+@router.callback_query(F.data == actions.NEW_VISIT_FOR)
+async def new_visit_for_callback(callback: CallbackQuery, state: FSMContext, api: ApiClient, user: dict, **kwargs) -> None:
+    if user["role"] not in STAFF_ROLES:
+        await callback.answer("Недостаточно прав")
+        return
+    args = await nav.top_args(callback, state, "vehicle")
+    if args is None:
+        return
+    owner = await api.get_vehicle_owner(args["vehicle_id"])
+    if owner is None:
+        await callback.answer("У машины нет владельца — заведите заезд через «Новый заезд».", show_alert=True)
+        return
+    await wizard.start(
+        callback, state, api, user, "new_visit", NewVisitStates.waiting_for_mileage,
+        client_id=str(owner["id"]), vehicle_id=args["vehicle_id"], owner_name=owner["full_name"],
+    )
 
 
 @router.message(NewVisitStates.waiting_for_client_query)
-async def receive_client_query(message: Message, state: FSMContext, api: ApiClient, **kwargs) -> None:
+@router.message(NewVisitStates.client_not_found)
+async def receive_client_query(message: Message, state: FSMContext, api: ApiClient, user: dict, **kwargs) -> None:
+    if not message.text:
+        await wizard.reprompt(message, state, api, user, TEXT_REQUIRED)
+        return
     results = await api.search(message.text)
     client_ids = [r["id"] for r in results if r["entity"] == "client"][:5]
     if not client_ids:
-        await state.update_data(return_flow="new_visit")
-        await state.set_state(NewClientStates.waiting_for_phone)
-        await message.answer("Клиент не найден. Введите телефон клиента:")
+        await state.update_data(client_query=message.text)
+        await wizard.goto(message, state, api, user, NewVisitStates.client_not_found)
         return
-    builder = InlineKeyboardBuilder()
-    for client_id in client_ids:
-        client = await api.get_client(client_id)
-        builder.button(text=client["full_name"], callback_data=f"client_pick:{client_id}")
-    builder.adjust(1)
-    await state.set_state(NewVisitStates.choosing_client)
-    await message.answer("Выберите клиента:", reply_markup=builder.as_markup())
+    choices = [[str(cid), (await api.get_client(cid))["full_name"]] for cid in client_ids]
+    await state.update_data(client_choices=choices)
+    await wizard.goto(message, state, api, user, NewVisitStates.choosing_client)
 
 
 @router.callback_query(NewVisitStates.choosing_client, F.data.startswith("client_pick:"))
-async def choose_client_callback(callback: CallbackQuery, state: FSMContext, **kwargs) -> None:
-    _, client_id = callback.data.split(":")
-    await state.update_data(client_id=client_id)
-    await state.set_state(NewVisitStates.waiting_for_vehicle_query)
-    await callback.message.answer("Введите VIN или гос.номер авто:")
-    await callback.answer()
+async def choose_client_callback(callback: CallbackQuery, state: FSMContext, api: ApiClient, user: dict, **kwargs) -> None:
+    await state.update_data(client_id=callback.data.split(":", 1)[1])
+    await wizard.goto(callback, state, api, user, NewVisitStates.waiting_for_vehicle_query)
+
+
+@router.callback_query(NewVisitStates.client_not_found, F.data == CLIENT_ADD)
+async def add_client_callback(callback: CallbackQuery, state: FSMContext, api: ApiClient, user: dict, **kwargs) -> None:
+    """Reuse the search query: a phone or a name is not asked again."""
+    query = (await state.get_data())["client_query"]
+    phone = query if is_valid_phone(query) else None
+    is_name = any(c.isalpha() for c in query) and not any(c.isdigit() for c in query)
+    await state.update_data(phone=phone, full_name=query if is_name else None)
+    target = NewClientStates.waiting_for_full_name if phone else NewClientStates.waiting_for_phone
+    await wizard.goto(callback, state, api, user, target)
 
 
 @router.message(NewVisitStates.waiting_for_vehicle_query)
-async def receive_vehicle_query(message: Message, state: FSMContext, api: ApiClient, **kwargs) -> None:
+@router.message(NewVisitStates.vehicle_not_found)
+async def receive_vehicle_query(message: Message, state: FSMContext, api: ApiClient, user: dict, **kwargs) -> None:
+    if not message.text:
+        await wizard.reprompt(message, state, api, user, TEXT_REQUIRED)
+        return
     results = await api.search(message.text)
     vehicle_ids = [r["id"] for r in results if r["entity"] == "vehicle"][:5]
     if not vehicle_ids:
-        await state.update_data(return_flow="new_visit")
-        await state.set_state(NewVehicleStates.waiting_for_vin)
-        await message.answer("Автомобиль не найден. Введите VIN:")
+        await state.update_data(vehicle_query=message.text)
+        await wizard.goto(message, state, api, user, NewVisitStates.vehicle_not_found)
         return
-    builder = InlineKeyboardBuilder()
-    for vehicle_id in vehicle_ids:
-        vehicle = await api.get_vehicle(vehicle_id)
-        builder.button(text=vehicle["plate_number"], callback_data=f"vehicle_pick:{vehicle_id}")
-    builder.adjust(1)
-    await state.set_state(NewVisitStates.choosing_vehicle)
-    await message.answer("Выберите автомобиль:", reply_markup=builder.as_markup())
+    choices = [[str(vid), (await api.get_vehicle(vid))["plate_number"]] for vid in vehicle_ids]
+    await state.update_data(vehicle_choices=choices)
+    await wizard.goto(message, state, api, user, NewVisitStates.choosing_vehicle)
+
+
+@router.callback_query(NewVisitStates.vehicle_not_found, F.data == VEHICLE_ADD)
+async def add_vehicle_in_visit_callback(callback: CallbackQuery, state: FSMContext, api: ApiClient, user: dict, **kwargs) -> None:
+    """Reuse the search query: a plate or a VIN is not asked again."""
+    query = (await state.get_data())["vehicle_query"]
+    plate = normalize_plate(query) if looks_like_plate(query) else None
+    vin = normalize_vin(query) if not plate and is_valid_vin(query) else None
+    await state.update_data(plate_number=plate, vin=vin)
+    target = NewVehicleStates.waiting_for_plate if vin else NewVehicleStates.waiting_for_vin
+    await wizard.goto(callback, state, api, user, target)
 
 
 @router.callback_query(NewVisitStates.choosing_vehicle, F.data.startswith("vehicle_pick:"))
-async def choose_vehicle_callback(callback: CallbackQuery, state: FSMContext, **kwargs) -> None:
-    _, vehicle_id = callback.data.split(":")
-    await state.update_data(vehicle_id=vehicle_id)
-    await state.set_state(NewVisitStates.waiting_for_mileage)
-    await callback.message.answer("Введите пробег на приёмке:")
-    await callback.answer()
+async def choose_vehicle_callback(callback: CallbackQuery, state: FSMContext, api: ApiClient, user: dict, **kwargs) -> None:
+    await state.update_data(vehicle_id=callback.data.split(":", 1)[1])
+    await wizard.goto(callback, state, api, user, NewVisitStates.waiting_for_mileage)
 
 
-async def _create_visit(message: Message, state: FSMContext, api: ApiClient, user: dict) -> None:
-    """Create the visit from FSM data: client_id, vehicle_id, mileage, mileage_confirmed,
-    and assigned_master_id (ADMIN's pick; a MASTER is always the master)."""
+@router.message(NewVisitStates.waiting_for_mileage)
+@router.message(NewVisitStates.confirming_mileage)
+async def receive_mileage(message: Message, state: FSMContext, api: ApiClient, user: dict, **kwargs) -> None:
+    try:
+        mileage = int(message.text)
+    except (ValueError, TypeError):
+        await wizard.reprompt(message, state, api, user, "Введите число (пробег в км).")
+        return
+    await state.update_data(mileage=mileage, mileage_confirmed=False)
+    await _continue_after_mileage(message, state, api, user)
+
+
+@router.callback_query(NewVisitStates.confirming_mileage, F.data == MILEAGE_CONFIRM)
+async def confirm_mileage_callback(callback: CallbackQuery, state: FSMContext, api: ApiClient, user: dict, **kwargs) -> None:
+    await state.update_data(mileage_confirmed=True)
+    await _continue_after_mileage(callback, state, api, user)
+
+
+@router.callback_query(NewVisitStates.choosing_master, F.data.startswith("master_pick:"))
+async def choose_master_callback(callback: CallbackQuery, state: FSMContext, api: ApiClient, user: dict, **kwargs) -> None:
+    await state.update_data(assigned_master_id=decode_id(callback.data.split(":", 1)[1]))
+    await _create_visit(callback, state, api, user)
+
+
+async def _continue_after_mileage(event: nav.Event, state: FSMContext, api: ApiClient, user: dict) -> None:
+    data = await state.get_data()
+    if user["role"] == "admin" and "assigned_master_id" not in data:
+        masters = await api.list_masters()
+        if not masters:
+            await wizard.finish(state)
+            await nav.refresh(event, state, api, user, notice="Сначала добавьте мастера через «Добавить сотрудника».")
+            return
+        await state.update_data(master_choices=[[encode_id(m["id"]), m["full_name"]] for m in masters])
+        await wizard.goto(event, state, api, user, NewVisitStates.choosing_master)
+        return
+    await _create_visit(event, state, api, user)
+
+
+async def _create_visit(event: nav.Event, state: FSMContext, api: ApiClient, user: dict) -> None:
+    """Create the visit from wizard data; a MASTER is always the visit's master, an ADMIN picked one."""
     data = await state.get_data()
     try:
         visit = await api.create_visit(
@@ -140,111 +327,10 @@ async def _create_visit(message: Message, state: FSMContext, api: ApiClient, use
             mileage_manually_confirmed=data["mileage_confirmed"],
         )
     except ApiMileageRollback as e:
-        # Keep everything (incl. the chosen master) until the mileage is confirmed
-        # or a different mileage is typed — also accepted in this state.
-        await state.set_state(NewVisitStates.confirming_mileage)
-        builder = InlineKeyboardBuilder()
-        builder.button(text="Подтвердить пробег", callback_data=MILEAGE_CONFIRM)
-        await message.answer(f"{e.message}\nИли введите другой пробег.", reply_markup=builder.as_markup())
+        # Everything (incl. the chosen master) is kept until the mileage is
+        # confirmed or a different one is typed — also accepted in this step.
+        await state.update_data(rollback_message=e.message)
+        await wizard.goto(event, state, api, user, NewVisitStates.confirming_mileage)
         return
-    await state.clear()
-    await send_visit_card(message, visit, [])
-
-
-async def _continue_after_mileage(message: Message, state: FSMContext, api: ApiClient, user: dict) -> None:
-    data = await state.get_data()
-    if user["role"] == "admin" and "assigned_master_id" not in data:
-        masters = await api.list_masters()
-        if not masters:
-            await state.clear()
-            await message.answer("Сначала добавьте мастера через «Добавить сотрудника».")
-            return
-        builder = InlineKeyboardBuilder()
-        for master in masters:
-            builder.button(text=master["full_name"], callback_data=f"master_pick:{encode_id(master['id'])}")
-        builder.adjust(1)
-        await state.set_state(NewVisitStates.choosing_master)
-        await message.answer("Выберите мастера:", reply_markup=builder.as_markup())
-        return
-    await _create_visit(message, state, api, user)
-
-
-@router.message(NewVisitStates.waiting_for_mileage)
-@router.message(NewVisitStates.confirming_mileage)
-async def receive_mileage(message: Message, state: FSMContext, api: ApiClient, user: dict, **kwargs) -> None:
-    try:
-        mileage = int(message.text)
-    except (ValueError, TypeError):
-        await message.answer("Введите число (пробег в км).")
-        return
-    await state.update_data(mileage=mileage, mileage_confirmed=False)
-    await _continue_after_mileage(message, state, api, user)
-
-
-@router.callback_query(NewVisitStates.confirming_mileage, F.data == MILEAGE_CONFIRM)
-async def confirm_mileage_callback(callback: CallbackQuery, state: FSMContext, api: ApiClient, user: dict, **kwargs) -> None:
-    await state.update_data(mileage_confirmed=True)
-    await _continue_after_mileage(callback.message, state, api, user)
-    await callback.answer()
-
-
-@router.callback_query(NewVisitStates.choosing_master, F.data.startswith("master_pick:"))
-async def choose_master_callback(callback: CallbackQuery, state: FSMContext, api: ApiClient, user: dict, **kwargs) -> None:
-    await state.update_data(assigned_master_id=decode_id(callback.data.split(":", 1)[1]))
-    await _create_visit(callback.message, state, api, user)
-    await callback.answer()
-
-
-@router.callback_query(F.data.startswith("new_visit_for:"))
-async def new_visit_for_vehicle_callback(
-    callback: CallbackQuery, state: FSMContext, api: ApiClient, user: dict, **kwargs
-) -> None:
-    if user["role"] not in ("admin", "master"):
-        await callback.answer("Недостаточно прав")
-        return
-    vehicle_id = decode_id(callback.data.split(":", 1)[1])
-    owner = await api.get_vehicle_owner(vehicle_id)
-    if owner is None:
-        await callback.message.answer("У машины нет владельца — заведите заезд через «Новый заезд».")
-        await callback.answer()
-        return
-    await state.clear()
-    await state.update_data(client_id=owner["id"], vehicle_id=vehicle_id)
-    await state.set_state(NewVisitStates.waiting_for_mileage)
-    await callback.message.answer(f"Новый заезд: {owner['full_name']}. Введите пробег на приёмке {CANCEL_HINT}:")
-    await callback.answer()
-
-
-@router.callback_query(F.data.startswith("visit_status:"))
-async def change_status_callback(callback: CallbackQuery, state: FSMContext, api: ApiClient, **kwargs) -> None:
-    _, visit_id, new_status = callback.data.split(":")
-    if new_status == "cancelled":
-        await state.clear()
-        await state.update_data(visit_id=visit_id)
-        await state.set_state(VisitCancelStates.waiting_for_reason)
-        await callback.message.answer(f"Укажите причину отмены заезда {CANCEL_HINT}:")
-        await callback.answer()
-        return
-    await api.change_visit_status(visit_id, new_status)
-    await refresh_visit_card(callback.message, api, visit_id)
-    await callback.answer()
-
-
-@router.message(VisitCancelStates.waiting_for_reason)
-async def receive_cancel_reason(message: Message, state: FSMContext, api: ApiClient, **kwargs) -> None:
-    if not message.text:
-        await message.answer(TEXT_REQUIRED)
-        return
-    visit_id = (await state.get_data())["visit_id"]
-    await api.change_visit_status(visit_id, "cancelled", reason=message.text)
-    await state.clear()
-    await refresh_visit_card(message, api, visit_id)
-
-
-@router.callback_query(F.data.startswith("approve_work:"))
-async def approve_work_callback(callback: CallbackQuery, api: ApiClient, **kwargs) -> None:
-    _, visit_b64, item_b64 = callback.data.split(":")
-    visit_id = decode_id(visit_b64)
-    await api.approve_work_item(visit_id, decode_id(item_b64))
-    await refresh_visit_card(callback.message, api, visit_id)
-    await callback.answer()
+    await wizard.finish(state)
+    await nav.push(event, state, api, user, "visit", {"visit_id": str(visit["id"])})

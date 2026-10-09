@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_session
 from app.core.enums import UserRole
-from app.core.exceptions import VehicleNotFound
+from app.core.exceptions import VehicleNotFound, VehicleVinTaken
 from app.modules.clients.schemas import ClientOut
 from app.modules.users.auth import require_role
 from app.modules.users.models import User
@@ -22,7 +22,10 @@ async def create_vehicle(
     acting_user: User = Depends(require_role(UserRole.ADMIN, UserRole.MASTER)),
 ):
     service = VehicleService(session)
-    vehicle = await service.create_vehicle(data, acting_user)
+    try:
+        vehicle = await service.create_vehicle(data, acting_user)
+    except VehicleVinTaken:
+        raise HTTPException(409, "Машина с таким VIN уже есть")
     await session.commit()
     return vehicle
 

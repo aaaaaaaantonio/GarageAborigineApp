@@ -1,104 +1,82 @@
 from unittest.mock import AsyncMock
 
-from aiogram.fsm.context import FSMContext
-from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.fsm.storage.base import StorageKey
-
 from bot.handlers.part_items import receive_part_name, receive_quantity_and_price, start_add_part_item
-from bot.callback_ids import encode_id as _encode_id
 from bot.states import AddPartItemStates
+from tests.bot.helpers import MASTER, MECHANIC, fsm_context, make_callback, make_message, on_screens, shown
+
+VISIT = "11111111-1111-1111-1111-111111111111"
+ITEM = "22222222-2222-2222-2222-222222222222"
+WORK = ("work", {"visit_id": VISIT, "item_id": ITEM})
 
 
-def _fsm_context() -> FSMContext:
-    storage = MemoryStorage()
-    key = StorageKey(bot_id=1, chat_id=1, user_id=1)
-    return FSMContext(storage=storage, key=key)
+def _api():
+    api = AsyncMock()
+    api.get_visit.return_value = {"id": VISIT, "status": "in_progress", "total_amount": 0}
+    api.list_work_items.return_value = [
+        {"id": ITEM, "name": "Замена масла", "status": "in_progress", "approved_by_client": True, "assigned_mechanic_name": None},
+    ]
+    return api
 
 
-async def test_start_add_part_item_asks_for_name_and_stores_ids():
-    visit_id = "11111111-1111-1111-1111-111111111111"
-    work_item_id = "22222222-2222-2222-2222-222222222222"
-    callback = AsyncMock()
-    callback.data = f"add_part:{_encode_id(visit_id)}:{_encode_id(work_item_id)}"
-    state = _fsm_context()
+async def test_start_from_work_screen_asks_for_name():
+    state = fsm_context()
+    await on_screens(state, WORK)
+    callback = make_callback("act:add_part")
 
-    await start_add_part_item(callback, state)
+    await start_add_part_item(callback, state, api=_api(), user=MASTER)
 
     data = await state.get_data()
-    assert data == {"visit_id": visit_id, "work_item_id": work_item_id}
-    assert (await state.get_state()) == AddPartItemStates.waiting_for_name.state
-    callback.message.answer.assert_awaited_once_with("Введите название запчасти (/cancel — отмена):")
-    callback.answer.assert_awaited_once()
+    assert (data["visit_id"], data["work_item_id"]) == (VISIT, ITEM)
+    assert shown(callback)[0] == "Введите название запчасти:"
 
 
-async def test_receive_part_name_asks_for_quantity_and_price():
-    message = AsyncMock()
-    message.text = "Фильтр"
-    state = _fsm_context()
-    await state.update_data(visit_id="visit1", work_item_id="wi1")
-
-    await receive_part_name(message, state)
-
-    data = await state.get_data()
-    assert data["name"] == "Фильтр"
-    assert (await state.get_state()) == AddPartItemStates.waiting_for_quantity_and_price.state
-
-
-async def test_receive_quantity_and_price_creates_part_item_and_refreshes_card():
-    message = AsyncMock()
-    message.text = "2 350"
-    state = _fsm_context()
-    await state.update_data(visit_id="visit1", work_item_id="wi1", name="Фильтр")
-    api = AsyncMock()
-    api.add_part_item.return_value = {"id": "p1", "name": "Фильтр"}
-    api.get_visit.return_value = {"id": "visit1", "status": "in_progress", "total_amount": "0.00"}
-    api.list_work_items.return_value = []
-
-    await receive_quantity_and_price(message, state, api=api)
-
-    api.add_part_item.assert_awaited_once_with(
-        visit_id="visit1", work_item_id="wi1", name="Фильтр", quantity=2, unit_price=350.0
-    )
-    api.get_visit.assert_awaited_once_with("visit1")
-    message.answer.assert_awaited()
-    assert (await state.get_state()) is None
-
-
-async def test_receive_quantity_and_price_reprompts_on_malformed_input():
-    message = AsyncMock()
-    message.text = "две штуки"
-    state = _fsm_context()
-    await state.update_data(visit_id="visit1", work_item_id="wi1", name="Фильтр")
-    api = AsyncMock()
-
-    await receive_quantity_and_price(message, state, api=api)
-
-    api.add_part_item.assert_not_awaited()
-    message.answer.assert_awaited_once_with("Введите количество и цену через пробел, например: 2 350.")
-    assert (await state.get_state()) == AddPartItemStates.waiting_for_quantity_and_price.state
-
-
-async def test_receive_quantity_and_price_asks_for_text_on_non_text_message():
-    message = AsyncMock()
-    message.text = None
-    state = _fsm_context()
-    await state.set_state(AddPartItemStates.waiting_for_quantity_and_price)
-    await state.update_data(visit_id="visit1", work_item_id="wi1", name="Фильтр")
-    api = AsyncMock()
-
-    await receive_quantity_and_price(message, state, api=api)
-
-    api.add_part_item.assert_not_awaited()
-    message.answer.assert_awaited_once_with("Пожалуйста, отправьте ответ текстом.")
-
-
-async def test_receive_part_name_asks_for_text_on_non_text_message():
-    message = AsyncMock()
-    message.text = None
-    state = _fsm_context()
+async def test_name_then_quantity_and_price_creates_and_returns_to_work():
+    state = fsm_context()
+    await on_screens(state, WORK)
     await state.set_state(AddPartItemStates.waiting_for_name)
+    await state.update_data(wiz_name="add_part", wiz_steps=[], visit_id=VISIT, work_item_id=ITEM)
+    api = _api()
 
-    await receive_part_name(message, state)
+    message = make_message("Фильтр")
+    await receive_part_name(message, state, api=api, user=MASTER)
+    assert shown(message)[0] == "Введите количество и цену через пробел (например: 2 350):"
 
-    assert "name" not in await state.get_data()
-    message.answer.assert_awaited_once_with("Пожалуйста, отправьте ответ текстом.")
+    await receive_quantity_and_price(make_message("2 350"), state, api=api, user=MASTER)
+
+    api.add_part_item.assert_awaited_once_with(visit_id=VISIT, work_item_id=ITEM, name="Фильтр", quantity=2, unit_price=350.0)
+    assert await state.get_state() is None
+    assert (await state.get_data())["nav_stack"][-1] == list(WORK)
+
+
+async def test_malformed_quantity_reprompts():
+    state = fsm_context()
+    await on_screens(state, WORK)
+    await state.set_state(AddPartItemStates.waiting_for_quantity_and_price)
+    await state.update_data(wiz_name="add_part", wiz_steps=[], visit_id=VISIT, work_item_id=ITEM, name="Фильтр")
+    message = make_message("две")
+
+    await receive_quantity_and_price(message, state, api=_api(), user=MASTER)
+
+    assert shown(message)[0].startswith("Введите количество и цену через пробел, например: 2 350.\n\n")
+
+
+async def test_part_name_must_be_text():
+    state = fsm_context()
+    await state.set_state(AddPartItemStates.waiting_for_name)
+    await state.update_data(wiz_name="add_part", wiz_steps=[])
+    message = make_message(None)
+
+    await receive_part_name(message, state, api=_api(), user=MASTER)
+
+    assert shown(message)[0] == "Пожалуйста, отправьте ответ текстом.\n\nВведите название запчасти:"
+
+
+async def test_mechanic_cannot_start_add_part():
+    state = fsm_context()
+    await on_screens(state, WORK)
+    callback = make_callback("act:add_part")
+
+    await start_add_part_item(callback, state, api=_api(), user=MECHANIC)
+
+    assert await state.get_state() is None
+    callback.answer.assert_awaited_once_with("Недостаточно прав")
