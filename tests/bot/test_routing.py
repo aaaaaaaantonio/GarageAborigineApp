@@ -97,7 +97,7 @@ async def test_wizard_callback_outside_its_state_is_answered_as_stale(env):
 
 @pytest.mark.parametrize(
     "data",
-    ["client_pick:c1", "vehicle_pick:v1", "catalog_pick:none", "category_pick:body", "staff_role:master", "mileage_confirm", "master_pick:AAAAAAAAAAAAAAAAAAAAAA"],
+    ["client_pick:c1", "vehicle_pick:v1", "catalog_pick:none", "category_pick:body", "staff_role:master", "mileage_confirm", "master_pick:AAAAAAAAAAAAAAAAAAAAAA", "client_add", "vehicle_add"],
 )
 async def test_state_bound_wizard_callbacks_do_not_fire_without_state(env, data):
     bot, dp, state, api, user = env

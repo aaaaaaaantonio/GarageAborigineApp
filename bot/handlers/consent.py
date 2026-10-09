@@ -3,10 +3,11 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
 from bot import actions, nav, wizard
-from bot.api_client import ApiClient
+from bot.api_client import ApiClient, ApiConflict
 from bot.handlers.navigation import STAFF_ROLES
 from bot.states import PaperConsentStates
 from bot.texts import TEXT_REQUIRED
+from bot.validators import PHONE_FORMAT_ERROR, is_valid_phone
 
 router = Router()
 
@@ -34,6 +35,9 @@ async def receive_paper_phone(message: Message, state: FSMContext, api: ApiClien
     if not message.text:
         await wizard.reprompt(message, state, api, user, TEXT_REQUIRED)
         return
+    if not is_valid_phone(message.text):
+        await wizard.reprompt(message, state, api, user, PHONE_FORMAT_ERROR)
+        return
     await state.update_data(phone=message.text)
     await wizard.goto(message, state, api, user, PaperConsentStates.waiting_for_full_name)
 
@@ -44,6 +48,12 @@ async def receive_paper_full_name(message: Message, state: FSMContext, api: ApiC
         await wizard.reprompt(message, state, api, user, TEXT_REQUIRED)
         return
     phone = (await state.get_data())["phone"]
-    await api.register_paper_consent(full_name=message.text, phone=phone)
+    try:
+        result = await api.register_paper_consent(full_name=message.text, phone=phone)
+    except ApiConflict as e:
+        await wizard.retry(message, state, api, user, PaperConsentStates.waiting_for_phone, e.message)
+        return
     await wizard.finish(state)
-    await nav.home(message, state, api, user, notice=f"Клиент зарегистрирован (бумажное согласие): {message.text}")
+    # The card offers "➕ Добавить автомобиль" right away.
+    notice = f"Клиент зарегистрирован (бумажное согласие): {message.text}"
+    await nav.push(message, state, api, user, "client", {"client_id": result["client_id"]}, notice=notice)

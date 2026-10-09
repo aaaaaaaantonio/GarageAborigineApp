@@ -76,6 +76,17 @@ async def reprompt(event: nav.Event, state: FSMContext, api: ApiClient, user: di
     await _show(event, state, api, user, error=error)
 
 
+async def retry(event: nav.Event, state: FSMContext, api: ApiClient, user: dict, target: State, error: str) -> None:
+    """Return to an earlier step `target` with `error` (e.g. the API said the VIN is taken).
+    History is cut back to what it was when `target` was first shown."""
+    steps = list((await state.get_data()).get(WIZ_STEPS, []))
+    if target.state in steps:
+        steps = steps[: steps.index(target.state)]
+    await state.update_data(**{WIZ_STEPS: steps})
+    await state.set_state(target)
+    await _show(event, state, api, user, error=error)
+
+
 async def name(state: FSMContext) -> str | None:
     return (await state.get_data()).get(WIZ_NAME)
 

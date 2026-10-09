@@ -48,7 +48,7 @@ async def test_client_in_new_visit_continues_and_back_cannot_recreate_it():
     state = fsm_context()
     await on_screens(state)
     await state.set_state(NewClientStates.waiting_for_full_name)
-    await state.update_data(wiz_name="new_visit", wiz_steps=["NewVisitStates:waiting_for_client_query"], phone="7999")
+    await state.update_data(wiz_name="new_visit", wiz_steps=["NewVisitStates:waiting_for_client_query"], phone="79990000000")
     api = AsyncMock()
     api.create_client.return_value = {"id": C1, "full_name": "Иван Иванов"}
     message = make_message("Иван Иванов")
@@ -57,7 +57,7 @@ async def test_client_in_new_visit_continues_and_back_cannot_recreate_it():
 
     assert (await state.get_data())["client_id"] == C1
     assert await state.get_state() == NewVisitStates.waiting_for_vehicle_query.state
-    assert shown(message)[0] == "Клиент создан: Иван Иванов\nВведите VIN или гос.номер авто:"
+    assert shown(message)[0] == "Клиент создан: Иван Иванов\nВведите VIN или госномер авто:"
 
     await wizard.back_callback(make_callback("wiz_back"), state, api=api, user=MASTER)
 

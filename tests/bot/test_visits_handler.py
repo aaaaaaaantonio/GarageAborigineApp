@@ -75,17 +75,19 @@ async def test_client_query_offers_candidates_and_data_is_json():
     json.dumps(await state.get_data())  # survives RedisStorage
 
 
-async def test_client_not_found_goes_to_client_creation():
+async def test_client_not_found_offers_add_button():
     state = fsm_context()
     await _at(state, NewVisitStates.waiting_for_client_query)
     api = _api()
     api.search.return_value = []
-    message = make_message("Пётр")
+    message = make_message("Петров")
 
     await receive_client_query(message, state, api=api, user=MASTER)
 
-    assert await state.get_state() == NewClientStates.waiting_for_phone.state
-    assert shown(message)[0] == "Клиент не найден. Введите телефон клиента:"
+    assert await state.get_state() == NewVisitStates.client_not_found.state
+    text, markup = shown(message)
+    assert text.startswith("Клиент «Петров» не найден.")
+    assert ("➕ Добавить клиента", "client_add") in buttons(markup)
 
 
 async def test_choose_client_then_vehicle_query():
@@ -97,7 +99,7 @@ async def test_choose_client_then_vehicle_query():
 
     assert (await state.get_data())["client_id"] == C1
     assert await state.get_state() == NewVisitStates.waiting_for_vehicle_query.state
-    assert shown(callback)[0] == "Введите VIN или гос.номер авто:"
+    assert shown(callback)[0] == "Введите VIN или госномер авто:"
 
 
 async def test_vehicle_query_offers_candidates():
@@ -114,7 +116,7 @@ async def test_vehicle_query_offers_candidates():
     assert buttons(shown(message)[1])[0] == ("А123ВС77", f"vehicle_pick:{CAR}")
 
 
-async def test_vehicle_not_found_goes_to_vehicle_creation():
+async def test_vehicle_not_found_offers_add_button():
     state = fsm_context()
     await _at(state, NewVisitStates.waiting_for_vehicle_query, client_id=C1)
     api = _api()
@@ -123,8 +125,10 @@ async def test_vehicle_not_found_goes_to_vehicle_creation():
 
     await receive_vehicle_query(message, state, api=api, user=MASTER)
 
-    assert await state.get_state() == NewVehicleStates.waiting_for_vin.state
-    assert shown(message)[0] == "Автомобиль не найден. Введите VIN:"
+    assert await state.get_state() == NewVisitStates.vehicle_not_found.state
+    text, markup = shown(message)
+    assert text.startswith("Автомобиль «Х000» не найден.")
+    assert ("➕ Добавить автомобиль", "vehicle_add") in buttons(markup)
 
 
 async def test_choose_vehicle_then_mileage():

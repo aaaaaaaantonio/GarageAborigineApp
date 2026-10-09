@@ -44,6 +44,8 @@ async def render_client(api: ApiClient, user: dict, args: dict) -> nav.Rendered:
     builder = InlineKeyboardBuilder()
     for v in vehicles:
         builder.button(text=f"🚗 {v['make']} {v['model']} ({v['plate_number']})", callback_data=nav.go_data("vehicle", v["id"]))
+    if user["role"] in STAFF_ROLES:
+        builder.button(text="➕ Добавить автомобиль", callback_data=actions.ADD_VEHICLE)
     builder.button(text="📋 Заезды клиента", callback_data=nav.go_data("client_visits", args["client_id"]))
     builder.adjust(1)
     return f"👤 {client['full_name']}\n{client['phone_display']}", builder.as_markup()

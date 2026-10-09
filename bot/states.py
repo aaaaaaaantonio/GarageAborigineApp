@@ -14,8 +14,10 @@ class NewVehicleStates(StatesGroup):
 
 class NewVisitStates(StatesGroup):
     waiting_for_client_query = State()
+    client_not_found = State()
     choosing_client = State()
     waiting_for_vehicle_query = State()
+    vehicle_not_found = State()
     choosing_vehicle = State()
     waiting_for_mileage = State()
     confirming_mileage = State()

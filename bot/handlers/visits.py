@@ -10,6 +10,7 @@ from bot.formatting import format_number
 from bot.handlers.navigation import STAFF_ROLES
 from bot.states import NewClientStates, NewVehicleStates, NewVisitStates, VisitCancelStates
 from bot.texts import TEXT_REQUIRED
+from bot.validators import is_valid_phone, is_valid_vin, looks_like_plate, normalize_plate, normalize_vin
 from bot.visit_status import visit_status_label
 from bot.work_item_status import work_item_icon, work_item_status_label
 
@@ -26,6 +27,8 @@ _NEXT_STATUS_BY_CURRENT = {
 }
 
 MILEAGE_CONFIRM = "mileage_confirm"
+CLIENT_ADD = "client_add"
+VEHICLE_ADD = "vehicle_add"
 
 
 def visit_header(visit: dict) -> list[str]:
@@ -123,6 +126,15 @@ async def client_query_prompt(state: FSMContext, api: ApiClient, user: dict):
     return "Введите телефон или ФИО клиента:", None
 
 
+@wizard.step(NewVisitStates.client_not_found)
+async def client_not_found_prompt(state: FSMContext, api: ApiClient, user: dict):
+    query = (await state.get_data())["client_query"]
+    builder = InlineKeyboardBuilder()
+    builder.button(text="➕ Добавить клиента", callback_data=CLIENT_ADD)
+    text = f"Клиент «{query}» не найден.\nВведите другой телефон или ФИО либо добавьте нового клиента."
+    return text, builder.as_markup()
+
+
 @wizard.step(NewVisitStates.choosing_client)
 async def choosing_client_prompt(state: FSMContext, api: ApiClient, user: dict):
     return "Выберите клиента:", _choices((await state.get_data())["client_choices"], "client_pick")
@@ -132,7 +144,16 @@ async def choosing_client_prompt(state: FSMContext, api: ApiClient, user: dict):
 async def vehicle_query_prompt(state: FSMContext, api: ApiClient, user: dict):
     created = (await state.get_data()).get("created_client")
     prefix = f"Клиент создан: {created}\n" if created else ""
-    return f"{prefix}Введите VIN или гос.номер авто:", None
+    return f"{prefix}Введите VIN или госномер авто:", None
+
+
+@wizard.step(NewVisitStates.vehicle_not_found)
+async def vehicle_not_found_prompt(state: FSMContext, api: ApiClient, user: dict):
+    query = (await state.get_data())["vehicle_query"]
+    builder = InlineKeyboardBuilder()
+    builder.button(text="➕ Добавить автомобиль", callback_data=VEHICLE_ADD)
+    text = f"Автомобиль «{query}» не найден.\nВведите другой VIN или госномер либо добавьте автомобиль."
+    return text, builder.as_markup()
 
 
 @wizard.step(NewVisitStates.choosing_vehicle)
@@ -189,6 +210,7 @@ async def new_visit_for_callback(callback: CallbackQuery, state: FSMContext, api
 
 
 @router.message(NewVisitStates.waiting_for_client_query)
+@router.message(NewVisitStates.client_not_found)
 async def receive_client_query(message: Message, state: FSMContext, api: ApiClient, user: dict, **kwargs) -> None:
     if not message.text:
         await wizard.reprompt(message, state, api, user, TEXT_REQUIRED)
@@ -196,7 +218,8 @@ async def receive_client_query(message: Message, state: FSMContext, api: ApiClie
     results = await api.search(message.text)
     client_ids = [r["id"] for r in results if r["entity"] == "client"][:5]
     if not client_ids:
-        await wizard.goto(message, state, api, user, NewClientStates.waiting_for_phone)
+        await state.update_data(client_query=message.text)
+        await wizard.goto(message, state, api, user, NewVisitStates.client_not_found)
         return
     choices = [[str(cid), (await api.get_client(cid))["full_name"]] for cid in client_ids]
     await state.update_data(client_choices=choices)
@@ -209,7 +232,19 @@ async def choose_client_callback(callback: CallbackQuery, state: FSMContext, api
     await wizard.goto(callback, state, api, user, NewVisitStates.waiting_for_vehicle_query)
 
 
+@router.callback_query(NewVisitStates.client_not_found, F.data == CLIENT_ADD)
+async def add_client_callback(callback: CallbackQuery, state: FSMContext, api: ApiClient, user: dict, **kwargs) -> None:
+    """Reuse the search query: a phone or a name is not asked again."""
+    query = (await state.get_data())["client_query"]
+    phone = query if is_valid_phone(query) else None
+    is_name = any(c.isalpha() for c in query) and not any(c.isdigit() for c in query)
+    await state.update_data(phone=phone, full_name=query if is_name else None)
+    target = NewClientStates.waiting_for_full_name if phone else NewClientStates.waiting_for_phone
+    await wizard.goto(callback, state, api, user, target)
+
+
 @router.message(NewVisitStates.waiting_for_vehicle_query)
+@router.message(NewVisitStates.vehicle_not_found)
 async def receive_vehicle_query(message: Message, state: FSMContext, api: ApiClient, user: dict, **kwargs) -> None:
     if not message.text:
         await wizard.reprompt(message, state, api, user, TEXT_REQUIRED)
@@ -217,11 +252,23 @@ async def receive_vehicle_query(message: Message, state: FSMContext, api: ApiCli
     results = await api.search(message.text)
     vehicle_ids = [r["id"] for r in results if r["entity"] == "vehicle"][:5]
     if not vehicle_ids:
-        await wizard.goto(message, state, api, user, NewVehicleStates.waiting_for_vin)
+        await state.update_data(vehicle_query=message.text)
+        await wizard.goto(message, state, api, user, NewVisitStates.vehicle_not_found)
         return
     choices = [[str(vid), (await api.get_vehicle(vid))["plate_number"]] for vid in vehicle_ids]
     await state.update_data(vehicle_choices=choices)
     await wizard.goto(message, state, api, user, NewVisitStates.choosing_vehicle)
+
+
+@router.callback_query(NewVisitStates.vehicle_not_found, F.data == VEHICLE_ADD)
+async def add_vehicle_in_visit_callback(callback: CallbackQuery, state: FSMContext, api: ApiClient, user: dict, **kwargs) -> None:
+    """Reuse the search query: a plate or a VIN is not asked again."""
+    query = (await state.get_data())["vehicle_query"]
+    plate = normalize_plate(query) if looks_like_plate(query) else None
+    vin = normalize_vin(query) if not plate and is_valid_vin(query) else None
+    await state.update_data(plate_number=plate, vin=vin)
+    target = NewVehicleStates.waiting_for_plate if vin else NewVehicleStates.waiting_for_vin
+    await wizard.goto(callback, state, api, user, target)
 
 
 @router.callback_query(NewVisitStates.choosing_vehicle, F.data.startswith("vehicle_pick:"))

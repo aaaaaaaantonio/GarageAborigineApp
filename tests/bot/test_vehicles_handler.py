@@ -16,7 +16,7 @@ async def test_new_vehicle_command_asks_for_vin():
     await start_new_vehicle(message, state, api=AsyncMock(), user=MASTER)
 
     assert await state.get_state() == NewVehicleStates.waiting_for_vin.state
-    assert shown(message)[0] == "Введите VIN:"
+    assert shown(message)[0] == "Введите VIN или номер кузова:"
 
 
 async def test_new_vehicle_refused_for_mechanic():

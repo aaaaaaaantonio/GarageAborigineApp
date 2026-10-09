@@ -81,6 +81,7 @@ async def test_client_card_lists_vehicles_and_visits_button():
     assert text == "👤 Иван Иванов\n+7 999 123-45-67"
     assert buttons(markup) == [
         ("🚗 Toyota Camry (А123ВС77)", f"go:vehicle:{encode_id(CAR)}"),
+        ("➕ Добавить автомобиль", "act:add_vehicle"),
         ("📋 Заезды клиента", f"go:client_visits:{encode_id(C1)}"),
     ]
 
