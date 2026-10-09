@@ -10,8 +10,8 @@ VIN_FORMAT_ERROR = (
 
 _VIN_RE = re.compile(r"[A-HJ-NPR-Z0-9]{17}")
 _FRAME_RE = re.compile(r"(?=.*\d)[A-Z0-9]+(-[A-Z0-9]+)*")
-# Russian plate: letter, 3 digits, 2 letters, region. Latin look-alikes allowed.
-_PLATE_LETTERS = "АВЕКМНОРСТУХABEKMHOPCTYX"
+# Russian plate: letter, 3 digits, 2 letters, region (checked after normalize_plate).
+_PLATE_LETTERS = "АВЕКМНОРСТУХ"
 _PLATE_RE = re.compile(rf"[{_PLATE_LETTERS}]\d{{3}}[{_PLATE_LETTERS}]{{2}}\d{{2,3}}")
 
 
@@ -41,8 +41,12 @@ def is_valid_vin(raw: str) -> bool:
     return 6 <= len(vin) <= 17 and bool(_FRAME_RE.fullmatch(vin))
 
 
+_LATIN_TO_CYRILLIC = str.maketrans("ABEKMHOPCTYX", "АВЕКМНОРСТУХ")
+
+
 def normalize_plate(raw: str) -> str:
-    return re.sub(r"[\s-]", "", raw).upper()
+    """Same as the API: Latin look-alikes become Cyrillic, so A123BC77 == А123ВС77."""
+    return re.sub(r"[\s-]", "", raw).upper().translate(_LATIN_TO_CYRILLIC)
 
 
 def looks_like_plate(raw: str) -> bool:

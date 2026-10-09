@@ -80,3 +80,16 @@ async def test_recent_views_returns_last_n_for_user(session):
     recent = await SearchService(session).recent(admin.id)
     assert len(recent) == 1
     assert recent[0].entity_id == entity_id
+
+
+@pytest.mark.parametrize("stored,query", [("А123ВС77", "a123bc77"), ("A777MM50", "а 777 мм 50")])
+async def test_search_plate_ignores_latin_vs_cyrillic(session, stored, query):
+    admin = User(role=UserRole.ADMIN, full_name="Админ", branch_id=uuid.uuid4())
+    session.add(admin)
+    await session.flush()
+    await VehicleService(session).create_vehicle(
+        VehicleCreate(vin="JTDBR32E720012345", plate_number=stored, make="Toyota", model="Camry"), admin
+    )
+
+    results = await SearchService(session).search(query)
+    assert any(r["entity"] == "vehicle" for r in results)

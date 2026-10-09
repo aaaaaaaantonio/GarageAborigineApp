@@ -39,3 +39,7 @@ def test_not_plates(raw):
 
 def test_normalize_plate():
     assert normalize_plate("а 123 вс-77") == "А123ВС77"
+
+
+def test_normalize_plate_maps_latin_to_cyrillic():
+    assert normalize_plate("a123bc77") == "А123ВС77"
