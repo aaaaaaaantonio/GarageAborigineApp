@@ -1,9 +1,10 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, computed_field
 
 from app.core.enums import VisitStatus
+from app.modules.visits.fsm import ALLOWED_TRANSITIONS
 
 
 class VisitCreate(BaseModel):
@@ -36,6 +37,12 @@ class VisitOut(BaseModel):
     make_model: str
     assigned_master_id: uuid.UUID
     master_name: str
+
+    @computed_field
+    @property
+    def allowed_next_statuses(self) -> list[VisitStatus]:
+        allowed = ALLOWED_TRANSITIONS[self.status]
+        return [s for s in VisitStatus if s in allowed]
 
 
 class VisitListOut(BaseModel):

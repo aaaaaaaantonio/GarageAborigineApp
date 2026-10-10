@@ -1,9 +1,10 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, computed_field, model_validator
 
 from app.core.enums import WorkCategory, WorkItemStatus
+from app.modules.visits.work_item_flow import WORK_ITEM_NEXT_STATUSES
 
 
 class WorkItemCreate(BaseModel):
@@ -42,6 +43,11 @@ class WorkItemOut(BaseModel):
     assigned_mechanic_id: uuid.UUID | None
     assigned_mechanic_name: str | None = None
 
+    @computed_field
+    @property
+    def allowed_next_statuses(self) -> list[WorkItemStatus]:
+        return list(WORK_ITEM_NEXT_STATUSES[self.status])
+
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -54,6 +60,11 @@ class WorkItemMineOut(BaseModel):
     catalog_item_id: uuid.UUID | None
     plate_number: str | None = None
     make_model: str | None = None
+
+    @computed_field
+    @property
+    def allowed_next_statuses(self) -> list[WorkItemStatus]:
+        return list(WORK_ITEM_NEXT_STATUSES[self.status])
 
     model_config = ConfigDict(from_attributes=True)
 
