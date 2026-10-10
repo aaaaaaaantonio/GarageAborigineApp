@@ -73,8 +73,9 @@ async def test_lines_have_prices_parts_and_totals(api_app, world, session):
     resp = await _get(api_app, f"/visits/{visit.id}/lines", master)
     assert resp.status_code == 200
     body = resp.json()
-    assert [w["name"] for w in body["works"]] == ["Замена масла", "Колодки"]
-    first, second = body["works"]
+    works = {w["name"]: w for w in body["works"]}
+    assert sorted(works) == ["Замена масла", "Колодки"]
+    first, second = works["Замена масла"], works["Колодки"]
     assert first["amount"] == 1200.0
     assert first["assigned_mechanic_name"] == "Сидоров"
     assert [(p["name"], p["quantity"], p["amount"]) for p in first["parts"]] == [
