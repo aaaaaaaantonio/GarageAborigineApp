@@ -26,7 +26,7 @@
 ### Отклонения от спека (решено при планировании)
 
 1. Telegram SDK — официальный скрипт `https://telegram.org/js/telegram-web-app.js` и тонкая обёртка `web/src/telegram/webapp.ts`, а не `@telegram-apps/sdk-react`: меньше зависимостей, API стабилен, в браузере скрипт безвреден (`initData` пустой).
-2. Суммы по отдельным работам и список запчастей на карточке заезда **не показываются**: `WorkItemOut` не содержит цен (и отдаётся механикам), `GET` для запчастей нет. Карточка показывает `total_amount` заезда. Расширение API — вне рамок.
+2. Цены работ и запчасти карточка заезда берёт из нового эндпоинта `GET /visits/{id}/lines` (Task 3b, только ADMIN/MASTER). `WorkItemOut` не трогаем: его получают и механики, цены им не показываются.
 3. PDF в браузере открывается как blob (`URL.createObjectURL`). В Mini App blob-ссылки не открываются — там кнопка PDF показывает тост «PDF доступен в боте или в браузере». Полноценная отдача PDF в Mini App — вне рамок.
 4. `allowed_next_statuses` реализуется `computed_field` в схеме, поэтому появляется во всех ответах с `VisitOut` (включая элементы `GET /visits`) — безвредное расширение.
 
@@ -49,6 +49,7 @@
 - `app/modules/users/router.py` — `by-telegram` под `require_service_key` (Task 1).
 - `app/main.py` — роутер auth, предупреждение о ключе (Tasks 1–2).
 - `app/modules/visits/work_item_flow.py`, `schemas.py`, `work_items_schemas.py` — `allowed_next_statuses` (Task 3).
+- `app/modules/visits/lines_schemas.py`, `lines_service.py`, `router.py` — `GET /visits/{id}/lines` (Task 3b).
 - `bot/config.py`, `bot/api_client.py` — `X-Service-Key` (Task 4).
 - `.env.example`, `pyproject.toml` (`pyjwt`).
 - Тесты: `tests/conftest.py` (autouse-настройки), `tests/modules/auth/test_tokens.py`, `test_current_user.py`, `test_telegram.py`, `test_routes.py`, `tests/modules/visits/test_allowed_next_statuses.py`, `tests/bot/test_api_client.py`.
@@ -890,6 +891,275 @@ git commit -m "feat(api): expose allowed_next_statuses on visits and work items"
 
 ---
 
+### Task 3b: `GET /visits/{id}/lines` — работы с ценами и запчасти (только мастер и админ)
+
+**Files:**
+- Create: `app/modules/visits/lines_schemas.py`, `app/modules/visits/lines_service.py`, `tests/modules/visits/test_visit_lines.py`
+- Modify: `app/modules/visits/router.py` (новый эндпоинт)
+
+**Interfaces:**
+- Consumes: `WorkItemService.list_for_visit(visit_id)` (raises `VisitNotFound`, attaches `name` and `assigned_mechanic_name`), `VisitPartItem`, `Visit.discount`.
+- Produces: `GET /visits/{visit_id}/lines` (ADMIN, MASTER; MECHANIC → 403; unknown visit → 404) → `VisitLinesOut`:
+  ```
+  { works: [ { id, name, status, assigned_mechanic_name, approved_by_client,
+               norm_hours, hourly_rate, amount,               # amount = norm_hours × hourly_rate
+               parts: [ { id, work_item_id, name, quantity, unit_price, amount } ] } ],
+    works_total, parts_total, discount, total }              # total = works_total + parts_total − discount
+  ```
+  Работы — в порядке `list_for_visit`; запчасти — под своей работой, по имени. Суммы — `Decimal`, в JSON `float` с 2 знаками. `total` совпадает с `Visit.total_amount` (та же формула, что `VisitService.recalculate_total`).
+
+- [ ] **Step 1: Write failing tests**
+
+`tests/modules/visits/test_visit_lines.py`:
+
+```python
+import uuid
+
+import pytest
+from httpx import ASGITransport, AsyncClient
+
+from app.core.db import get_session
+from app.core.enums import UserRole, WorkCategory
+from app.main import app
+from app.modules.clients.schemas import ClientCreate
+from app.modules.clients.service import ClientService
+from app.modules.users.models import User
+from app.modules.vehicles.schemas import VehicleCreate
+from app.modules.vehicles.service import VehicleService
+from app.modules.visits.part_items_schemas import PartItemCreate
+from app.modules.visits.part_items_service import PartItemService
+from app.modules.visits.schemas import VisitCreate
+from app.modules.visits.service import VisitService
+from app.modules.visits.work_items_schemas import WorkItemCreate
+from app.modules.visits.work_items_service import WorkItemService
+
+
+@pytest.fixture
+def api_app(session):
+    async def override_get_session():
+        yield session
+
+    app.dependency_overrides[get_session] = override_get_session
+    yield app
+    app.dependency_overrides.clear()
+
+
+async def _get(api_app, path, user):
+    async with AsyncClient(transport=ASGITransport(app=api_app), base_url="http://test") as client:
+        return await client.get(path, headers={"X-User-Id": str(user.id)})
+
+
+@pytest.fixture
+async def world(session):
+    admin = User(role=UserRole.ADMIN, full_name="Админ", branch_id=uuid.uuid4())
+    master = User(role=UserRole.MASTER, full_name="Мастер", branch_id=uuid.uuid4())
+    mechanic = User(role=UserRole.MECHANIC, full_name="Сидоров", branch_id=uuid.uuid4())
+    session.add_all([admin, master, mechanic])
+    await session.flush()
+    client = await ClientService(session).create_client(ClientCreate(full_name="Иван", phone="79991230001"), admin)
+    vehicle = await VehicleService(session).create_vehicle(
+        VehicleCreate(vin="B" * 17, plate_number="А123ВС77", make="Toyota", model="Camry"), admin
+    )
+    visit = await VisitService(session).create_visit(
+        VisitCreate(client_id=client.id, vehicle_id=vehicle.id, assigned_master_id=master.id, mileage_at_intake=1000),
+        admin,
+    )
+    works = WorkItemService(session)
+    oil = await works.add_item(
+        visit.id,
+        WorkItemCreate(free_text_name="Замена масла", category=WorkCategory.MAINTENANCE, norm_hours=0.5,
+                       hourly_rate=2400, assigned_mechanic_id=mechanic.id),
+        admin,
+    )
+    pads = await works.add_item(
+        visit.id,
+        WorkItemCreate(free_text_name="Колодки", category=WorkCategory.CHASSIS, norm_hours=1.2, hourly_rate=2000),
+        admin,
+    )
+    parts = PartItemService(session)
+    await parts.add_item(visit.id, PartItemCreate(work_item_id=oil.id, name="Фильтр", quantity=1, unit_price=450.5), admin)
+    await parts.add_item(visit.id, PartItemCreate(work_item_id=oil.id, name="Масло 5W30", quantity=4, unit_price=900), admin)
+    await session.flush()
+    return admin, master, mechanic, visit, oil, pads
+
+
+async def test_lines_have_prices_parts_and_totals(api_app, world, session):
+    _, master, _, visit, oil, pads = world
+    resp = await _get(api_app, f"/visits/{visit.id}/lines", master)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert [w["name"] for w in body["works"]] == ["Замена масла", "Колодки"]
+    first, second = body["works"]
+    assert first["amount"] == 1200.0
+    assert first["assigned_mechanic_name"] == "Сидоров"
+    assert [(p["name"], p["quantity"], p["amount"]) for p in first["parts"]] == [
+        ("Масло 5W30", 4, 3600.0),
+        ("Фильтр", 1, 450.5),
+    ]
+    assert second["amount"] == 2400.0 and second["parts"] == []
+    assert body["works_total"] == 3600.0
+    assert body["parts_total"] == 4050.5
+    assert body["discount"] == 0.0
+    assert body["total"] == 7650.5
+    await session.refresh(visit)
+    assert float(visit.total_amount) == body["total"]
+
+
+async def test_mechanic_forbidden(api_app, world):
+    _, _, mechanic, visit, _, _ = world
+    assert (await _get(api_app, f"/visits/{visit.id}/lines", mechanic)).status_code == 403
+
+
+async def test_unknown_visit_404(api_app, world):
+    _, master, _, _, _, _ = world
+    assert (await _get(api_app, f"/visits/{uuid.uuid4()}/lines", master)).status_code == 404
+```
+
+- [ ] **Step 2: Run to verify failure**
+
+Run: `uv run pytest tests/modules/visits/test_visit_lines.py -v`
+Expected: FAIL — 404 for `/lines` on the first test (route missing), the 403 test also gets 404.
+
+- [ ] **Step 3: Implement**
+
+`app/modules/visits/lines_schemas.py`:
+
+```python
+import uuid
+
+from pydantic import BaseModel
+
+from app.core.enums import WorkItemStatus
+
+
+class PartLineOut(BaseModel):
+    id: uuid.UUID
+    work_item_id: uuid.UUID
+    name: str
+    quantity: int
+    unit_price: float
+    amount: float
+
+
+class WorkLineOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    status: WorkItemStatus
+    assigned_mechanic_name: str | None
+    approved_by_client: bool
+    norm_hours: float
+    hourly_rate: float
+    amount: float
+    parts: list[PartLineOut]
+
+
+class VisitLinesOut(BaseModel):
+    """Priced lines of a visit — staff only (mechanics never see prices)."""
+
+    works: list[WorkLineOut]
+    works_total: float
+    parts_total: float
+    discount: float
+    total: float
+```
+
+`app/modules/visits/lines_service.py`:
+
+```python
+import uuid
+from collections import defaultdict
+from decimal import Decimal
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.modules.visits.lines_schemas import PartLineOut, VisitLinesOut, WorkLineOut
+from app.modules.visits.models import Visit, VisitPartItem
+from app.modules.visits.work_items_service import WorkItemService
+
+
+def _money(value: Decimal) -> float:
+    return float(value.quantize(Decimal("0.01")))
+
+
+def _dec(value) -> Decimal:
+    return Decimal(str(value))
+
+
+class VisitLinesService:
+    def __init__(self, session: AsyncSession):
+        self.session = session
+
+    async def get_lines(self, visit_id: uuid.UUID) -> VisitLinesOut:
+        works = await WorkItemService(self.session).list_for_visit(visit_id)  # raises VisitNotFound
+        visit = await self.session.get(Visit, visit_id)
+        result = await self.session.execute(
+            select(VisitPartItem).where(VisitPartItem.visit_id == visit_id).order_by(VisitPartItem.name, VisitPartItem.id)
+        )
+        parts_by_work: dict[uuid.UUID, list[PartLineOut]] = defaultdict(list)
+        parts_total = Decimal("0")
+        for p in result.scalars():
+            amount = _dec(p.quantity) * _dec(p.unit_price)
+            parts_total += amount
+            parts_by_work[p.work_item_id].append(
+                PartLineOut(id=p.id, work_item_id=p.work_item_id, name=p.name, quantity=p.quantity,
+                            unit_price=_money(_dec(p.unit_price)), amount=_money(amount))
+            )
+        lines: list[WorkLineOut] = []
+        works_total = Decimal("0")
+        for w in works:
+            amount = _dec(w.norm_hours) * _dec(w.hourly_rate)
+            works_total += amount
+            lines.append(
+                WorkLineOut(
+                    id=w.id, name=w.name, status=w.status, assigned_mechanic_name=w.assigned_mechanic_name,
+                    approved_by_client=w.approved_by_client, norm_hours=float(w.norm_hours),
+                    hourly_rate=_money(_dec(w.hourly_rate)), amount=_money(amount),
+                    parts=parts_by_work.get(w.id, []),
+                )
+            )
+        discount = _dec(visit.discount)
+        return VisitLinesOut(
+            works=lines,
+            works_total=_money(works_total),
+            parts_total=_money(parts_total),
+            discount=_money(discount),
+            total=_money(works_total + parts_total - discount),
+        )
+```
+
+`app/modules/visits/router.py` — imports `from app.core.exceptions import VisitNotFound` (if not already imported there), `from app.modules.visits.lines_schemas import VisitLinesOut`, `from app.modules.visits.lines_service import VisitLinesService`; after `get_visit`:
+
+```python
+@router.get("/{visit_id}/lines", response_model=VisitLinesOut)
+async def get_visit_lines(
+    visit_id: uuid.UUID,
+    session: AsyncSession = Depends(get_session),
+    acting_user: User = Depends(require_role(UserRole.ADMIN, UserRole.MASTER)),
+):
+    try:
+        return await VisitLinesService(session).get_lines(visit_id)
+    except VisitNotFound:
+        raise HTTPException(404, "Visit not found")
+```
+
+- [ ] **Step 4: Run tests and full suite**
+
+Run: `uv run pytest tests/modules/visits/test_visit_lines.py -v`
+Expected: 3 passed.
+
+Run: `uv run pytest -q`
+Expected: all pass.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add app/modules/visits/lines_schemas.py app/modules/visits/lines_service.py app/modules/visits/router.py tests/modules/visits/test_visit_lines.py
+git commit -m "feat(api): GET /visits/{id}/lines — priced works and parts for staff"
+```
+
+---
+
 ### Task 4: Bot sends `X-Service-Key`; env example
 
 **Files:**
@@ -1664,6 +1934,36 @@ export interface PartItem {
   unit_price: number;
 }
 
+export interface PartLine {
+  id: string;
+  work_item_id: string;
+  name: string;
+  quantity: number;
+  unit_price: number;
+  amount: number;
+}
+
+export interface WorkLine {
+  id: string;
+  name: string;
+  status: WorkItemStatus;
+  assigned_mechanic_name: string | null;
+  approved_by_client: boolean;
+  norm_hours: number;
+  hourly_rate: number;
+  amount: number;
+  parts: PartLine[];
+}
+
+/** GET /visits/{id}/lines — staff only. */
+export interface VisitLines {
+  works: WorkLine[];
+  works_total: number;
+  parts_total: number;
+  discount: number;
+  total: number;
+}
+
 export interface Client {
   id: string;
   full_name: string;
@@ -1731,7 +2031,7 @@ export interface UserCreate {
 import { api, requestBlob } from './client';
 import type {
   AuthResponse, CatalogItem, Client, MyWorkItem, PartItem, PartItemCreate, RecentView, SearchHit,
-  User, UserCreate, Vehicle, VehicleCreate, Visit, VisitCreate, VisitList, VisitStatus, WorkHistory,
+  User, UserCreate, Vehicle, VehicleCreate, Visit, VisitCreate, VisitLines, VisitList, VisitStatus, WorkHistory,
   WorkItem, WorkItemCreate, WorkItemStatus,
 } from './types';
 
@@ -1749,6 +2049,7 @@ export const visitsApi = {
   listForClient: (clientId: string) => api.get<VisitList>(`/visits?client_id=${q(clientId)}`),
   listForVehicle: (vehicleId: string) => api.get<VisitList>(`/visits?vehicle_id=${q(vehicleId)}`),
   get: (id: string) => api.get<Visit>(`/visits/${id}`),
+  lines: (id: string) => api.get<VisitLines>(`/visits/${id}/lines`),
   create: (body: VisitCreate) => api.post<Visit>('/visits', body),
   changeStatus: (id: string, newStatus: VisitStatus, reason: string | null = null) =>
     api.patch<Visit>(`/visits/${id}/status`, { new_status: newStatus, reason }),
@@ -3049,7 +3350,7 @@ git commit -m "feat(web): auth (Telegram initData + dev login), role routes, tab
 - Consumes: `visitsApi.listActive`, `useAuth`, UI kit, `ScreenHeader`.
 - Produces:
   - `useAction<TVars = void, TData = unknown>(fn: (vars: TVars) => Promise<TData>, opts?: { invalidate?: QueryKey[]; onSuccess?: (data: TData) => void })` → the `useMutation` result with `mutate(vars?)` replaced by a ref-locked version (a second call while one is in flight is dropped); on success: haptic + invalidate + `onSuccess`; on error: haptic + toast with `error.message`.
-  - Fixtures: `makeVisit(over?)`, `makeWorkItem(over?)`, `makeMyWork(over?)`, `CLIENT`, `VEHICLE`, `mockVisitPage(visit?, works?)` (registers `GET /api/visits/:id` and `GET /api/visits/:id/work-items`).
+  - Fixtures: `makeVisit(over?)`, `makeWorkItem(over?)`, `makeMyWork(over?)`, `makeWorkLine(over?)`, `CLIENT`, `VEHICLE`, `mockVisitPage(visit?, works?: WorkLine[])` (registers `GET /api/visits/:id` and `GET /api/visits/:id/lines`).
   - Query key `['visits', 'active']` (invalidated by `['visits']`).
 
 - [ ] **Step 1: Fixtures and `useAction`**
@@ -3058,7 +3359,7 @@ git commit -m "feat(web): auth (Telegram initData + dev login), role routes, tab
 
 ```ts
 import { http, HttpResponse } from 'msw';
-import type { Client, MyWorkItem, Vehicle, Visit, WorkItem } from '../api/types';
+import type { Client, MyWorkItem, Vehicle, Visit, WorkItem, WorkLine } from '../api/types';
 import { server } from './server';
 
 export function makeVisit(over: Partial<Visit> = {}): Visit {
@@ -3092,10 +3393,22 @@ export const VEHICLE: Vehicle = {
   id: 'veh1', vin: 'JTDBR32E720012345', plate_number: 'А123ВС77', make: 'Toyota', model: 'Camry', mileage_current: 120500,
 };
 
-export function mockVisitPage(visit: Visit = makeVisit(), works: WorkItem[] = [makeWorkItem()]) {
+export function makeWorkLine(over: Partial<WorkLine> = {}): WorkLine {
+  return {
+    id: 'w1', name: 'Замена масла ДВС', status: 'in_progress', assigned_mechanic_name: 'Сидоров Иван',
+    approved_by_client: false, norm_hours: 0.5, hourly_rate: 2400, amount: 1200,
+    parts: [{ id: 'p1', work_item_id: 'w1', name: 'Фильтр', quantity: 1, unit_price: 450, amount: 450 }],
+    ...over,
+  };
+}
+
+export function mockVisitPage(visit: Visit = makeVisit(), works: WorkLine[] = [makeWorkLine()]) {
+  const worksTotal = works.reduce((sum, w) => sum + w.amount, 0);
+  const partsTotal = works.reduce((sum, w) => sum + w.parts.reduce((s, p) => s + p.amount, 0), 0);
   server.use(
     http.get(`/api/visits/${visit.id}`, () => HttpResponse.json(visit)),
-    http.get(`/api/visits/${visit.id}/work-items`, () => HttpResponse.json(works)),
+    http.get(`/api/visits/${visit.id}/lines`, () =>
+      HttpResponse.json({ works, works_total: worksTotal, parts_total: partsTotal, discount: 0, total: worksTotal + partsTotal })),
   );
 }
 ```
@@ -3326,8 +3639,8 @@ git commit -m "feat(web): active visits screen with filters"
 - Modify: `web/src/routes.tsx` (route `/visits/:visitId`), `web/src/theme.css` (append)
 
 **Interfaces:**
-- Consumes: `visitsApi.get/changeStatus/generateDocument/documentFile`, `workItemsApi.list`, `useAction`, `telegram.isMiniApp`, labels, `formatRub`, `formatKm`.
-- Produces: query keys `['visit', visitId]`, `['workItems', visitId]`; `CancelVisitSheet({ visitId: string; open: boolean; onClose: () => void })`.
+- Consumes: `visitsApi.get/lines/changeStatus/generateDocument/documentFile` (`lines` from Task 3b), `useAction`, `telegram.isMiniApp`, labels, `formatRub`, `formatKm`.
+- Produces: query keys `['visit', visitId]`, `['visitLines', visitId]` (actions that change works, parts or totals invalidate it); `CancelVisitSheet({ visitId: string; open: boolean; onClose: () => void })`.
 
 - [ ] **Step 1: Write failing tests**
 
@@ -3336,16 +3649,24 @@ git commit -m "feat(web): active visits screen with filters"
 ```tsx
 import { screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import { makeVisit, makeWorkItem, mockVisitPage } from '../test/fixtures';
+import { makeVisit, makeWorkLine, mockVisitPage } from '../test/fixtures';
 import { renderApp } from '../test/render';
 import { server } from '../test/server';
 
-test('shows header, total and works', async () => {
-  mockVisitPage(makeVisit(), [makeWorkItem(), makeWorkItem({ id: 'w2', name: 'Колодки передние', status: 'ready', assigned_mechanic_name: null, approved_by_client: true })]);
+test('shows header, total, priced works and their parts', async () => {
+  mockVisitPage(makeVisit(), [
+    makeWorkLine(),
+    makeWorkLine({ id: 'w2', name: 'Колодки передние', status: 'ready', assigned_mechanic_name: null, approved_by_client: true, amount: 2400, parts: [] }),
+  ]);
   renderApp('/visits/v1', { as: 'master' });
   expect(await screen.findByLabelText('Госномер А123ВС77')).toBeInTheDocument();
   expect(screen.getByText('Toyota Camry')).toBeInTheDocument();
   expect(screen.getByText('9 850 ₽')).toBeInTheDocument();
+  expect(await screen.findByText('1 200 ₽')).toBeInTheDocument();
+  expect(screen.getByText('2 400 ₽')).toBeInTheDocument();
+  expect(screen.getByText('🔩 Фильтр × 1')).toBeInTheDocument();
+  expect(screen.getByText('450 ₽')).toBeInTheDocument();
+  expect(screen.getByText('Работы 3 600 ₽ · запчасти 450 ₽')).toBeInTheDocument();
   expect(screen.getByRole('link', { name: /Колодки передние/ })).toHaveAttribute('href', '/visits/v1/works/w2');
   expect(screen.getByText(/без исполнителя/)).toBeInTheDocument();
   expect(screen.getByRole('link', { name: 'Петров Иван ›' })).toHaveAttribute('href', '/clients/c1');
@@ -3401,7 +3722,7 @@ test('cancel asks for a reason', async () => {
 
 test('unknown visit shows not found', async () => {
   server.use(http.get('/api/visits/nope', () => HttpResponse.json({ detail: 'Visit not found' }, { status: 404 })),
-    http.get('/api/visits/nope/work-items', () => HttpResponse.json({ detail: 'Visit not found' }, { status: 404 })));
+    http.get('/api/visits/nope/lines', () => HttpResponse.json({ detail: 'Visit not found' }, { status: 404 })));
   renderApp('/visits/nope', { as: 'master' });
   expect(await screen.findByText('Заезд не найден')).toBeInTheDocument();
 });
@@ -3470,7 +3791,7 @@ export function CancelVisitSheet({ visitId, open, onClose }: { visitId: string; 
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { visitsApi, workItemsApi } from '../api/endpoints';
+import { visitsApi } from '../api/endpoints';
 import type { VisitStatus } from '../api/types';
 import { CancelVisitSheet } from '../forms/CancelVisitSheet';
 import { formatKm, formatRub } from '../lib/format';
@@ -3490,7 +3811,7 @@ export function VisitScreen() {
   const { visitId = '' } = useParams();
   const toast = useToast();
   const visit = useQuery({ queryKey: ['visit', visitId], queryFn: () => visitsApi.get(visitId) });
-  const works = useQuery({ queryKey: ['workItems', visitId], queryFn: () => workItemsApi.list(visitId) });
+  const lines = useQuery({ queryKey: ['visitLines', visitId], queryFn: () => visitsApi.lines(visitId) });
   const [statusOpen, setStatusOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
   const changeStatus = useAction((status: VisitStatus) => visitsApi.changeStatus(visitId, status), {
@@ -3529,26 +3850,38 @@ export function VisitScreen() {
               <b>{formatRub(v.total_amount)}</b>
             </div>
             <h2 className="section-title">Работы</h2>
-            <Loadable query={works}>
-              {(items) =>
-                items.length === 0 ? (
+            <Loadable query={lines}>
+              {(l) =>
+                l.works.length === 0 ? (
                   <EmptyState text="Работ пока нет" />
                 ) : (
-                  <div className="card">
-                    {items.map((w) => (
-                      <Link key={w.id} className="list-row" to={`/visits/${visitId}/works/${w.id}`}>
-                        <span aria-hidden="true">{WORK_STATUS_ICONS[w.status]}</span>
-                        <span>
-                          <span className="block">{w.name}</span>
-                          <span className="hint block">
-                            {w.assigned_mechanic_name ?? 'без исполнителя'}
-                            {w.approved_by_client ? '' : ' · не согласовано'}
-                          </span>
-                        </span>
-                        <span className="hint" aria-hidden="true">›</span>
-                      </Link>
-                    ))}
-                  </div>
+                  <>
+                    <div className="card">
+                      {l.works.map((w) => (
+                        <div key={w.id} className="work-line">
+                          <Link className="list-row" to={`/visits/${visitId}/works/${w.id}`}>
+                            <span aria-hidden="true">{WORK_STATUS_ICONS[w.status]}</span>
+                            <span>
+                              <span className="block">{w.name}</span>
+                              <span className="hint block">
+                                {w.assigned_mechanic_name ?? 'без исполнителя'}
+                                {w.approved_by_client ? '' : ' · не согласовано'}
+                                {` · ${w.norm_hours} н/ч`}
+                              </span>
+                            </span>
+                            <span className="mono">{formatRub(w.amount)}</span>
+                          </Link>
+                          {w.parts.map((p) => (
+                            <div key={p.id} className="part-row hint">
+                              <span>🔩 {p.name} × {p.quantity}</span>
+                              <span className="mono">{formatRub(p.amount)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ))}
+                    </div>
+                    <p className="hint">Работы {formatRub(l.works_total)} · запчасти {formatRub(l.parts_total)}</p>
+                  </>
                 )
               }
             </Loadable>
@@ -3593,6 +3926,10 @@ export function VisitScreen() {
 
 ```css
 .visit-car { font-size: 20px; font-weight: 700; }
+.work-line { border-bottom: 1px solid var(--line); }
+.work-line:last-child { border-bottom: 0; }
+.work-line .list-row { border-bottom: 0; }
+.part-row { display: flex; justify-content: space-between; gap: 8px; padding: 0 0 8px 36px; font-size: 13px; }
 .span-2 { grid-column: 1 / -1; }
 .block { display: block; }
 ```
@@ -3621,7 +3958,7 @@ git commit -m "feat(web): visit card with works, status sheet, cancel reason, PD
 
 **Interfaces:**
 - Consumes: `workItemsApi.list/mine/changeStatus/approve/assign`, `usersApi.mechanics`, `useAction`.
-- Produces: query keys `['myWorks']`, `['mechanics']`; invalidates `['workItems', visitId]`, `['myWorks']`, `['visit', visitId]` after any action.
+- Produces: query keys `['myWorks']`, `['mechanics']`; invalidates `['workItems', visitId]`, `['myWorks']`, `['visit', visitId]`, `['visitLines', visitId]` after any action.
 
 - [ ] **Step 1: Write failing tests**
 
@@ -3758,7 +4095,7 @@ export function WorkScreen() {
     queryFn: () => (isMechanic ? workItemsApi.mine() : workItemsApi.list(visitId)),
   });
   const mechanics = useQuery({ queryKey: ['mechanics'], queryFn: usersApi.mechanics, enabled: assignOpen });
-  const invalidate = [['workItems', visitId], ['myWorks'], ['visit', visitId]];
+  const invalidate = [['workItems', visitId], ['myWorks'], ['visit', visitId], ['visitLines', visitId]];
   const status = useAction((s: WorkItemStatus) => workItemsApi.changeStatus(visitId, itemId, s), { invalidate });
   const approve = useAction(() => workItemsApi.approve(visitId, itemId), { invalidate });
   const assign = useAction((mechanicId: string | null) => workItemsApi.assign(visitId, itemId, mechanicId), {
@@ -4645,6 +4982,7 @@ export function AddWorkForm() {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['workItems', visitId] }),
         queryClient.invalidateQueries({ queryKey: ['visit', visitId] }),
+        queryClient.invalidateQueries({ queryKey: ['visitLines', visitId] }),
       ]);
       navigate(`/visits/${visitId}`, { replace: true });
     },
@@ -4749,7 +5087,10 @@ export function AddPartForm() {
     mutationFn: (body: PartItemCreate) => workItemsApi.addPart(visitId, body),
     onSuccess: async () => {
       telegram.haptic('success');
-      await queryClient.invalidateQueries({ queryKey: ['visit', visitId] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['visit', visitId] }),
+        queryClient.invalidateQueries({ queryKey: ['visitLines', visitId] }),
+      ]);
       navigate(`/visits/${visitId}/works/${itemId}`, { replace: true });
     },
     onError: (e) => {
@@ -5851,6 +6192,7 @@ git commit -m "docs: web/Mini App run instructions; remove placeholder screen"
 
 ## Self-Review notes (done while writing)
 
+- Priced lines (added after review with the user) → Task 3b (API) + Task 11 (card).
 - Spec §2 auth → Tasks 1–2; §2 bot key → Task 4; §3 statuses → Task 3; §4 screens → Tasks 10–14, 16; forms → 15–17; Telegram → Task 9 (`telegram`, BackButton, haptic) and 17 (wizard back); §5 errors → `client.ts`, `Loadable`, `useAction`, `formErrors`; §6 tests → per task; §7 rollout → Task 4 (`.env.example`) and Task 18 (README).
-- Deviations from spec are listed at the top (SDK, per-work sums/parts list, PDF in Mini App, computed field scope).
+- Deviations from spec are listed at the top (SDK, priced lines via new endpoint, PDF in Mini App, computed field scope).
 - Leaving the wizard: confirm only on Back at the first step (no router blocker — `BrowserRouter` has no `useBlocker`); switching tabs drops the draft silently. Acceptable for this cycle.
