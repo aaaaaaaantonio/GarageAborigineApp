@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from app.core.config import settings
 from app.core.logging import install_access_log_filter
 
+from app.modules.auth.router import router as auth_router
 from app.modules.users.router import router as users_router
 from app.modules.clients.router import router as clients_router
 from app.modules.vehicles.router import router as vehicles_router
@@ -26,6 +27,7 @@ if not settings.internal_api_key:
 
 app = FastAPI(title="CRM Backend")
 
+app.include_router(auth_router)
 app.include_router(users_router)
 app.include_router(clients_router)
 app.include_router(vehicles_router)
