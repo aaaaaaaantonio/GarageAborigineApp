@@ -25,7 +25,7 @@ def test_expired_token_rejected():
 
 
 def test_token_signed_with_other_key_rejected():
-    token = jwt.encode({"sub": str(uuid.uuid4()), "exp": 9999999999}, "other-key", algorithm="HS256")
+    token = jwt.encode({"sub": str(uuid.uuid4()), "exp": 9999999999}, "other-key-0123456789abcdef-0123456789", algorithm="HS256")
     with pytest.raises(InvalidSessionToken):
         read_session_token(token)
 

@@ -41,6 +41,6 @@ async def session(engine) -> AsyncSession:
 
 @pytest.fixture(autouse=True)
 def _auth_settings(monkeypatch):
-    monkeypatch.setattr(settings, "session_secret", "test-session-secret")
+    monkeypatch.setattr(settings, "session_secret", "test-session-secret-0123456789abcdef")
     monkeypatch.setattr(settings, "internal_api_key", None)
     monkeypatch.setattr(settings, "dev_login", False)
