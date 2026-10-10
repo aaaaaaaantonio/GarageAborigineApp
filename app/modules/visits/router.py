@@ -16,6 +16,8 @@ from app.core.exceptions import (
 )
 from app.modules.users.auth import require_role
 from app.modules.users.models import User
+from app.modules.visits.lines_schemas import VisitLinesOut
+from app.modules.visits.lines_service import VisitLinesService
 from app.modules.visits.schemas import VisitCreate, VisitListOut, VisitOut, VisitStatusChange
 from app.modules.visits.service import VisitService
 
@@ -66,6 +68,18 @@ async def get_visit(
     if visit is None:
         raise HTTPException(404, "Visit not found")
     return visit
+
+
+@router.get("/{visit_id}/lines", response_model=VisitLinesOut)
+async def get_visit_lines(
+    visit_id: uuid.UUID,
+    session: AsyncSession = Depends(get_session),
+    acting_user: User = Depends(require_role(UserRole.ADMIN, UserRole.MASTER)),
+):
+    try:
+        return await VisitLinesService(session).get_lines(visit_id)
+    except VisitNotFound:
+        raise HTTPException(404, "Visit not found")
 
 
 @router.patch("/{visit_id}/status", response_model=VisitOut)
