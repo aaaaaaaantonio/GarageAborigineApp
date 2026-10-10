@@ -10,6 +10,7 @@ from bot.api_client import (
     ApiUnavailable,
     ApiValidationError,
 )
+from bot.config import settings as bot_settings
 
 
 @respx.mock
@@ -250,3 +251,30 @@ async def test_api_client_assign_work_item_mechanic_patches_endpoint():
     await ApiClient().assign_work_item_mechanic(visit_id, item_id, None)
 
     assert route.calls.last.request.content == b'{"assigned_mechanic_id":null}'
+
+
+@respx.mock
+async def test_service_key_sent_when_configured(monkeypatch):
+    monkeypatch.setattr(bot_settings, "internal_api_key", "bot-key")
+    route = respx.get("http://localhost:8000/clients/abc").mock(return_value=httpx.Response(200, json={}))
+    await ApiClient(user_id="11111111-1111-1111-1111-111111111111").get("/clients/abc")
+    headers = route.calls.last.request.headers
+    assert headers["X-Service-Key"] == "bot-key"
+    assert headers["X-User-Id"] == "11111111-1111-1111-1111-111111111111"
+
+
+@respx.mock
+async def test_service_key_sent_without_user(monkeypatch):
+    monkeypatch.setattr(bot_settings, "internal_api_key", "bot-key")
+    route = respx.get("http://localhost:8000/users/by-telegram/5").mock(
+        return_value=httpx.Response(200, json={"id": "u"})
+    )
+    await ApiClient().get_user_by_telegram(5)
+    assert route.calls.last.request.headers["X-Service-Key"] == "bot-key"
+
+
+@respx.mock
+async def test_no_service_key_header_when_not_configured():
+    route = respx.get("http://localhost:8000/clients/abc").mock(return_value=httpx.Response(200, json={}))
+    await ApiClient(user_id="11111111-1111-1111-1111-111111111111").get("/clients/abc")
+    assert "X-Service-Key" not in route.calls.last.request.headers
