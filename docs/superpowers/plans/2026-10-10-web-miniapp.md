@@ -27,7 +27,8 @@
 
 1. Telegram SDK — официальный скрипт `https://telegram.org/js/telegram-web-app.js` и тонкая обёртка `web/src/telegram/webapp.ts`, а не `@telegram-apps/sdk-react`: меньше зависимостей, API стабилен, в браузере скрипт безвреден (`initData` пустой).
 2. Цены работ и запчасти карточка заезда берёт из нового эндпоинта `GET /visits/{id}/lines` (Task 3b, только ADMIN/MASTER). `WorkItemOut` не трогаем: его получают и механики, цены им не показываются.
-3. PDF в браузере открывается как blob (`URL.createObjectURL`). В Mini App blob-ссылки не открываются — там кнопка PDF показывает тост «PDF доступен в боте или в браузере». Полноценная отдача PDF в Mini App — вне рамок.
+3. PDF скачивается по разовой подписанной ссылке (Task 3c, 5 минут, один документ): в Mini App — через `WebApp.downloadFile` (на старых клиентах Telegram — `openLink`), в браузере — обычной загрузкой. Встроенный браузер Telegram не умеет сохранять файл, скачанный `fetch` с заголовком `Authorization`, поэтому ссылка несёт разрешение в себе.
+5. Мастер нового заезда — полноэкранный: таб-бар скрыт, «Отмена» и «Назад» на первом шаге спрашивают «Прервать новый заезд?», при закрытии вкладки — `beforeunload`. Блокировщик роутера (`useBlocker`) не нужен.
 4. `allowed_next_statuses` реализуется `computed_field` в схеме, поэтому появляется во всех ответах с `VisitOut` (включая элементы `GET /visits`) — безвредное расширение.
 
 ## Review Focus
@@ -50,6 +51,7 @@
 - `app/main.py` — роутер auth, предупреждение о ключе (Tasks 1–2).
 - `app/modules/visits/work_item_flow.py`, `schemas.py`, `work_items_schemas.py` — `allowed_next_statuses` (Task 3).
 - `app/modules/visits/lines_schemas.py`, `lines_service.py`, `router.py` — `GET /visits/{id}/lines` (Task 3b).
+- `app/modules/auth/tokens.py`, `app/modules/documents/router.py` — разовые ссылки на PDF (Task 3c).
 - `bot/config.py`, `bot/api_client.py` — `X-Service-Key` (Task 4).
 - `.env.example`, `pyproject.toml` (`pyjwt`).
 - Тесты: `tests/conftest.py` (autouse-настройки), `tests/modules/auth/test_tokens.py`, `test_current_user.py`, `test_telegram.py`, `test_routes.py`, `tests/modules/visits/test_allowed_next_statuses.py`, `tests/bot/test_api_client.py`.
@@ -1160,6 +1162,290 @@ git commit -m "feat(api): GET /visits/{id}/lines — priced works and parts for 
 
 ---
 
+### Task 3c: PDF download by a one-time signed link
+
+**Files:**
+- Modify: `app/modules/auth/tokens.py` (download tokens; session tokens reject them), `app/modules/documents/router.py` (two endpoints)
+- Create: `tests/modules/documents/test_download_link.py`
+
+**Interfaces:**
+- Consumes: `settings.session_secret` (Task 1), `DocumentService.generate_visit_document(visit_id) -> str`, `DocumentService.get_visit_document(visit_id) -> bytes` (raises `DocumentNotFound`).
+- Produces:
+  - `issue_download_token(document_id: uuid.UUID, now: datetime | None = None) -> str` (JWT HS256 `{"doc": "<uuid>", "purpose": "download", "iat", "exp": now + 300}`; raises `SessionNotConfigured`), `read_download_token(token: str) -> uuid.UUID` (raises `InvalidSessionToken`); `DOWNLOAD_TTL_S = 300`. `read_session_token` rejects any token carrying `purpose`.
+  - `POST /visits/{visit_id}/document/link` (ADMIN, MASTER) → generates the PDF, returns `{"url": "/documents/{visit_id}/download?token=<jwt>", "expires_in": 300}`; unknown visit → 404; no `SESSION_SECRET` → 503.
+  - `GET /documents/{document_id}/download?token=<jwt>` — **no auth header**; valid token for this document → PDF with `Content-Disposition: attachment`; expired/forged/other document/session token → 403 «Ссылка устарела, нажмите PDF ещё раз»; missing file → 404.
+
+Why a signed link: Telegram's in-app browser saves files only through `WebApp.downloadFile({url})` / `openLink(url)`, which fetch a plain URL without our `Authorization` header. The link opens exactly one document for 5 minutes.
+
+- [ ] **Step 1: Write failing tests**
+
+`tests/modules/documents/test_download_link.py`:
+
+```python
+import uuid
+from datetime import datetime, timedelta, timezone
+from urllib.parse import parse_qs, urlparse
+
+import pytest
+from httpx import ASGITransport, AsyncClient
+
+from app.core.config import settings
+from app.core.db import get_session
+from app.core.enums import UserRole
+from app.core.exceptions import DocumentNotFound, VisitNotFound
+from app.main import app
+from app.modules.auth.tokens import (
+    InvalidSessionToken,
+    issue_download_token,
+    issue_session_token,
+    read_download_token,
+    read_session_token,
+)
+from app.modules.documents.service import DocumentService
+from app.modules.users.models import User
+
+PDF = b"%PDF-1.7 test"
+
+
+@pytest.fixture
+def api_app(session, monkeypatch):
+    async def fake_generate(self, visit_id):
+        if str(visit_id).startswith("00000000"):
+            raise VisitNotFound()
+        return f"visits/{visit_id}.pdf"
+
+    async def fake_read(self, visit_id):
+        if str(visit_id).startswith("ffffffff"):
+            raise DocumentNotFound()
+        return PDF
+
+    monkeypatch.setattr(DocumentService, "generate_visit_document", fake_generate)
+    monkeypatch.setattr(DocumentService, "get_visit_document", fake_read)
+
+    async def override_get_session():
+        yield session
+
+    app.dependency_overrides[get_session] = override_get_session
+    yield app
+    app.dependency_overrides.clear()
+
+
+async def _call(api_app, method, path, headers=None):
+    async with AsyncClient(transport=ASGITransport(app=api_app), base_url="http://test") as client:
+        return await client.request(method, path, headers=headers or {})
+
+
+@pytest.fixture
+async def users(session):
+    master = User(role=UserRole.MASTER, full_name="Мастер", branch_id=uuid.uuid4())
+    mechanic = User(role=UserRole.MECHANIC, full_name="Механик", branch_id=uuid.uuid4())
+    session.add_all([master, mechanic])
+    await session.flush()
+    return master, mechanic
+
+
+def test_download_token_round_trip_and_expiry():
+    doc = uuid.uuid4()
+    assert read_download_token(issue_download_token(doc)) == doc
+    old = issue_download_token(doc, now=datetime.now(timezone.utc) - timedelta(seconds=301))
+    with pytest.raises(InvalidSessionToken):
+        read_download_token(old)
+
+
+def test_tokens_are_not_interchangeable():
+    doc = uuid.uuid4()
+    with pytest.raises(InvalidSessionToken):
+        read_session_token(issue_download_token(doc))
+    with pytest.raises(InvalidSessionToken):
+        read_download_token(issue_session_token(doc))
+
+
+async def test_link_then_download_without_auth_header(api_app, users):
+    master, _ = users
+    visit_id = uuid.uuid4()
+    resp = await _call(api_app, "POST", f"/visits/{visit_id}/document/link", {"X-User-Id": str(master.id)})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["expires_in"] == 300
+    url = urlparse(body["url"])
+    assert url.path == f"/documents/{visit_id}/download"
+    assert parse_qs(url.query)["token"]
+    file_resp = await _call(api_app, "GET", body["url"])
+    assert file_resp.status_code == 200
+    assert file_resp.content == PDF
+    assert file_resp.headers["content-type"] == "application/pdf"
+    assert file_resp.headers["content-disposition"].startswith("attachment;")
+
+
+async def test_link_forbidden_for_mechanic(api_app, users):
+    _, mechanic = users
+    resp = await _call(api_app, "POST", f"/visits/{uuid.uuid4()}/document/link", {"X-User-Id": str(mechanic.id)})
+    assert resp.status_code == 403
+
+
+async def test_link_unknown_visit_404(api_app, users):
+    master, _ = users
+    resp = await _call(api_app, "POST", f"/visits/{uuid.UUID(int=1)}/document/link", {"X-User-Id": str(master.id)})
+    assert resp.status_code == 404
+
+
+async def test_link_without_secret_503(api_app, users, monkeypatch):
+    master, _ = users
+    monkeypatch.setattr(settings, "session_secret", None)
+    resp = await _call(api_app, "POST", f"/visits/{uuid.uuid4()}/document/link", {"X-User-Id": str(master.id)})
+    assert resp.status_code == 503
+
+
+async def test_download_rejects_bad_tokens(api_app):
+    doc = uuid.uuid4()
+    other = issue_download_token(uuid.uuid4())
+    expired = issue_download_token(doc, now=datetime.now(timezone.utc) - timedelta(seconds=301))
+    session_token = issue_session_token(doc)
+    for token in (other, expired, session_token, "garbage"):
+        resp = await _call(api_app, "GET", f"/documents/{doc}/download?token={token}")
+        assert resp.status_code == 403
+        assert resp.json()["detail"] == "Ссылка устарела, нажмите PDF ещё раз"
+
+
+async def test_download_missing_file_404(api_app):
+    doc = uuid.UUID("ffffffff-0000-0000-0000-000000000000")
+    resp = await _call(api_app, "GET", f"/documents/{doc}/download?token={issue_download_token(doc)}")
+    assert resp.status_code == 404
+```
+
+- [ ] **Step 2: Run to verify failure**
+
+Run: `uv run pytest tests/modules/documents/test_download_link.py -v`
+Expected: FAIL — `ImportError: cannot import name 'issue_download_token'`.
+
+- [ ] **Step 3: Implement tokens**
+
+`app/modules/auth/tokens.py` — append:
+
+```python
+DOWNLOAD_TTL_S = 300
+
+
+def issue_download_token(document_id: uuid.UUID, now: datetime | None = None) -> str:
+    """Signed link token for one document; used where no Authorization header can be sent
+    (Telegram WebApp.downloadFile / openLink)."""
+    if not settings.session_secret:
+        raise SessionNotConfigured
+    now = now or datetime.now(timezone.utc)
+    payload = {
+        "doc": str(document_id),
+        "purpose": "download",
+        "iat": int(now.timestamp()),
+        "exp": int((now + timedelta(seconds=DOWNLOAD_TTL_S)).timestamp()),
+    }
+    return jwt.encode(payload, settings.session_secret, algorithm="HS256")
+
+
+def read_download_token(token: str) -> uuid.UUID:
+    if not settings.session_secret:
+        raise InvalidSessionToken
+    try:
+        payload = jwt.decode(
+            token, settings.session_secret, algorithms=["HS256"], options={"require": ["exp", "doc", "purpose"]}
+        )
+        if payload["purpose"] != "download":
+            raise InvalidSessionToken
+        return uuid.UUID(payload["doc"])
+    except (jwt.PyJWTError, ValueError, KeyError) as e:
+        raise InvalidSessionToken from e
+```
+
+In `read_session_token`, after `jwt.decode(...)` and before returning, reject purpose-scoped tokens:
+
+```python
+        if "purpose" in payload:
+            raise InvalidSessionToken
+        return uuid.UUID(payload["sub"])
+```
+
+(`InvalidSessionToken` raised inside the `try` is not caught by the `except (jwt.PyJWTError, ValueError, KeyError)` clause, so it propagates as is.)
+
+- [ ] **Step 4: Implement endpoints**
+
+`app/modules/documents/router.py` — imports:
+
+```python
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
+
+from app.modules.auth.tokens import (
+    DOWNLOAD_TTL_S,
+    InvalidSessionToken,
+    SessionNotConfigured,
+    issue_download_token,
+    read_download_token,
+)
+```
+
+After `generate_document`:
+
+```python
+@router.post("/link")
+async def create_download_link(
+    visit_id: uuid.UUID,
+    session: AsyncSession = Depends(get_session),
+    acting_user: User = Depends(require_role(UserRole.ADMIN, UserRole.MASTER)),
+):
+    try:
+        token = issue_download_token(visit_id)
+    except SessionNotConfigured:
+        raise HTTPException(503, "SESSION_SECRET не задан")
+    try:
+        await DocumentService(session).generate_visit_document(visit_id)
+    except VisitNotFound:
+        raise HTTPException(404, "Visit not found")
+    await session.commit()
+    return {"url": f"/documents/{visit_id}/download?token={token}", "expires_in": DOWNLOAD_TTL_S}
+```
+
+After `get_document_file`:
+
+```python
+@files_router.get("/{document_id}/download")
+async def download_document(
+    document_id: uuid.UUID,
+    token: str = Query(...),
+    session: AsyncSession = Depends(get_session),
+):
+    """No Authorization header here: the signed token is the permission (one document, 5 minutes)."""
+    try:
+        allowed = read_download_token(token)
+    except InvalidSessionToken:
+        allowed = None
+    if allowed != document_id:
+        raise HTTPException(403, "Ссылка устарела, нажмите PDF ещё раз")
+    try:
+        content = await DocumentService(session).get_visit_document(document_id)
+    except DocumentNotFound:
+        raise HTTPException(404, "Документ не найден")
+    return Response(
+        content=content,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="visit-{document_id}.pdf"'},
+    )
+```
+
+- [ ] **Step 5: Run tests and full suite**
+
+Run: `uv run pytest tests/modules/documents/test_download_link.py tests/modules/auth -v`
+Expected: all pass (download tests 9, auth tests unchanged).
+
+Run: `uv run pytest -q`
+Expected: all pass.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add app/modules/auth/tokens.py app/modules/documents/router.py tests/modules/documents/test_download_link.py
+git commit -m "feat(api): one-time signed PDF download links for the Mini App"
+```
+
+---
+
 ### Task 4: Bot sends `X-Service-Key`; env example
 
 **Files:**
@@ -1619,7 +1905,7 @@ git commit -m "feat(web): scaffold Vite + React + TS app with variant B theme"
   - `class ApiError extends Error { status: number; fields: Record<string, string> }` — `status` 0 = no connection.
   - `onUnauthorized(handler: () => void): void` — called on any 401 (after the token is cleared).
   - `parseErrorBody(body: unknown): { message: string; fields: Record<string, string> }`.
-  - `api.get/post/patch<T>(path, body?)`, `requestBlob(path): Promise<Blob>` — `path` without `/api` prefix, e.g. `'/visits'`.
+  - `api.get/post/patch<T>(path, body?)` — `path` without `/api` prefix, e.g. `'/visits'`.
   - Types (`types.ts`) and endpoint groups (`endpoints.ts`): `authApi`, `visitsApi`, `workItemsApi`, `clientsApi`, `vehiclesApi`, `searchApi`, `usersApi`, `catalogApi`, `consentApi` — exact signatures below; later tasks call only these.
 
 - [ ] **Step 1: Write failing client tests**
@@ -1818,10 +2104,6 @@ export async function request<T>(method: string, path: string, body?: unknown): 
   const res = await send(method, path, body);
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
-}
-
-export async function requestBlob(path: string): Promise<Blob> {
-  return (await send('GET', path)).blob();
 }
 
 export const api = {
@@ -2028,7 +2310,7 @@ export interface UserCreate {
 `web/src/api/endpoints.ts`:
 
 ```ts
-import { api, requestBlob } from './client';
+import { api } from './client';
 import type {
   AuthResponse, CatalogItem, Client, MyWorkItem, PartItem, PartItemCreate, RecentView, SearchHit,
   User, UserCreate, Vehicle, VehicleCreate, Visit, VisitCreate, VisitLines, VisitList, VisitStatus, WorkHistory,
@@ -2053,9 +2335,8 @@ export const visitsApi = {
   create: (body: VisitCreate) => api.post<Visit>('/visits', body),
   changeStatus: (id: string, newStatus: VisitStatus, reason: string | null = null) =>
     api.patch<Visit>(`/visits/${id}/status`, { new_status: newStatus, reason }),
-  generateDocument: (id: string) =>
-    api.post<{ document_id: string; document_url: string }>(`/visits/${id}/document`),
-  documentFile: (documentId: string) => requestBlob(`/documents/${documentId}/file`),
+  /** Signed link (5 min) that downloads the visit's PDF without an Authorization header. */
+  documentLink: (id: string) => api.post<{ url: string; expires_in: number }>(`/visits/${id}/document/link`),
 };
 
 export const workItemsApi = {
@@ -2689,7 +2970,7 @@ git commit -m "feat(web): variant B UI kit — button, card, plate, status tag, 
 **Interfaces:**
 - Consumes: `authApi`, `onUnauthorized`, token functions (Task 6); `homePath`, `ROOT_PATHS`, `STAFF`, `ALL_ROLES`, `ROLE_LABELS` (Task 7); `Button`, `EmptyState`, `ToastProvider` (Task 8).
 - Produces:
-  - `telegram`: `{ isMiniApp(): boolean; initData(): string; init(): void; showBack(onClick: () => void): () => void; haptic(kind: 'success' | 'error'): void }`.
+  - `telegram`: `{ isMiniApp(): boolean; initData(): string; init(): void; showBack(onClick: () => void): () => void; haptic(kind: 'success' | 'error'): void; download(url: string, fileName: string): void }` — `download` uses `WebApp.downloadFile`, else `openLink` in Telegram, else `window.location.assign`.
   - `AuthProvider`, `useAuth(): { status: 'loading' | 'anon' | 'authed'; user: User | null; signIn(r: AuthResponse): void; signOut(): void }`. `signIn`/`signOut` clear the query cache.
   - `RequireAuth` (layout route: redirects to `/login` with `state.from`), `RoleGate({ roles: Role[]; children })`.
   - `useGoBack(): () => void` — `navigate(-1)` if there is in-app history, else to `homePath`.
@@ -2884,6 +3165,9 @@ interface TelegramWebApp {
   setBackgroundColor?(color: string): void;
   BackButton: { show(): void; hide(): void; onClick(cb: () => void): void; offClick(cb: () => void): void };
   HapticFeedback?: { notificationOccurred(kind: 'success' | 'error' | 'warning'): void };
+  openLink(url: string): void;
+  /** Bot API 8.0+; older clients lack it. */
+  downloadFile?(params: { url: string; file_name: string }): void;
 }
 
 function webApp(): TelegramWebApp | null {
@@ -2914,6 +3198,13 @@ export const telegram = {
   },
   haptic(kind: 'success' | 'error'): void {
     webApp()?.HapticFeedback?.notificationOccurred(kind);
+  },
+  /** Save a file from a URL that needs no Authorization header (e.g. a signed PDF link). */
+  download(url: string, fileName: string): void {
+    const app = webApp();
+    if (app?.downloadFile) app.downloadFile({ url, file_name: fileName });
+    else if (app) app.openLink(url);
+    else window.location.assign(url);
   },
 };
 ```
@@ -3639,7 +3930,7 @@ git commit -m "feat(web): active visits screen with filters"
 - Modify: `web/src/routes.tsx` (route `/visits/:visitId`), `web/src/theme.css` (append)
 
 **Interfaces:**
-- Consumes: `visitsApi.get/lines/changeStatus/generateDocument/documentFile` (`lines` from Task 3b), `useAction`, `telegram.isMiniApp`, labels, `formatRub`, `formatKm`.
+- Consumes: `visitsApi.get/lines/changeStatus/documentLink` (`lines` — Task 3b, `documentLink` — Task 3c), `useAction`, `telegram.download`, labels, `formatRub`, `formatKm`.
 - Produces: query keys `['visit', visitId]`, `['visitLines', visitId]` (actions that change works, parts or totals invalidate it); `CancelVisitSheet({ visitId: string; open: boolean; onClose: () => void })`.
 
 - [ ] **Step 1: Write failing tests**
@@ -3649,6 +3940,7 @@ git commit -m "feat(web): active visits screen with filters"
 ```tsx
 import { screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
+import { telegram } from '../telegram/webapp';
 import { makeVisit, makeWorkLine, mockVisitPage } from '../test/fixtures';
 import { renderApp } from '../test/render';
 import { server } from '../test/server';
@@ -3727,14 +4019,41 @@ test('unknown visit shows not found', async () => {
   expect(await screen.findByText('Заезд не найден')).toBeInTheDocument();
 });
 
-test('PDF in Mini App explains where to get it', async () => {
+function mockPdfLink() {
+  server.use(http.post('/api/visits/v1/document/link', () =>
+    HttpResponse.json({ url: '/documents/v1/download?token=abc', expires_in: 300 })));
+}
+
+test('PDF in Mini App downloads through Telegram with the signed link', async () => {
+  const downloadFile = vi.fn();
   (window as { Telegram?: unknown }).Telegram = {
-    WebApp: { initData: 'x', ready: vi.fn(), expand: vi.fn(), BackButton: { show: vi.fn(), hide: vi.fn(), onClick: vi.fn(), offClick: vi.fn() } },
+    WebApp: {
+      initData: 'x', ready: vi.fn(), expand: vi.fn(), openLink: vi.fn(), downloadFile,
+      BackButton: { show: vi.fn(), hide: vi.fn(), onClick: vi.fn(), offClick: vi.fn() },
+    },
   };
   mockVisitPage();
+  mockPdfLink();
   const { user } = renderApp('/visits/v1', { as: 'master' });
   await user.click(await screen.findByRole('button', { name: 'PDF' }));
-  expect(screen.getByText('PDF доступен в боте или в браузере')).toBeInTheDocument();
+  await waitFor(() =>
+    expect(downloadFile).toHaveBeenCalledWith({
+      url: `${window.location.origin}/api/documents/v1/download?token=abc`,
+      file_name: 'zakaz-naryad-А123ВС77.pdf',
+    }),
+  );
+});
+
+test('PDF in a browser starts a plain download of the signed link', async () => {
+  const download = vi.spyOn(telegram, 'download').mockImplementation(() => {});
+  mockVisitPage();
+  mockPdfLink();
+  const { user } = renderApp('/visits/v1', { as: 'master' });
+  await user.click(await screen.findByRole('button', { name: 'PDF' }));
+  await waitFor(() =>
+    expect(download).toHaveBeenCalledWith(`${window.location.origin}/api/documents/v1/download?token=abc`, 'zakaz-naryad-А123ВС77.pdf'),
+  );
+  download.mockRestore();
 });
 ```
 
@@ -3805,11 +4124,9 @@ import { Plate } from '../ui/Plate';
 import { ScreenHeader } from '../ui/ScreenHeader';
 import { Sheet } from '../ui/Sheet';
 import { StatusTag } from '../ui/StatusTag';
-import { useToast } from '../ui/Toast';
 
 export function VisitScreen() {
   const { visitId = '' } = useParams();
-  const toast = useToast();
   const visit = useQuery({ queryKey: ['visit', visitId], queryFn: () => visitsApi.get(visitId) });
   const lines = useQuery({ queryKey: ['visitLines', visitId], queryFn: () => visitsApi.lines(visitId) });
   const [statusOpen, setStatusOpen] = useState(false);
@@ -3818,19 +4135,10 @@ export function VisitScreen() {
     invalidate: [['visit', visitId], ['visits']],
     onSuccess: () => setStatusOpen(false),
   });
-  const pdf = useAction(async () => {
-    const doc = await visitsApi.generateDocument(visitId);
-    const blob = await visitsApi.documentFile(doc.document_id);
-    window.open(URL.createObjectURL(blob), '_blank');
+  const pdf = useAction(() => visitsApi.documentLink(visitId), {
+    onSuccess: ({ url }) =>
+      telegram.download(`${window.location.origin}/api${url}`, `zakaz-naryad-${visit.data?.plate_number ?? visitId}.pdf`),
   });
-
-  function openPdf() {
-    if (telegram.isMiniApp()) {
-      toast.show('PDF доступен в боте или в браузере');
-      return;
-    }
-    pdf.mutate();
-  }
 
   return (
     <>
@@ -3887,7 +4195,7 @@ export function VisitScreen() {
             </Loadable>
             <div className="actions">
               <Link className="btn" to={`/visits/${visitId}/works/new`}>+ Работа</Link>
-              <Button onClick={openPdf} busy={pdf.isPending}>PDF</Button>
+              <Button onClick={() => pdf.mutate()} busy={pdf.isPending}>PDF</Button>
               <Button variant="primary" className="span-2" disabled={v.allowed_next_statuses.length === 0} onClick={() => setStatusOpen(true)}>
                 Сменить статус
               </Button>
@@ -5761,6 +6069,30 @@ test('back keeps typed values', async () => {
   expect(screen.getByLabelText('Телефон или ФИО клиента')).toHaveValue('Петров');
 });
 
+test('wizard is full screen; Отмена asks before dropping the draft', async () => {
+  mockClientSearch();
+  const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+  const { user } = renderApp('/visits/new', { as: 'master' });
+  await user.type(await screen.findByLabelText('Телефон или ФИО клиента'), 'Петров');
+  expect(screen.queryByRole('navigation', { name: 'Разделы' })).not.toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: 'Отмена' }));
+  expect(confirm).toHaveBeenCalledWith('Прервать новый заезд?');
+  expect(screen.getByTestId('location')).toHaveTextContent(/^\/visits\/new$/);
+  confirm.mockReturnValue(true);
+  await user.click(screen.getByRole('button', { name: 'Отмена' }));
+  await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent(/^\/visits$/));
+  confirm.mockRestore();
+});
+
+test('Отмена on an untouched wizard leaves without asking', async () => {
+  const confirm = vi.spyOn(window, 'confirm');
+  const { user } = renderApp('/visits/new', { as: 'master' });
+  await user.click(await screen.findByRole('button', { name: 'Отмена' }));
+  await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent(/^\/visits$/));
+  expect(confirm).not.toHaveBeenCalled();
+  confirm.mockRestore();
+});
+
 test('vehicle_id preset starts at mileage', async () => {
   server.use(
     http.get('/api/vehicles/veh1', () => HttpResponse.json(VEHICLE)),
@@ -5882,11 +6214,26 @@ export function NewVisitWizard() {
     setStep(next);
   }
 
+  const dirty = client !== null || clientQuery.trim() !== '' || mileage !== '';
+
+  useEffect(() => {
+    if (!dirty) return;
+    const onUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', onUnload);
+    return () => window.removeEventListener('beforeunload', onUnload);
+  }, [dirty]);
+
+  function leave() {
+    if (dirty && !window.confirm('Прервать новый заезд?')) return;
+    goBack();
+  }
+
   function back() {
     if (history.length === 0) {
-      const dirty = client !== null || clientQuery.trim() !== '' || mileage !== '';
-      if (dirty && !window.confirm('Прервать новый заезд?')) return;
-      goBack();
+      leave();
       return;
     }
     setStep(history[history.length - 1]);
@@ -5978,7 +6325,7 @@ export function NewVisitWizard() {
 
   return (
     <>
-      <ScreenHeader title="Новый заезд" back onBack={back} />
+      <ScreenHeader title="Новый заезд" back onBack={back} right={<Button variant="ghost" onClick={leave}>Отмена</Button>} />
       <p className="wizard-step">
         {STEP_TITLES[step]}
         {client && step !== 'client' && step !== 'client_new' ? ` · ${client.full_name}` : ''}
@@ -6101,10 +6448,47 @@ export function ScreenHeader({ title, back = false, onBack, right }: { title: st
 }
 ```
 
-`web/src/lib/roles.ts` — the wizard owns the Telegram BackButton on its route, so the layout must not register a second handler. Change:
+`web/src/lib/roles.ts` — the wizard owns the Telegram BackButton on its route, so the layout must not register a second handler; and the wizard is full screen (no tab bar, so a tap on a tab cannot silently drop the draft). Change / add:
 
 ```ts
 export const ROOT_PATHS = ['/visits', '/visits/new', '/my', '/search', '/more'];
+/** Screens without the tab bar: leaving them goes through their own Cancel/Back. */
+export const FULLSCREEN_PATHS = ['/visits/new'];
+```
+
+`web/src/ui/Layout.tsx` — hide the tab bar on full-screen routes:
+
+```tsx
+import { useEffect } from 'react';
+import { Outlet, useLocation } from 'react-router-dom';
+import { FULLSCREEN_PATHS, ROOT_PATHS } from '../lib/roles';
+import { useGoBack } from '../lib/useGoBack';
+import { telegram } from '../telegram/webapp';
+import { TabBar } from './TabBar';
+
+export function Layout() {
+  const { pathname } = useLocation();
+  const goBack = useGoBack();
+  const fullscreen = FULLSCREEN_PATHS.includes(pathname);
+  useEffect(() => {
+    if (ROOT_PATHS.includes(pathname)) return;
+    return telegram.showBack(goBack);
+  }, [pathname, goBack]);
+  return (
+    <div className={fullscreen ? 'app app-full' : 'app'}>
+      <main className="app-main">
+        <Outlet />
+      </main>
+      {!fullscreen && <TabBar />}
+    </div>
+  );
+}
+```
+
+`web/src/theme.css` — append:
+
+```css
+.app-full { padding-bottom: env(safe-area-inset-bottom, 0px); }
 ```
 
 `web/src/routes.tsx` — import; replace `/visits/new` element with `<RoleGate roles={STAFF}><NewVisitWizard /></RoleGate>`.
@@ -6194,5 +6578,6 @@ git commit -m "docs: web/Mini App run instructions; remove placeholder screen"
 
 - Priced lines (added after review with the user) → Task 3b (API) + Task 11 (card).
 - Spec §2 auth → Tasks 1–2; §2 bot key → Task 4; §3 statuses → Task 3; §4 screens → Tasks 10–14, 16; forms → 15–17; Telegram → Task 9 (`telegram`, BackButton, haptic) and 17 (wizard back); §5 errors → `client.ts`, `Loadable`, `useAction`, `formErrors`; §6 tests → per task; §7 rollout → Task 4 (`.env.example`) and Task 18 (README).
-- Deviations from spec are listed at the top (SDK, priced lines via new endpoint, PDF in Mini App, computed field scope).
-- Leaving the wizard: confirm only on Back at the first step (no router blocker — `BrowserRouter` has no `useBlocker`); switching tabs drops the draft silently. Acceptable for this cycle.
+- Deviations from spec are listed at the top (SDK, priced lines via new endpoint, PDF via signed link, computed field scope, full-screen wizard).
+- Leaving the wizard: it is full screen (no tab bar); «Отмена» and Back at the first step confirm when there is input; closing the browser tab triggers `beforeunload`. No router blocker needed.
+- PDF (decided with the user): signed one-document link, 5 minutes → Task 3c (API) + Task 11 (`telegram.download`).
