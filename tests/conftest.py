@@ -37,3 +37,10 @@ async def session(engine) -> AsyncSession:
         yield s
     await trans.rollback()
     await connection.close()
+
+
+@pytest.fixture(autouse=True)
+def _auth_settings(monkeypatch):
+    monkeypatch.setattr(settings, "session_secret", "test-session-secret")
+    monkeypatch.setattr(settings, "internal_api_key", None)
+    monkeypatch.setattr(settings, "dev_login", False)

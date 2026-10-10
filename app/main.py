@@ -1,5 +1,8 @@
+import logging
+
 from fastapi import FastAPI
 
+from app.core.config import settings
 from app.core.logging import install_access_log_filter
 
 from app.modules.users.router import router as users_router
@@ -17,6 +20,9 @@ from app.modules.documents.router import files_router as document_files_router
 from app.modules.documents.router import router as documents_router
 
 install_access_log_filter()
+
+if not settings.internal_api_key:
+    logging.getLogger(__name__).warning("INTERNAL_API_KEY не задан: X-User-Id принимается без сервисного ключа")
 
 app = FastAPI(title="CRM Backend")
 
