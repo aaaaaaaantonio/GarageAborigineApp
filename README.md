@@ -330,3 +330,25 @@ sudo rm -f /run/docker.sock
 sudo systemctl reset-failed docker.service docker.socket
 sudo systemctl start docker.socket docker.service
 ```
+
+## Веб / Telegram Mini App
+
+Фронтенд — `web/` (React + Vite). Тонкий клиент к тому же API, что и бот.
+
+Локальный запуск:
+
+1. В `.env`: `SESSION_SECRET=<случайная строка>`, `DEV_LOGIN=true`.
+2. `docker compose up -d --build api` — API на `http://localhost:8000`.
+3. `cd web && npm install && npm run dev` — открыть `http://localhost:5173`,
+   в DevTools включить режим устройства (ширина 390px). Вход — выбор сотрудника
+   (работает только при `DEV_LOGIN=true`).
+
+Тесты: `cd web && npm test`.
+
+Сервисный ключ бота: задать `INTERNAL_API_KEY` в `.env` и пересобрать
+`docker compose up -d --build api bot` — после этого API принимает `X-User-Id`
+только от бота.
+
+Mini App без домена: `cloudflared tunnel --url http://localhost:5173` даёт
+HTTPS-адрес; его ставят кнопке меню бота в BotFather. В Mini App вход
+автоматический (Telegram `initData`), `DEV_LOGIN` не нужен.
