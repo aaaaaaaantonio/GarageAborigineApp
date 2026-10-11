@@ -4,9 +4,13 @@ import { RequireAuth } from './auth/RequireAuth';
 import { RoleGate } from './auth/RoleGate';
 import { AddPartForm } from './forms/AddPartForm';
 import { AddWorkForm } from './forms/AddWorkForm';
+import { NewClientRoute, NewVehicleRoute } from './forms/entryRoutes';
+import { PaperConsentForm } from './forms/PaperConsentForm';
+import { StaffForm } from './forms/StaffForm';
 import { ALL_ROLES, STAFF, homePath } from './lib/roles';
 import { ClientScreen } from './screens/ClientScreen';
 import { LoginScreen } from './screens/LoginScreen';
+import { MoreScreen } from './screens/MoreScreen';
 import { MyWorksScreen } from './screens/MyWorksScreen';
 import { Placeholder } from './screens/Placeholder';
 import { SearchScreen } from './screens/SearchScreen';
@@ -33,13 +37,13 @@ export function AppRoutes() {
         <Route path="/visits/:visitId/works/:itemId/parts/new" element={<RoleGate roles={STAFF}><AddPartForm /></RoleGate>} />
         <Route path="/my" element={<RoleGate roles={['mechanic']}><MyWorksScreen /></RoleGate>} />
         <Route path="/search" element={<RoleGate roles={ALL_ROLES}><SearchScreen /></RoleGate>} />
-        <Route path="/clients/new" element={<RoleGate roles={STAFF}><Placeholder title="Новый клиент" /></RoleGate>} />
+        <Route path="/clients/new" element={<RoleGate roles={STAFF}><NewClientRoute /></RoleGate>} />
         <Route path="/clients/:clientId" element={<RoleGate roles={STAFF}><ClientScreen /></RoleGate>} />
-        <Route path="/vehicles/new" element={<RoleGate roles={STAFF}><Placeholder title="Новая машина" /></RoleGate>} />
+        <Route path="/vehicles/new" element={<RoleGate roles={STAFF}><NewVehicleRoute /></RoleGate>} />
         <Route path="/vehicles/:vehicleId" element={<RoleGate roles={ALL_ROLES}><VehicleScreen /></RoleGate>} />
-        <Route path="/more" element={<RoleGate roles={STAFF}><Placeholder title="Ещё" /></RoleGate>} />
-        <Route path="/consent/paper" element={<RoleGate roles={STAFF}><Placeholder title="Бумажное согласие" /></RoleGate>} />
-        <Route path="/staff/new" element={<RoleGate roles={['admin']}><Placeholder title="Новый сотрудник" /></RoleGate>} />
+        <Route path="/more" element={<RoleGate roles={STAFF}><MoreScreen /></RoleGate>} />
+        <Route path="/consent/paper" element={<RoleGate roles={STAFF}><PaperConsentForm /></RoleGate>} />
+        <Route path="/staff/new" element={<RoleGate roles={['admin']}><StaffForm /></RoleGate>} />
         <Route path="*" element={<HomeRedirect />} />
       </Route>
     </Routes>
