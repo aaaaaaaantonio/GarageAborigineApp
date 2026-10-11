@@ -7,6 +7,7 @@ import { LoginScreen } from './screens/LoginScreen';
 import { Placeholder } from './screens/Placeholder';
 import { VisitsScreen } from './screens/VisitsScreen';
 import { VisitScreen } from './screens/VisitScreen';
+import { WorkScreen } from './screens/WorkScreen';
 
 function HomeRedirect() {
   const { user } = useAuth();
@@ -22,7 +23,7 @@ export function AppRoutes() {
         <Route path="/visits/new" element={<RoleGate roles={STAFF}><Placeholder title="Новый заезд" /></RoleGate>} />
         <Route path="/visits/:visitId" element={<RoleGate roles={STAFF}><VisitScreen /></RoleGate>} />
         <Route path="/visits/:visitId/works/new" element={<RoleGate roles={STAFF}><Placeholder title="Новая работа" /></RoleGate>} />
-        <Route path="/visits/:visitId/works/:itemId" element={<RoleGate roles={ALL_ROLES}><Placeholder title="Работа" /></RoleGate>} />
+        <Route path="/visits/:visitId/works/:itemId" element={<RoleGate roles={ALL_ROLES}><WorkScreen /></RoleGate>} />
         <Route path="/visits/:visitId/works/:itemId/parts/new" element={<RoleGate roles={STAFF}><Placeholder title="Запчасть" /></RoleGate>} />
         <Route path="/my" element={<RoleGate roles={['mechanic']}><Placeholder title="Мои работы" /></RoleGate>} />
         <Route path="/search" element={<RoleGate roles={ALL_ROLES}><Placeholder title="Поиск" /></RoleGate>} />
