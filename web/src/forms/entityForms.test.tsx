@@ -113,3 +113,35 @@ test('more: staff link only for admin; sign out returns to login', async () => {
   await user.click(screen.getByRole('button', { name: 'Выйти' }));
   await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/login'));
 });
+
+test('retry after owner attach failure does not re-create the vehicle', async () => {
+  const posts = vi.fn();
+  let attaches = 0;
+  server.use(
+    http.post('/api/vehicles', () => {
+      posts();
+      return HttpResponse.json(VEHICLE, { status: 201 });
+    }),
+    http.post('/api/vehicles/veh1/owners', () => {
+      attaches += 1;
+      return attaches === 1
+        ? HttpResponse.json({ detail: 'Не удалось привязать владельца' }, { status: 500 })
+        : HttpResponse.json({ id: 'o1' }, { status: 201 });
+    }),
+    http.get('/api/vehicles/veh1', () => HttpResponse.json(VEHICLE)),
+    http.get('/api/vehicles/veh1/owner', () => HttpResponse.json(CLIENT)),
+    http.get('/api/vehicles/veh1/work-history', () => HttpResponse.json({ items: [], has_more: false })),
+    http.get('/api/visits', () => HttpResponse.json({ items: [], has_more: false })),
+  );
+  const { user } = renderApp('/vehicles/new?client_id=c1', { as: 'master' });
+  await user.type(await screen.findByLabelText('VIN или номер кузова'), 'JTDBR32E720012345');
+  await user.type(screen.getByLabelText('Госномер'), 'А123ВС77');
+  await user.type(screen.getByLabelText('Марка'), 'Toyota');
+  await user.type(screen.getByLabelText('Модель'), 'Camry');
+  await user.click(screen.getByRole('button', { name: 'Добавить автомобиль' }));
+  expect(await screen.findByRole('alert')).toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: 'Добавить автомобиль' }));
+  await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/vehicles/veh1'));
+  expect(posts).toHaveBeenCalledTimes(1);
+  expect(attaches).toBe(2);
+});

@@ -1,5 +1,5 @@
 import { useMutation } from '@tanstack/react-query';
-import { useState, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
 import { vehiclesApi } from '../api/endpoints';
 import type { Vehicle } from '../api/types';
 import {
@@ -23,11 +23,15 @@ export function VehicleForm({ clientId, initialQuery = '', submitLabel = 'Доб
   const [make, setMake] = useState('');
   const [model, setModel] = useState('');
   const [errors, setErrors] = useState<FormErrors>(NO_ERRORS);
+  const createdRef = useRef<Vehicle | null>(null);
   const save = useMutation({
     mutationFn: async () => {
-      const vehicle = await vehiclesApi.create({
-        vin: normalizeVin(vin), plate_number: normalizePlate(plate), make: make.trim(), model: model.trim(),
-      });
+      if (!createdRef.current) {
+        createdRef.current = await vehiclesApi.create({
+          vin: normalizeVin(vin), plate_number: normalizePlate(plate), make: make.trim(), model: model.trim(),
+        });
+      }
+      const vehicle = createdRef.current;
       if (clientId) await vehiclesApi.attachOwner(vehicle.id, clientId);
       return vehicle;
     },
