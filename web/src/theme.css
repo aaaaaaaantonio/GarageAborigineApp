@@ -102,3 +102,11 @@ button { font: inherit; color: inherit; }
 .toast button { border: 0; background: none; color: #1d2024; font-weight: 700; min-height: 36px; cursor: pointer; }
 
 .wizard-step { font-size: 13px; color: var(--hint); margin: 0 4px 10px; }
+
+.visit-car { font-size: 20px; font-weight: 700; }
+.work-line { border-bottom: 1px solid var(--line); }
+.work-line:last-child { border-bottom: 0; }
+.work-line .list-row { border-bottom: 0; }
+.part-row { display: flex; justify-content: space-between; gap: 8px; padding: 0 0 8px 36px; font-size: 13px; }
+.span-2 { grid-column: 1 / -1; }
+.block { display: block; }
