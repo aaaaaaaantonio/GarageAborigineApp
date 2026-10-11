@@ -350,13 +350,14 @@ sudo systemctl start docker.socket docker.service
 `docker compose up -d --build api bot` — после этого API принимает `X-User-Id`
 только от бота.
 
+**Внимание:** перед запуском туннеля (и любой другой публикацией dev-сервера)
+выставьте `DEV_LOGIN=false` и задайте `INTERNAL_API_KEY` в `.env`, затем
+пересоберите api и бота (`docker compose up -d --build api bot`). Иначе
+`/auth/dev-users` и `/auth/dev-login` доступны всем, у кого есть ссылка, а без
+`INTERNAL_API_KEY` любой может действовать как сотрудник, передав заголовок
+`X-User-Id`. Для входа через `initData` в `.env` должны быть заданы
+`TELEGRAM_BOT_TOKEN` и `SESSION_SECRET`, иначе `/auth/telegram` отвечает 503.
+
 Mini App без домена: `cloudflared tunnel --url http://localhost:5173` даёт
 HTTPS-адрес; его ставят кнопке меню бота в BotFather. В Mini App вход
 автоматический (Telegram `initData`), `DEV_LOGIN` не нужен.
-
-**Внимание:** перед запуском туннеля (и любой другой публикацией dev-сервера)
-выставьте `DEV_LOGIN=false` и пересоберите/перезапустите api
-(`docker compose up -d --build api`). Иначе `/auth/dev-users` и
-`/auth/dev-login` доступны всем, у кого есть ссылка, и любой сможет войти как
-любой сотрудник. Для входа через `initData` в `.env` должны быть заданы
-`TELEGRAM_BOT_TOKEN` и `SESSION_SECRET`, иначе `/auth/telegram` отвечает 503.
