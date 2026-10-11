@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { visitsApi } from '../api/endpoints';
 import { useAction } from '../lib/useAction';
 import { Button } from '../ui/Button';
@@ -8,6 +8,12 @@ import { Sheet } from '../ui/Sheet';
 export function CancelVisitSheet({ visitId, open, onClose }: { visitId: string; open: boolean; onClose: () => void }) {
   const [reason, setReason] = useState('');
   const [error, setError] = useState('');
+  useEffect(() => {
+    if (!open) {
+      setReason('');
+      setError('');
+    }
+  }, [open]);
   const cancel = useAction(() => visitsApi.changeStatus(visitId, 'cancelled', reason.trim()), {
     invalidate: [['visit', visitId], ['visits']],
     onSuccess: onClose,

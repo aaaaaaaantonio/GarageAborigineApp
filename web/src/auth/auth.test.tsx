@@ -95,3 +95,15 @@ test('stored but rejected token falls back to login', async () => {
   await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/login'));
   expect(getToken()).toBeNull();
 });
+
+test('server error on startup keeps the token, offers retry and recovers', async () => {
+  setToken('good');
+  let calls = 0;
+  server.use(http.get('/api/auth/me', () => (++calls === 1 ? HttpResponse.json({}, { status: 503 }) : HttpResponse.json(USERS.master))));
+  const { user } = renderApp('/visits');
+  expect(await screen.findByText('Нет связи с сервером')).toBeInTheDocument();
+  expect(getToken()).toBe('good');
+  await user.click(screen.getByRole('button', { name: 'Повторить' }));
+  await waitFor(() => expect(screen.getByRole('link', { name: /Заезды/ })).toBeInTheDocument());
+  expect(screen.getByTestId('location')).toHaveTextContent('/visits');
+});

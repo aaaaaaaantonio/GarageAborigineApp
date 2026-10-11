@@ -9,7 +9,8 @@ interface TelegramWebApp {
   BackButton: { show(): void; hide(): void; onClick(cb: () => void): void; offClick(cb: () => void): void };
   HapticFeedback?: { notificationOccurred(kind: 'success' | 'error' | 'warning'): void };
   openLink(url: string): void;
-  /** Bot API 8.0+; older clients lack it. */
+  isVersionAtLeast?(version: string): boolean;
+  /** Bot API 8.0+; older clients lack it (and throw WebAppMethodUnsupported when it is called). */
   downloadFile?(params: { url: string; file_name: string }): void;
 }
 
@@ -45,7 +46,7 @@ export const telegram = {
   /** Save a file from a URL that needs no Authorization header (e.g. a signed PDF link). */
   download(url: string, fileName: string): void {
     const app = webApp();
-    if (app?.downloadFile) app.downloadFile({ url, file_name: fileName });
+    if (app?.downloadFile && app.isVersionAtLeast?.('8.0') !== false) app.downloadFile({ url, file_name: fileName });
     else if (app) app.openLink(url);
     else window.location.assign(url);
   },

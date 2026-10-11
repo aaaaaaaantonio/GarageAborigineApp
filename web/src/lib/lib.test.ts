@@ -32,6 +32,14 @@ test('format', () => {
   expect(formatKm(120500)).toBe('120 500 км');
   expect(formatDate('2026-10-10T09:30:00Z')).toBe('10.10.2026');
 });
+test('formatDate shows the local calendar date', () => {
+  vi.stubEnv('TZ', 'Europe/Moscow'); // UTC+3: 22:30Z is already the next day
+  try {
+    expect(formatDate('2026-10-10T22:30:00Z')).toBe('11.10.2026');
+  } finally {
+    vi.unstubAllEnvs();
+  }
+});
 test('labels and roles', () => {
   expect(WORK_STATUS_ICONS.waiting_parts).toBe('📦');
   expect(homePath('mechanic')).toBe('/my');

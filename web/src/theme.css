@@ -65,7 +65,7 @@ button { font: inherit; color: inherit; }
 .tag-neutral { background: rgba(184,189,196,.14); color: var(--tone-neutral); }
 
 .chips { display: flex; gap: 6px; flex-wrap: wrap; padding: 0 0 12px; }
-.chip { min-height: 36px; border: 1px solid var(--line); color: var(--hint); background: none; padding: 6px 12px; border-radius: 8px; font-size: 13px; cursor: pointer; }
+.chip { min-height: 44px; border: 1px solid var(--line); color: var(--hint); background: none; padding: 6px 12px; border-radius: 8px; font-size: 13px; cursor: pointer; }
 .chip[aria-pressed="true"] { border-color: var(--amber); color: var(--amber); }
 
 .field { display: grid; gap: 6px; }
@@ -99,7 +99,7 @@ button { font: inherit; color: inherit; }
 
 .toasts { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(var(--tabbar-h) + 12px); width: calc(100% - 28px); max-width: 402px; display: grid; gap: 8px; z-index: 30; }
 .toast { background: #f1efe9; color: #1d2024; border-radius: 12px; padding: 10px 12px; display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: 14px; }
-.toast button { border: 0; background: none; color: #1d2024; font-weight: 700; min-height: 36px; cursor: pointer; }
+.toast button { border: 0; background: none; color: #1d2024; font-weight: 700; min-height: 44px; cursor: pointer; }
 
 .wizard-step { font-size: 13px; color: var(--hint); margin: 0 4px 10px; }
 

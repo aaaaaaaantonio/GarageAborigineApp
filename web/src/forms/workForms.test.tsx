@@ -75,6 +75,7 @@ test('add part posts and returns to the work', async () => {
       return HttpResponse.json({ id: 'p1', name: 'Фильтр', quantity: 2, unit_price: 450.5 }, { status: 201 });
     }),
     http.get('/api/visits/v1/work-items', () => HttpResponse.json([makeWorkItem()])),
+    http.get('/api/visits/v1/lines', () => HttpResponse.json({ works: [], works_total: 0, parts_total: 0, discount: 0, total: 0 })),
   );
   const { user } = renderApp('/visits/v1/works/w1/parts/new', { as: 'master' });
   await user.type(await screen.findByLabelText('Название'), 'Фильтр');

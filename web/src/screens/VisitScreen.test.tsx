@@ -72,6 +72,22 @@ test('cancel asks for a reason', async () => {
   await waitFor(() => expect(body).toEqual({ new_status: 'cancelled', reason: 'Клиент передумал' }));
 });
 
+test('cancel sheet forgets the reason and error after it is closed', async () => {
+  mockVisitPage();
+  const { user } = renderApp('/visits/v1', { as: 'master' });
+  await user.click(await screen.findByRole('button', { name: 'Сменить статус' }));
+  await user.click(screen.getByRole('button', { name: 'Отменён' }));
+  let sheet = screen.getByRole('dialog', { name: 'Отменить заезд' });
+  await user.click(within(sheet).getByRole('button', { name: 'Отменить заезд' }));
+  await user.type(within(sheet).getByLabelText('Причина отмены'), 'Передумал');
+  await user.click(within(sheet).getByRole('button', { name: 'Закрыть' }));
+  await user.click(await screen.findByRole('button', { name: 'Сменить статус' }));
+  await user.click(screen.getByRole('button', { name: 'Отменён' }));
+  sheet = screen.getByRole('dialog', { name: 'Отменить заезд' });
+  expect(within(sheet).getByLabelText('Причина отмены')).toHaveValue('');
+  expect(within(sheet).queryByText('Укажите причину')).not.toBeInTheDocument();
+});
+
 test('unknown visit shows not found', async () => {
   server.use(http.get('/api/visits/nope', () => HttpResponse.json({ detail: 'Visit not found' }, { status: 404 })),
     http.get('/api/visits/nope/lines', () => HttpResponse.json({ detail: 'Visit not found' }, { status: 404 })));
