@@ -5,6 +5,7 @@ import { RoleGate } from './auth/RoleGate';
 import { ALL_ROLES, STAFF, homePath } from './lib/roles';
 import { LoginScreen } from './screens/LoginScreen';
 import { Placeholder } from './screens/Placeholder';
+import { VisitsScreen } from './screens/VisitsScreen';
 
 function HomeRedirect() {
   const { user } = useAuth();
@@ -16,7 +17,7 @@ export function AppRoutes() {
     <Routes>
       <Route path="/login" element={<LoginScreen />} />
       <Route element={<RequireAuth />}>
-        <Route path="/visits" element={<RoleGate roles={STAFF}><Placeholder title="Заезды в работе" /></RoleGate>} />
+        <Route path="/visits" element={<RoleGate roles={STAFF}><VisitsScreen /></RoleGate>} />
         <Route path="/visits/new" element={<RoleGate roles={STAFF}><Placeholder title="Новый заезд" /></RoleGate>} />
         <Route path="/visits/:visitId" element={<RoleGate roles={STAFF}><Placeholder title="Заезд" /></RoleGate>} />
         <Route path="/visits/:visitId/works/new" element={<RoleGate roles={STAFF}><Placeholder title="Новая работа" /></RoleGate>} />
