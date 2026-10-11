@@ -16,3 +16,10 @@ export function formatDate(iso: string): string {
   const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
   return `${dd}.${mm}.${d.getUTCFullYear()}`;
 }
+
+export function parseNumber(raw: string): number | null {
+  const text = raw.trim().replace(',', '.');
+  if (!text) return null;
+  const n = Number(text);
+  return Number.isFinite(n) ? n : null;
+}

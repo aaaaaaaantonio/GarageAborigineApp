@@ -2,6 +2,8 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { useAuth } from './auth/AuthProvider';
 import { RequireAuth } from './auth/RequireAuth';
 import { RoleGate } from './auth/RoleGate';
+import { AddPartForm } from './forms/AddPartForm';
+import { AddWorkForm } from './forms/AddWorkForm';
 import { ALL_ROLES, STAFF, homePath } from './lib/roles';
 import { ClientScreen } from './screens/ClientScreen';
 import { LoginScreen } from './screens/LoginScreen';
@@ -26,9 +28,9 @@ export function AppRoutes() {
         <Route path="/visits" element={<RoleGate roles={STAFF}><VisitsScreen /></RoleGate>} />
         <Route path="/visits/new" element={<RoleGate roles={STAFF}><Placeholder title="Новый заезд" /></RoleGate>} />
         <Route path="/visits/:visitId" element={<RoleGate roles={STAFF}><VisitScreen /></RoleGate>} />
-        <Route path="/visits/:visitId/works/new" element={<RoleGate roles={STAFF}><Placeholder title="Новая работа" /></RoleGate>} />
+        <Route path="/visits/:visitId/works/new" element={<RoleGate roles={STAFF}><AddWorkForm /></RoleGate>} />
         <Route path="/visits/:visitId/works/:itemId" element={<RoleGate roles={ALL_ROLES}><WorkScreen /></RoleGate>} />
-        <Route path="/visits/:visitId/works/:itemId/parts/new" element={<RoleGate roles={STAFF}><Placeholder title="Запчасть" /></RoleGate>} />
+        <Route path="/visits/:visitId/works/:itemId/parts/new" element={<RoleGate roles={STAFF}><AddPartForm /></RoleGate>} />
         <Route path="/my" element={<RoleGate roles={['mechanic']}><MyWorksScreen /></RoleGate>} />
         <Route path="/search" element={<RoleGate roles={ALL_ROLES}><SearchScreen /></RoleGate>} />
         <Route path="/clients/new" element={<RoleGate roles={STAFF}><Placeholder title="Новый клиент" /></RoleGate>} />
