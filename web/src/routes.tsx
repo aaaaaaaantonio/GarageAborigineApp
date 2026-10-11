@@ -4,6 +4,7 @@ import { RequireAuth } from './auth/RequireAuth';
 import { RoleGate } from './auth/RoleGate';
 import { AddPartForm } from './forms/AddPartForm';
 import { AddWorkForm } from './forms/AddWorkForm';
+import { NewVisitWizard } from './forms/NewVisitWizard';
 import { NewClientRoute, NewVehicleRoute } from './forms/entryRoutes';
 import { PaperConsentForm } from './forms/PaperConsentForm';
 import { StaffForm } from './forms/StaffForm';
@@ -12,7 +13,6 @@ import { ClientScreen } from './screens/ClientScreen';
 import { LoginScreen } from './screens/LoginScreen';
 import { MoreScreen } from './screens/MoreScreen';
 import { MyWorksScreen } from './screens/MyWorksScreen';
-import { Placeholder } from './screens/Placeholder';
 import { SearchScreen } from './screens/SearchScreen';
 import { VehicleScreen } from './screens/VehicleScreen';
 import { VisitsScreen } from './screens/VisitsScreen';
@@ -30,7 +30,7 @@ export function AppRoutes() {
       <Route path="/login" element={<LoginScreen />} />
       <Route element={<RequireAuth />}>
         <Route path="/visits" element={<RoleGate roles={STAFF}><VisitsScreen /></RoleGate>} />
-        <Route path="/visits/new" element={<RoleGate roles={STAFF}><Placeholder title="Новый заезд" /></RoleGate>} />
+        <Route path="/visits/new" element={<RoleGate roles={STAFF}><NewVisitWizard /></RoleGate>} />
         <Route path="/visits/:visitId" element={<RoleGate roles={STAFF}><VisitScreen /></RoleGate>} />
         <Route path="/visits/:visitId/works/new" element={<RoleGate roles={STAFF}><AddWorkForm /></RoleGate>} />
         <Route path="/visits/:visitId/works/:itemId" element={<RoleGate roles={ALL_ROLES}><WorkScreen /></RoleGate>} />

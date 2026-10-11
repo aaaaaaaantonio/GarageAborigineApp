@@ -114,3 +114,5 @@ button { font: inherit; color: inherit; }
 .hit { text-align: left; border: 0; width: 100%; color: inherit; font: inherit; }
 .title { font-size: 18px; }
 .search-field { margin-bottom: 12px; }
+
+.app-full { padding-bottom: env(safe-area-inset-bottom, 0px); }
