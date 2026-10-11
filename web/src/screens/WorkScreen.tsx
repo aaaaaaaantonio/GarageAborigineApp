@@ -1,9 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { usersApi, workItemsApi } from '../api/endpoints';
+import { usersApi, visitsApi, workItemsApi } from '../api/endpoints';
 import type { MyWorkItem, WorkItem, WorkItemStatus } from '../api/types';
 import { useAuth } from '../auth/AuthProvider';
+import { formatRub } from '../lib/format';
 import { WORK_STATUS_ICONS, WORK_STATUS_LABELS } from '../lib/labels';
 import { useAction } from '../lib/useAction';
 import { Button } from '../ui/Button';
@@ -29,6 +30,8 @@ export function WorkScreen() {
     queryKey: isMechanic ? ['myWorks'] : ['workItems', visitId],
     queryFn: () => (isMechanic ? workItemsApi.mine() : workItemsApi.list(visitId)),
   });
+  // Parts only exist inside /lines (staff only; mechanics never see prices).
+  const lines = useQuery({ queryKey: ['visitLines', visitId], queryFn: () => visitsApi.lines(visitId), enabled: !isMechanic });
   const mechanics = useQuery({ queryKey: ['mechanics'], queryFn: usersApi.mechanics, enabled: assignOpen });
   const invalidate = [['workItems', visitId], ['myWorks'], ['visit', visitId], ['visitLines', visitId]];
   const status = useAction((s: WorkItemStatus) => workItemsApi.changeStatus(visitId, itemId, s), { invalidate });
@@ -66,6 +69,23 @@ export function WorkScreen() {
                   </>
                 )}
               </div>
+              {!isMechanic && lines.data && (
+                <>
+                  <h2 className="section-title">Запчасти</h2>
+                  {(lines.data.works.find((x) => x.id === itemId)?.parts ?? []).length === 0 ? (
+                    <p className="hint">Запчастей нет</p>
+                  ) : (
+                    <div className="card">
+                      {lines.data.works.find((x) => x.id === itemId)!.parts.map((p) => (
+                        <div key={p.id} className="part-row hint">
+                          <span>🔩 {p.name} × {p.quantity}</span>
+                          <span className="mono">{formatRub(p.amount)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
               {w.allowed_next_statuses.length > 0 && (
                 <>
                   <h2 className="section-title">Статус</h2>

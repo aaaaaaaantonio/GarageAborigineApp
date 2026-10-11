@@ -1,8 +1,14 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import { delay, http, HttpResponse } from 'msw';
 import { USERS, renderApp } from '../test/render';
-import { makeMyWork, makeWorkItem } from '../test/fixtures';
+import { makeMyWork, makeWorkItem, makeWorkLine } from '../test/fixtures';
 import { server } from '../test/server';
+
+beforeEach(() => {
+  server.use(http.get('/api/visits/v1/lines', () => HttpResponse.json({
+    works: [], works_total: 0, parts_total: 0, discount: 0, total: 0,
+  })));
+});
 
 function staffItem(over = {}) {
   server.use(http.get('/api/visits/v1/work-items', () => HttpResponse.json([makeWorkItem(over)])));
@@ -19,13 +25,30 @@ test('staff sees status steps, approve, part and reassign', async () => {
   expect(screen.getByRole('button', { name: 'Сменить исполнителя' })).toBeInTheDocument();
 });
 
+test('staff sees the parts of this work with quantity and price', async () => {
+  staffItem();
+  server.use(http.get('/api/visits/v1/lines', () => HttpResponse.json({
+    works: [makeWorkLine()], works_total: 1200, parts_total: 450, discount: 0, total: 1650,
+  })));
+  renderApp('/visits/v1/works/w1', { as: 'master' });
+  expect(await screen.findByText(/Фильтр × 1/)).toBeInTheDocument();
+  expect(screen.getByText(/450/)).toBeInTheDocument();
+});
+
 test('mechanic sees only status steps', async () => {
+  const lineCalls: string[] = [];
+  const onStart = ({ request }: { request: Request }) => {
+    if (request.url.includes('/lines')) lineCalls.push(request.url);
+  };
+  server.events.on('request:start', onStart);
   server.use(http.get('/api/work-items/mine', () => HttpResponse.json([makeMyWork()])));
   renderApp('/visits/v1/works/w1', { as: 'mechanic' });
   expect(await screen.findByRole('button', { name: /В работе/ })).toBeInTheDocument();
   expect(screen.getByLabelText('Госномер А123ВС77')).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Согласовано клиентом' })).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Сменить исполнителя' })).not.toBeInTheDocument();
+  server.events.removeListener('request:start', onStart);
+  expect(lineCalls).toEqual([]);
 });
 
 test('status tap sends one PATCH even on double tap', async () => {
