@@ -4,6 +4,7 @@ import { RequireAuth } from './auth/RequireAuth';
 import { RoleGate } from './auth/RoleGate';
 import { ALL_ROLES, STAFF, homePath } from './lib/roles';
 import { LoginScreen } from './screens/LoginScreen';
+import { MyWorksScreen } from './screens/MyWorksScreen';
 import { Placeholder } from './screens/Placeholder';
 import { VisitsScreen } from './screens/VisitsScreen';
 import { VisitScreen } from './screens/VisitScreen';
@@ -25,7 +26,7 @@ export function AppRoutes() {
         <Route path="/visits/:visitId/works/new" element={<RoleGate roles={STAFF}><Placeholder title="Новая работа" /></RoleGate>} />
         <Route path="/visits/:visitId/works/:itemId" element={<RoleGate roles={ALL_ROLES}><WorkScreen /></RoleGate>} />
         <Route path="/visits/:visitId/works/:itemId/parts/new" element={<RoleGate roles={STAFF}><Placeholder title="Запчасть" /></RoleGate>} />
-        <Route path="/my" element={<RoleGate roles={['mechanic']}><Placeholder title="Мои работы" /></RoleGate>} />
+        <Route path="/my" element={<RoleGate roles={['mechanic']}><MyWorksScreen /></RoleGate>} />
         <Route path="/search" element={<RoleGate roles={ALL_ROLES}><Placeholder title="Поиск" /></RoleGate>} />
         <Route path="/clients/new" element={<RoleGate roles={STAFF}><Placeholder title="Новый клиент" /></RoleGate>} />
         <Route path="/clients/:clientId" element={<RoleGate roles={STAFF}><Placeholder title="Клиент" /></RoleGate>} />
