@@ -337,7 +337,8 @@ sudo systemctl start docker.socket docker.service
 
 Локальный запуск:
 
-1. В `.env`: `SESSION_SECRET=<случайная строка>`, `DEV_LOGIN=true`.
+1. В `.env`: `SESSION_SECRET=<случайная строка>`, `DEV_LOGIN=true`
+   (только для локальной работы — никогда в продакшене и не при открытом туннеле).
 2. `docker compose up -d --build api` — API на `http://localhost:8000`.
 3. `cd web && npm install && npm run dev` — открыть `http://localhost:5173`,
    в DevTools включить режим устройства (ширина 390px). Вход — выбор сотрудника
@@ -352,3 +353,10 @@ sudo systemctl start docker.socket docker.service
 Mini App без домена: `cloudflared tunnel --url http://localhost:5173` даёт
 HTTPS-адрес; его ставят кнопке меню бота в BotFather. В Mini App вход
 автоматический (Telegram `initData`), `DEV_LOGIN` не нужен.
+
+**Внимание:** перед запуском туннеля (и любой другой публикацией dev-сервера)
+выставьте `DEV_LOGIN=false` и пересоберите/перезапустите api
+(`docker compose up -d --build api`). Иначе `/auth/dev-users` и
+`/auth/dev-login` доступны всем, у кого есть ссылка, и любой сможет войти как
+любой сотрудник. Для входа через `initData` в `.env` должны быть заданы
+`TELEGRAM_BOT_TOKEN` и `SESSION_SECRET`, иначе `/auth/telegram` отвечает 503.
