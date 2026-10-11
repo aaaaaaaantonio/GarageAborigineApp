@@ -8,7 +8,7 @@ import { useAuth } from '../auth/AuthProvider';
 import { formatKm } from '../lib/format';
 import { useDebounced } from '../lib/useDebounced';
 import { useGoBack } from '../lib/useGoBack';
-import { ClientHit } from '../screens/hits';
+import { ClientHit, VehicleHit } from '../screens/hits';
 import { telegram } from '../telegram/webapp';
 import { Button } from '../ui/Button';
 import { EmptyState } from '../ui/EmptyState';
@@ -31,6 +31,7 @@ const STEP_TITLES: Record<Step, string> = {
   master: 'Шаг 4 · Мастер',
 };
 
+const MAX_MILEAGE = 9_999_999;
 const ROLLBACK_TEXT = 'Пробег меньше последнего зафиксированного. Подтвердите, если он верный, или исправьте.';
 
 export function NewVisitWizard() {
@@ -46,6 +47,7 @@ export function NewVisitWizard() {
   const [step, setStep] = useState<Step>('client');
   const [history, setHistory] = useState<Step[]>([]);
   const [clientQuery, setClientQuery] = useState('');
+  const [vehicleQuery, setVehicleQuery] = useState('');
   const [client, setClient] = useState<Client | null>(null);
   const [vehicle, setVehicle] = useState<Vehicle | null>(null);
   const [mileage, setMileage] = useState('');
@@ -73,9 +75,21 @@ export function NewVisitWizard() {
     };
   }, [presetVehicleId]);
 
-  function go(next: Step, opts: { resetHistory?: boolean } = {}) {
-    setHistory((h) => (opts.resetHistory ? [] : [...h, step]));
+  // A *_new step is a form that has just created its entity: Back must not return to it
+  // (it would create the entity again), so it is not recorded in the history.
+  function go(next: Step) {
+    setHistory((h) => (step === 'client_new' || step === 'vehicle_new' ? h : [...h, step]));
     setStep(next);
+  }
+
+  // Mileage typed for another car must not be saved on this one.
+  function selectVehicle(v: Vehicle) {
+    if (vehicle?.id !== v.id) {
+      setMileage('');
+      setMileageError('');
+      setRollback(false);
+    }
+    setVehicle(v);
   }
 
   const dirty = client !== null || clientQuery.trim() !== '' || mileage !== '';
@@ -115,6 +129,12 @@ export function NewVisitWizard() {
     queryKey: ['search', debouncedQuery],
     queryFn: () => searchApi.search(debouncedQuery),
     enabled: step === 'client' && debouncedQuery.length >= 2,
+  });
+  const debouncedVehicleQuery = useDebounced(vehicleQuery.trim(), 300);
+  const vehicleSearch = useQuery({
+    queryKey: ['search', debouncedVehicleQuery],
+    queryFn: () => searchApi.search(debouncedVehicleQuery),
+    enabled: step === 'vehicle' && debouncedVehicleQuery.length >= 2,
   });
   const clientVehicles = useQuery({
     queryKey: ['clientVehicles', client?.id],
@@ -167,6 +187,10 @@ export function NewVisitWizard() {
       setMileageError('Введите число (пробег в км)');
       return;
     }
+    if (Number(mileage.trim()) > MAX_MILEAGE) {
+      setMileageError('Пробег не больше 9 999 999 км');
+      return;
+    }
     setMileageError('');
     setRollback(false);
     if (isAdmin) {
@@ -185,6 +209,7 @@ export function NewVisitWizard() {
     startCreate({ confirmed: true, masterId: masterId ?? user!.id });
   }
 
+  const vehicleHits = (vehicleSearch.data ?? []).filter((h) => h.entity === 'vehicle');
   const clientHits = (clientSearch.data ?? []).filter((h) => h.entity === 'client');
 
   return (
@@ -213,7 +238,7 @@ export function NewVisitWizard() {
           submitLabel="Создать и продолжить"
           onCreated={(c) => {
             setClient(c);
-            go('vehicle', { resetHistory: true });
+            go('vehicle');
           }}
         />
       )}
@@ -227,7 +252,7 @@ export function NewVisitWizard() {
               ) : (
                 <>
                   {list.map((v) => (
-                    <button key={v.id} type="button" className="card card-link hit" onClick={() => { setVehicle(v); go('mileage'); }}>
+                    <button key={v.id} type="button" className="card card-link hit" onClick={() => { selectVehicle(v); go('mileage'); }}>
                       <div className="row">
                         <Plate value={v.plate_number} />
                         <span>{v.make} {v.model}</span>
@@ -238,6 +263,11 @@ export function NewVisitWizard() {
               )
             }
           </Loadable>
+          <Field label="Госномер или VIN" value={vehicleQuery} onChange={(e) => setVehicleQuery(e.target.value)} autoComplete="off" />
+          {debouncedVehicleQuery.length >= 2 && vehicleSearch.isSuccess && vehicleHits.length === 0 && <EmptyState text="Автомобиль не найден" />}
+          {vehicleHits.map((h) => (
+            <VehicleHit key={h.id} id={h.id} onPick={(v) => { selectVehicle(v); go('mileage'); }} />
+          ))}
           <Button block onClick={() => go('vehicle_new')}>+ Новый автомобиль</Button>
         </div>
       )}
@@ -245,10 +275,12 @@ export function NewVisitWizard() {
       {step === 'vehicle_new' && client && (
         <VehicleForm
           clientId={client.id}
+          initialQuery={vehicleQuery.trim()}
           submitLabel="Создать и продолжить"
           onCreated={(v) => {
-            setVehicle(v);
-            go('mileage', { resetHistory: true });
+            selectVehicle(v);
+            queryClient.invalidateQueries({ queryKey: ['clientVehicles', client.id] });
+            go('mileage');
           }}
         />
       )}
@@ -260,7 +292,7 @@ export function NewVisitWizard() {
             <span>{vehicle.make} {vehicle.model}</span>
           </div>
           <p className="hint">Последний пробег: {formatKm(vehicle.mileage_current)}</p>
-          <Field label="Пробег на приёмке, км" inputMode="numeric" value={mileage} onChange={(e) => setMileage(e.target.value)} error={mileageError} autoFocus />
+          <Field label="Пробег на приёмке, км" inputMode="numeric" value={mileage} onChange={(e) => { setMileage(e.target.value); setRollback(false); }} error={mileageError} autoFocus />
           {rollback && (
             <>
               <p className="form-error" role="alert">{ROLLBACK_TEXT}</p>
