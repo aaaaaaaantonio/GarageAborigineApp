@@ -110,3 +110,7 @@ button { font: inherit; color: inherit; }
 .part-row { display: flex; justify-content: space-between; gap: 8px; padding: 0 0 8px 36px; font-size: 13px; }
 .span-2 { grid-column: 1 / -1; }
 .block { display: block; }
+
+.hit { text-align: left; border: 0; width: 100%; color: inherit; font: inherit; }
+.title { font-size: 18px; }
+.search-field { margin-bottom: 12px; }
