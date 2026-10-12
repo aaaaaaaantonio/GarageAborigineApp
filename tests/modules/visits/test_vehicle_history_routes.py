@@ -17,6 +17,7 @@ from app.modules.visits.schemas import VisitCreate
 from app.modules.visits.service import VisitService
 from app.modules.visits.work_items_schemas import WorkItemCreate
 from app.modules.visits.work_items_service import WORK_HISTORY_LIMIT, WorkItemService
+from tests.helpers import staff_headers
 
 BASE = datetime(2026, 9, 1, 9, 0, tzinfo=timezone.utc)
 
@@ -34,7 +35,7 @@ def api_app(session):
 async def _get(api_app, path, user):
     transport = ASGITransport(app=api_app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        return await client.get(path, headers={"X-User-Id": str(user.id)})
+        return await client.get(path, headers=staff_headers(user.id))
 
 
 async def _world(session):

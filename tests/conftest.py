@@ -4,6 +4,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.core.config import settings
+from tests.helpers import TEST_SERVICE_KEY
 from app.core.models import Base
 import app.modules.users.models  # noqa
 import app.modules.users.audit  # noqa
@@ -37,3 +38,10 @@ async def session(engine) -> AsyncSession:
         yield s
     await trans.rollback()
     await connection.close()
+
+
+@pytest.fixture(autouse=True)
+def _auth_settings(monkeypatch):
+    monkeypatch.setattr(settings, "session_secret", "test-session-secret-0123456789abcdef")
+    monkeypatch.setattr(settings, "internal_api_key", TEST_SERVICE_KEY)
+    monkeypatch.setattr(settings, "dev_login", False)

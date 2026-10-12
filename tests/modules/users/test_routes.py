@@ -8,6 +8,7 @@ from app.core.db import get_session
 from app.core.enums import UserRole
 from app.main import app
 from app.modules.users.models import User
+from tests.helpers import TEST_SERVICE_KEY, staff_headers
 
 
 @pytest.fixture
@@ -35,7 +36,7 @@ async def test_list_mechanics_returns_active_mechanics_sorted_by_name(api_app, s
 
     transport = ASGITransport(app=api_app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        resp = await client.get("/users/mechanics", headers={"X-User-Id": str(master.id)})
+        resp = await client.get("/users/mechanics", headers=staff_headers(master.id))
 
     assert resp.status_code == 200
     assert [u["full_name"] for u in resp.json()] == ["Анна", "Борис"]
@@ -48,7 +49,7 @@ async def test_list_mechanics_forbidden_for_mechanic(api_app, session):
 
     transport = ASGITransport(app=api_app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        resp = await client.get("/users/mechanics", headers={"X-User-Id": str(mechanic.id)})
+        resp = await client.get("/users/mechanics", headers=staff_headers(mechanic.id))
 
     assert resp.status_code == 403
 
@@ -63,7 +64,7 @@ async def test_get_user_by_telegram_supports_ids_above_int32(api_app, session):
 
     transport = ASGITransport(app=api_app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        resp = await client.get(f"/users/by-telegram/{big_id}")
+        resp = await client.get(f"/users/by-telegram/{big_id}", headers={"X-Service-Key": TEST_SERVICE_KEY})
 
     assert resp.status_code == 200
     assert resp.json()["id"] == str(user.id)
@@ -80,7 +81,7 @@ async def test_list_masters_returns_active_masters_sorted_by_name(api_app, sessi
 
     transport = ASGITransport(app=api_app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        resp = await client.get("/users/masters", headers={"X-User-Id": str(admin.id)})
+        resp = await client.get("/users/masters", headers=staff_headers(admin.id))
 
     assert resp.status_code == 200
     assert [u["full_name"] for u in resp.json()] == ["Анна", "Борис"]
@@ -93,6 +94,6 @@ async def test_list_masters_forbidden_for_master(api_app, session):
 
     transport = ASGITransport(app=api_app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        resp = await client.get("/users/masters", headers={"X-User-Id": str(master.id)})
+        resp = await client.get("/users/masters", headers=staff_headers(master.id))
 
     assert resp.status_code == 403

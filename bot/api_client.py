@@ -62,9 +62,12 @@ class ApiClient:
         self.user_id = user_id
 
     def _headers(self) -> dict[str, str]:
-        if self.user_id is None:
-            return {}
-        return {"X-User-Id": str(self.user_id)}
+        headers: dict[str, str] = {}
+        if settings.internal_api_key:
+            headers["X-Service-Key"] = settings.internal_api_key
+        if self.user_id is not None:
+            headers["X-User-Id"] = str(self.user_id)
+        return headers
 
     def _raise_for_status(self, response: httpx.Response) -> None:
         if response.status_code < 400:

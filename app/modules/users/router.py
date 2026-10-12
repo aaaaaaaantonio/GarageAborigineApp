@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_session
 from app.core.enums import UserRole
-from app.modules.users.auth import require_role
+from app.modules.users.auth import require_role, require_service_key
 from app.modules.users.models import User
 from app.modules.users.schemas import UserCreate, UserOut
 from app.modules.users.service import UserService
@@ -50,7 +50,7 @@ async def list_masters(
     return await service.list_masters()
 
 
-@router.get("/by-telegram/{telegram_id}", response_model=UserOut)
+@router.get("/by-telegram/{telegram_id}", response_model=UserOut, dependencies=[Depends(require_service_key)])
 async def get_user_by_telegram(
     telegram_id: int,
     session: AsyncSession = Depends(get_session),

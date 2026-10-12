@@ -7,6 +7,7 @@ from app.core.db import get_session
 from app.core.enums import UserRole
 from app.main import app
 from app.modules.users.models import User
+from tests.helpers import staff_headers
 
 
 @pytest.fixture
@@ -24,7 +25,7 @@ async def test_duplicate_phone_returns_409(api_app, session, path):
     admin = User(role=UserRole.ADMIN, full_name="Админ", branch_id=uuid.uuid4())
     session.add(admin)
     await session.flush()
-    headers = {"X-User-Id": str(admin.id)}
+    headers = staff_headers(admin.id)
 
     transport = ASGITransport(app=api_app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -45,7 +46,7 @@ async def test_invalid_phone_returns_422(api_app, session, path):
     transport = ASGITransport(app=api_app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.post(
-            path, json={"full_name": "Иван", "phone": "12345"}, headers={"X-User-Id": str(admin.id)}
+            path, json={"full_name": "Иван", "phone": "12345"}, headers=staff_headers(admin.id)
         )
 
     assert response.status_code == 422
