@@ -23,7 +23,7 @@ from app.modules.documents.router import router as documents_router
 install_access_log_filter()
 
 if not settings.internal_api_key:
-    logging.getLogger(__name__).warning("INTERNAL_API_KEY не задан: X-User-Id принимается без сервисного ключа")
+    logging.getLogger(__name__).warning("INTERNAL_API_KEY не задан: запросы бота с X-User-Id будут отклоняться (401)")
 
 app = FastAPI(title="CRM Backend")
 

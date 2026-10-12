@@ -16,6 +16,7 @@ from app.modules.visits.schemas import VisitCreate
 from app.modules.visits.service import VisitService
 from app.modules.visits.work_items_schemas import WorkItemCreate
 from app.modules.visits.work_items_service import WorkItemService
+from tests.helpers import staff_headers
 
 
 async def test_generate_visit_document_sets_document_url(session, tmp_path):
@@ -114,7 +115,7 @@ async def test_document_file_route_returns_pdf(session, tmp_path, monkeypatch):
     try:
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
-            headers = {"X-User-Id": str(admin.id)}
+            headers = staff_headers(admin.id)
             generated = await client.post(f"/visits/{visit.id}/document", headers=headers)
             document_id = generated.json()["document_id"]
             resp = await client.get(f"/documents/{document_id}/file", headers=headers)

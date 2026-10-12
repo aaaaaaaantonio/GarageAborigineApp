@@ -4,6 +4,7 @@ from httpx import ASGITransport, AsyncClient
 from app.core.db import get_session
 from app.main import app
 from tests.modules.visits.test_work_items import _setup_visit_with_mechanic
+from tests.helpers import staff_headers
 
 
 @pytest.fixture
@@ -21,7 +22,7 @@ async def test_list_work_items_route_returns_resolved_name_and_visit_id(api_app,
 
     transport = ASGITransport(app=api_app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        resp = await client.get(f"/visits/{item.visit_id}/work-items", headers={"X-User-Id": str(admin.id)})
+        resp = await client.get(f"/visits/{item.visit_id}/work-items", headers=staff_headers(admin.id))
 
     assert resp.status_code == 200
     body = resp.json()
@@ -43,7 +44,7 @@ async def test_add_work_item_route_rejects_non_mechanic_assignee_with_422(api_ap
                 "hourly_rate": 1500,
                 "assigned_mechanic_id": str(admin.id),
             },
-            headers={"X-User-Id": str(admin.id)},
+            headers=staff_headers(admin.id),
         )
 
     assert resp.status_code == 422

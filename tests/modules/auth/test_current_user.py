@@ -54,12 +54,14 @@ async def test_no_credentials_is_401(api_app):
     assert resp.status_code == 401
 
 
-async def test_x_user_id_without_configured_key_still_works(api_app, master):
-    resp = await _get(api_app, "/users/mechanics", {"X-User-Id": str(master.id)})
-    assert resp.status_code == 200
+async def test_x_user_id_rejected_when_no_key_configured(api_app, master, monkeypatch):
+    monkeypatch.setattr(settings, "internal_api_key", None)
+    assert (await _get(api_app, "/users/mechanics", {"X-User-Id": str(master.id)})).status_code == 401
+    with_key = {"X-User-Id": str(master.id), "X-Service-Key": "anything"}
+    assert (await _get(api_app, "/users/mechanics", with_key)).status_code == 401
 
 
-async def test_x_user_id_requires_service_key_when_configured(api_app, master, monkeypatch):
+async def test_x_user_id_requires_service_key(api_app, master, monkeypatch):
     monkeypatch.setattr(settings, "internal_api_key", "bot-key")
     assert (await _get(api_app, "/users/mechanics", {"X-User-Id": str(master.id)})).status_code == 401
     wrong = {"X-User-Id": str(master.id), "X-Service-Key": "nope"}
@@ -68,11 +70,12 @@ async def test_x_user_id_requires_service_key_when_configured(api_app, master, m
     assert (await _get(api_app, "/users/mechanics", right)).status_code == 200
 
 
-async def test_by_telegram_requires_service_key_when_configured(api_app, master, monkeypatch):
+async def test_by_telegram_requires_service_key(api_app, master, monkeypatch):
     monkeypatch.setattr(settings, "internal_api_key", "bot-key")
     assert (await _get(api_app, "/users/by-telegram/777", {})).status_code == 401
     assert (await _get(api_app, "/users/by-telegram/777", {"X-Service-Key": "bot-key"})).status_code == 200
 
 
-async def test_by_telegram_open_without_configured_key(api_app, master):
-    assert (await _get(api_app, "/users/by-telegram/777", {})).status_code == 200
+async def test_by_telegram_rejected_when_no_key_configured(api_app, master, monkeypatch):
+    monkeypatch.setattr(settings, "internal_api_key", None)
+    assert (await _get(api_app, "/users/by-telegram/777", {})).status_code == 401

@@ -13,9 +13,9 @@ from app.modules.users.models import User
 
 
 def _check_service_key(x_service_key: str | None) -> None:
-    """With INTERNAL_API_KEY set, only the bot (holding the key) may act via X-User-Id."""
+    """Only the bot (holding INTERNAL_API_KEY) may act via X-User-Id; no key configured = refuse."""
     expected = settings.internal_api_key
-    if expected and not (x_service_key and hmac.compare_digest(x_service_key, expected)):
+    if not expected or not x_service_key or not hmac.compare_digest(x_service_key, expected):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid service key")
 
 

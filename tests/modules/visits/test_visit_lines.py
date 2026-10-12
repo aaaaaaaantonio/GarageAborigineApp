@@ -17,6 +17,7 @@ from app.modules.visits.schemas import VisitCreate
 from app.modules.visits.service import VisitService
 from app.modules.visits.work_items_schemas import WorkItemCreate
 from app.modules.visits.work_items_service import WorkItemService
+from tests.helpers import staff_headers
 
 
 @pytest.fixture
@@ -31,7 +32,7 @@ def api_app(session):
 
 async def _get(api_app, path, user):
     async with AsyncClient(transport=ASGITransport(app=api_app), base_url="http://test") as client:
-        return await client.get(path, headers={"X-User-Id": str(user.id)})
+        return await client.get(path, headers=staff_headers(user.id))
 
 
 @pytest.fixture

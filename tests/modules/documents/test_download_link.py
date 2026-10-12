@@ -19,6 +19,7 @@ from app.modules.auth.tokens import (
 )
 from app.modules.documents.service import DocumentService
 from app.modules.users.models import User
+from tests.helpers import staff_headers
 
 PDF = b"%PDF-1.7 test"
 
@@ -79,7 +80,7 @@ def test_tokens_are_not_interchangeable():
 async def test_link_then_download_without_auth_header(api_app, users):
     master, _ = users
     visit_id = uuid.uuid4()
-    resp = await _call(api_app, "POST", f"/visits/{visit_id}/document/link", {"X-User-Id": str(master.id)})
+    resp = await _call(api_app, "POST", f"/visits/{visit_id}/document/link", staff_headers(master.id))
     assert resp.status_code == 200
     body = resp.json()
     assert body["expires_in"] == 300
@@ -95,20 +96,20 @@ async def test_link_then_download_without_auth_header(api_app, users):
 
 async def test_link_forbidden_for_mechanic(api_app, users):
     _, mechanic = users
-    resp = await _call(api_app, "POST", f"/visits/{uuid.uuid4()}/document/link", {"X-User-Id": str(mechanic.id)})
+    resp = await _call(api_app, "POST", f"/visits/{uuid.uuid4()}/document/link", staff_headers(mechanic.id))
     assert resp.status_code == 403
 
 
 async def test_link_unknown_visit_404(api_app, users):
     master, _ = users
-    resp = await _call(api_app, "POST", f"/visits/{uuid.UUID(int=1)}/document/link", {"X-User-Id": str(master.id)})
+    resp = await _call(api_app, "POST", f"/visits/{uuid.UUID(int=1)}/document/link", staff_headers(master.id))
     assert resp.status_code == 404
 
 
 async def test_link_without_secret_503(api_app, users, monkeypatch):
     master, _ = users
     monkeypatch.setattr(settings, "session_secret", None)
-    resp = await _call(api_app, "POST", f"/visits/{uuid.uuid4()}/document/link", {"X-User-Id": str(master.id)})
+    resp = await _call(api_app, "POST", f"/visits/{uuid.uuid4()}/document/link", staff_headers(master.id))
     assert resp.status_code == 503
 
 

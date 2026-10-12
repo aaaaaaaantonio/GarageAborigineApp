@@ -14,6 +14,7 @@ from app.modules.vehicles.schemas import VehicleCreate
 from app.modules.vehicles.service import VehicleService
 from app.modules.visits.schemas import VisitCreate
 from app.modules.visits.service import VISIT_LIST_LIMIT, VisitService
+from tests.helpers import staff_headers
 
 BASE = datetime(2026, 10, 1, 9, 0, tzinfo=timezone.utc)
 
@@ -31,7 +32,7 @@ def api_app(session):
 async def _get(api_app, path, user):
     transport = ASGITransport(app=api_app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        return await client.get(path, headers={"X-User-Id": str(user.id)})
+        return await client.get(path, headers=staff_headers(user.id))
 
 
 async def _world(session):
@@ -206,7 +207,7 @@ async def test_get_unknown_visit_returns_404(api_app, session):
 async def test_create_and_change_status_routes_return_summary(api_app, session):
     admin, me, other, mechanic, client, vehicle = await _world(session)
     transport = ASGITransport(app=api_app)
-    headers = {"X-User-Id": str(me.id)}
+    headers = staff_headers(me.id)
     async with AsyncClient(transport=transport, base_url="http://test") as http:
         created = await http.post(
             "/visits",

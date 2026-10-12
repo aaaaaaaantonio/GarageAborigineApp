@@ -9,6 +9,7 @@ from app.core.db import get_session
 from app.core.enums import UserRole
 from app.modules.users.auth import require_role
 from app.modules.users.models import User
+from tests.helpers import staff_headers
 
 
 @pytest.fixture
@@ -34,7 +35,7 @@ async def test_require_role_blocks_wrong_role(app_with_protected_route, session)
 
     transport = ASGITransport(app=app_with_protected_route)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        resp = await client.get("/admin-only", headers={"X-User-Id": str(mechanic.id)})
+        resp = await client.get("/admin-only", headers=staff_headers(mechanic.id))
     assert resp.status_code == 403
 
 
@@ -45,14 +46,14 @@ async def test_require_role_allows_correct_role(app_with_protected_route, sessio
 
     transport = ASGITransport(app=app_with_protected_route)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        resp = await client.get("/admin-only", headers={"X-User-Id": str(admin.id)})
+        resp = await client.get("/admin-only", headers=staff_headers(admin.id))
     assert resp.status_code == 200
 
 
 async def test_require_role_rejects_unknown_user(app_with_protected_route, session):
     transport = ASGITransport(app=app_with_protected_route)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        resp = await client.get("/admin-only", headers={"X-User-Id": str(uuid.uuid4())})
+        resp = await client.get("/admin-only", headers=staff_headers(uuid.uuid4()))
     assert resp.status_code == 401
 
 
@@ -65,5 +66,5 @@ async def test_require_role_rejects_soft_deleted_user(app_with_protected_route, 
 
     transport = ASGITransport(app=app_with_protected_route)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        resp = await client.get("/admin-only", headers={"X-User-Id": str(admin.id)})
+        resp = await client.get("/admin-only", headers=staff_headers(admin.id))
     assert resp.status_code == 401

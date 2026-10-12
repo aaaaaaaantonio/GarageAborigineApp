@@ -11,6 +11,7 @@ from app.modules.clients.service import ClientService
 from app.modules.users.models import User
 from app.modules.vehicles.schemas import VehicleCreate
 from app.modules.vehicles.service import VehicleService
+from tests.helpers import staff_headers
 
 
 @pytest.fixture
@@ -26,7 +27,7 @@ def api_app(session):
 async def _search(api_app, query, user):
     transport = ASGITransport(app=api_app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        return await client.get("/search", params={"q": query}, headers={"X-User-Id": str(user.id)})
+        return await client.get("/search", params={"q": query}, headers=staff_headers(user.id))
 
 
 async def _world(session):

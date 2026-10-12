@@ -12,6 +12,7 @@ from app.modules.clients.service import ClientService
 from app.modules.users.models import User
 from app.modules.vehicles.schemas import OwnershipCreate, VehicleCreate
 from app.modules.vehicles.service import VehicleService
+from tests.helpers import staff_headers
 
 
 @pytest.fixture
@@ -27,7 +28,7 @@ def api_app(session):
 async def _get(api_app, path, user):
     transport = ASGITransport(app=api_app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        return await client.get(path, headers={"X-User-Id": str(user.id)})
+        return await client.get(path, headers=staff_headers(user.id))
 
 
 async def _world(session):
@@ -140,7 +141,7 @@ async def _post_vehicle(api_app, user, vin):
         return await client.post(
             "/vehicles",
             json={"vin": vin, "plate_number": "А123ВС77", "make": "Toyota", "model": "Camry"},
-            headers={"X-User-Id": str(user.id)},
+            headers=staff_headers(user.id),
         )
 
 

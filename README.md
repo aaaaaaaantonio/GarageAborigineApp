@@ -337,7 +337,7 @@ sudo systemctl start docker.socket docker.service
 
 Локальный запуск:
 
-1. В `.env`: `SESSION_SECRET=<случайная строка>`, `DEV_LOGIN=true`
+1. В `.env`: `SESSION_SECRET=<случайная строка>`, `INTERNAL_API_KEY=<случайная строка>`, `DEV_LOGIN=true`
    (только для локальной работы — никогда в продакшене и не при открытом туннеле).
 2. `docker compose up -d --build api` — API на `http://localhost:8000`.
 3. `cd web && npm install && npm run dev` — открыть `http://localhost:5173`,
@@ -346,16 +346,15 @@ sudo systemctl start docker.socket docker.service
 
 Тесты: `cd web && npm test`.
 
-Сервисный ключ бота: задать `INTERNAL_API_KEY` в `.env` и пересобрать
-`docker compose up -d --build api bot` — после этого API принимает `X-User-Id`
-только от бота.
+Сервисный ключ бота **обязателен**: задайте `INTERNAL_API_KEY` в `.env` (общий
+для api и бота) и пересоберите `docker compose up -d --build api bot`. API
+принимает `X-User-Id` только вместе с этим ключом; если ключ не задан, все
+запросы бота получают 401.
 
 **Внимание:** перед запуском туннеля (и любой другой публикацией dev-сервера)
-выставьте `DEV_LOGIN=false` и задайте `INTERNAL_API_KEY` в `.env`, затем
-пересоберите api и бота (`docker compose up -d --build api bot`). Иначе
-`/auth/dev-users` и `/auth/dev-login` доступны всем, у кого есть ссылка, а без
-`INTERNAL_API_KEY` любой может действовать как сотрудник, передав заголовок
-`X-User-Id`. Для входа через `initData` в `.env` должны быть заданы
+выставьте `DEV_LOGIN=false` и пересоберите api (`docker compose up -d --build api`).
+Иначе `/auth/dev-users` и `/auth/dev-login` доступны всем, у кого есть ссылка.
+Для входа через `initData` в `.env` должны быть заданы
 `TELEGRAM_BOT_TOKEN` и `SESSION_SECRET`, иначе `/auth/telegram` отвечает 503.
 
 Mini App без домена: `cloudflared tunnel --url http://localhost:5173` даёт

@@ -14,6 +14,7 @@ from app.modules.users.models import User
 from app.modules.visits.work_items_schemas import WorkItemOut
 from app.modules.visits.work_items_service import WorkItemService
 from tests.modules.visits.test_work_items import _audit_rows, _new_work_item, _setup_visit_with_mechanic
+from tests.helpers import staff_headers
 
 
 async def _outbox(session, kind):
@@ -163,7 +164,7 @@ async def _patch_mechanic(item, user, mechanic_id, visit_id=None):
         return await client.patch(
             f"/visits/{visit_id or item.visit_id}/work-items/{item.id}/mechanic",
             json={"assigned_mechanic_id": str(mechanic_id) if mechanic_id else None},
-            headers={"X-User-Id": str(user.id)},
+            headers=staff_headers(user.id),
         )
 
 
