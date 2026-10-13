@@ -5,7 +5,7 @@ import { visitsApi } from '../api/endpoints';
 import type { VisitStatus } from '../api/types';
 import { CancelVisitSheet } from '../forms/CancelVisitSheet';
 import { formatKm, formatRub } from '../lib/format';
-import { VISIT_STATUS_LABELS, WORK_STATUS_ICONS } from '../lib/labels';
+import { byUrgency, VISIT_STATUS_LABELS, WORK_STATUS_ICONS } from '../lib/labels';
 import { useAction } from '../lib/useAction';
 import { telegram } from '../telegram/webapp';
 import { Button } from '../ui/Button';
@@ -56,7 +56,7 @@ export function VisitScreen() {
                 ) : (
                   <>
                     <div className="card">
-                      {l.works.map((w) => (
+                      {byUrgency(l.works).map((w) => (
                         <div key={w.id} className="work-line">
                           <Link className="list-row" to={`/visits/${visitId}/works/${w.id}`}>
                             <span aria-hidden="true">{WORK_STATUS_ICONS[w.status]}</span>

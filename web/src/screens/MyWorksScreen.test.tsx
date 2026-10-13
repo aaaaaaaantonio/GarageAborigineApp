@@ -1,5 +1,5 @@
-import { screen } from '@testing-library/react';
-import { http, HttpResponse } from 'msw';
+import { screen, waitFor } from '@testing-library/react';
+import { http, HttpResponse, type JsonBodyType } from 'msw';
 import { doneList, makeDoneWork, makeMyWork } from '../test/fixtures';
 import { renderApp } from '../test/render';
 import { server } from '../test/server';
@@ -45,4 +45,52 @@ test('on the done tab only that tab is current', async () => {
   const done = await screen.findByRole('link', { name: /Выполненные/ });
   expect(done).toHaveAttribute('aria-current', 'page');
   expect(screen.getByRole('link', { name: /Мои работы/ })).not.toHaveAttribute('aria-current');
+});
+
+function record(path: string, body: JsonBodyType) {
+  const queries: URLSearchParams[] = [];
+  server.use(http.get(path, ({ request }) => {
+    queries.push(new URL(request.url).searchParams);
+    return HttpResponse.json(body);
+  }));
+  return queries;
+}
+const lastOf = (queries: URLSearchParams[]) => queries[queries.length - 1];
+
+test('my works: status chips and car grouping go to the server', async () => {
+  const queries = record('/api/work-items/mine', [
+    makeMyWork(), makeMyWork({ id: 'w2', name: 'Развал', status: 'ready' }),
+    makeMyWork({ id: 'w3', visit_id: 'v2', name: 'Генератор', plate_number: 'В222ВВ77', make_model: 'Kia Rio' }),
+  ]);
+  const { user } = renderApp('/my', { as: 'mechanic' });
+  await screen.findByRole('link', { name: /Генератор/ });
+  expect(lastOf(queries).get('sort')).toBe('urgency');
+  await user.click(screen.getByRole('button', { name: 'Ждут запчасти' }));
+  await waitFor(() => expect(lastOf(queries).getAll('status')).toEqual(['waiting_parts']));
+  await user.click(screen.getByRole('button', { name: 'По машинам' }));
+  await waitFor(() => expect(lastOf(queries).get('sort')).toBe('car'));
+  expect(await screen.findByRole('heading', { name: 'А123ВС77 · Toyota Camry' })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: 'В222ВВ77 · Kia Rio' })).toBeInTheDocument();
+});
+
+test('my works: filtered empty state', async () => {
+  record('/api/work-items/mine', []);
+  const { user } = renderApp('/my', { as: 'mechanic' });
+  await screen.findByText('Нет назначенных работ');
+  await user.click(screen.getByRole('button', { name: 'Готовы' }));
+  expect(await screen.findByText('Нет работ с этим фильтром')).toBeInTheDocument();
+});
+
+test('done: month by default with a norm-hours total, period and outcome go to the server', async () => {
+  const queries = record('/api/work-items/mine/done', doneList(
+    [makeDoneWork(), makeDoneWork({ id: 'd2', norm_hours: 1.5 })], { count: 2, total_norm_hours: 3 },
+  ));
+  const { user } = renderApp('/my/done', { as: 'mechanic' });
+  expect(await screen.findByText('Работ: 2 · 3 н/ч')).toBeInTheDocument();
+  const since = new Date(lastOf(queries).get('since')!).getTime();
+  expect(Math.abs(Date.now() - 30 * 86_400_000 - since)).toBeLessThan(60_000);
+  await user.click(screen.getByRole('button', { name: 'Всё' }));
+  await waitFor(() => expect(lastOf(queries).has('since')).toBe(false));
+  await user.click(screen.getByRole('button', { name: 'Отменены' }));
+  await waitFor(() => expect(lastOf(queries).get('outcome')).toBe('cancelled'));
 });

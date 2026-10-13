@@ -1,15 +1,23 @@
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { vehiclesApi, visitsApi } from '../api/endpoints';
+import type { WorkCategory } from '../api/types';
 import { useAuth } from '../auth/AuthProvider';
 import { formatDate, formatKm } from '../lib/format';
-import { WORK_STATUS_ICONS } from '../lib/labels';
+import { WORK_CATEGORY_LABELS, WORK_STATUS_ICONS } from '../lib/labels';
 import { Card } from '../ui/Card';
+import { Chips } from '../ui/Chips';
 import { EmptyState } from '../ui/EmptyState';
 import { Loadable } from '../ui/Loadable';
 import { Plate } from '../ui/Plate';
 import { ScreenHeader } from '../ui/ScreenHeader';
 import { VisitHistory } from './VisitHistory';
+
+const CATEGORY_CHIPS: { value: WorkCategory | 'all'; label: string }[] = [
+  { value: 'all', label: 'Все' },
+  ...(Object.keys(WORK_CATEGORY_LABELS) as WorkCategory[]).map((c) => ({ value: c, label: WORK_CATEGORY_LABELS[c] })),
+];
 
 export function VehicleScreen() {
   const { vehicleId = '' } = useParams();
@@ -18,7 +26,12 @@ export function VehicleScreen() {
   const vehicle = useQuery({ queryKey: ['vehicle', vehicleId], queryFn: () => vehiclesApi.get(vehicleId) });
   const owner = useQuery({ queryKey: ['vehicleOwner', vehicleId], queryFn: () => vehiclesApi.owner(vehicleId), enabled: isStaff });
   const visits = useQuery({ queryKey: ['visitsFor', 'vehicle', vehicleId], queryFn: () => visitsApi.listForVehicle(vehicleId), enabled: isStaff });
-  const history = useQuery({ queryKey: ['workHistory', vehicleId], queryFn: () => vehiclesApi.workHistory(vehicleId) });
+  const [category, setCategory] = useState<WorkCategory | 'all'>('all');
+  const history = useQuery({
+    queryKey: ['workHistory', vehicleId, category],
+    queryFn: () => vehiclesApi.workHistory(vehicleId, category === 'all' ? [] : [category]),
+    placeholderData: keepPreviousData,
+  });
   return (
     <>
       <ScreenHeader title="Машина" back />
@@ -51,10 +64,11 @@ export function VehicleScreen() {
               </>
             )}
             <h2 className="section-title">История работ</h2>
+            <Chips label="Категория" value={category} options={CATEGORY_CHIPS} onChange={setCategory} />
             <Loadable query={history}>
               {(h) =>
                 h.items.length === 0 ? (
-                  <EmptyState text="Работ по машине ещё не было" />
+                  <EmptyState text={category === 'all' ? 'Работ по машине ещё не было' : 'Работ этой категории не было'} />
                 ) : (
                   <div className="card">
                     {h.items.map((w, i) => (

@@ -72,7 +72,7 @@ test('vehicle card for staff shows owner, visits, history and new visit', async 
   server.use(
     http.get('/api/vehicles/veh1/owner', () => HttpResponse.json(CLIENT)),
     http.get('/api/vehicles/veh1/work-history', () =>
-      HttpResponse.json({ items: [{ visit_id: 'v1', visit_at: '2026-09-01T10:00:00Z', mileage: 110000, name: 'Замена масла ДВС', status: 'ready' }], has_more: false })),
+      HttpResponse.json({ items: [{ visit_id: 'v1', visit_at: '2026-09-01T10:00:00Z', mileage: 110000, name: 'Замена масла ДВС', status: 'ready', category: 'maintenance' }], has_more: false })),
     http.get('/api/visits', () => HttpResponse.json({ items: [makeVisit()], has_more: false })),
   );
   renderApp('/vehicles/veh1', { as: 'master' });
@@ -98,4 +98,22 @@ test('vehicle card for mechanic asks for neither owner nor visits', async () => 
   expect(screen.queryByRole('link', { name: '+ Новый заезд' })).not.toBeInTheDocument();
   await waitFor(() => expect(screen.getByText('Toyota Camry')).toBeInTheDocument());
   expect(visitsCalled).not.toHaveBeenCalled();
+});
+
+test('vehicle history filters by category on the server', async () => {
+  mockEntities();
+  const queries: URLSearchParams[] = [];
+  server.use(
+    http.get('/api/vehicles/veh1/owner', () => HttpResponse.json(CLIENT)),
+    http.get('/api/vehicles/veh1/work-history', ({ request }) => {
+      queries.push(new URL(request.url).searchParams);
+      return HttpResponse.json({ items: [], has_more: false });
+    }),
+    http.get('/api/visits', () => HttpResponse.json({ items: [], has_more: false })),
+  );
+  const { user } = renderApp('/vehicles/veh1', { as: 'mechanic' });
+  await screen.findByText('Работ по машине ещё не было');
+  await user.click(screen.getByRole('button', { name: 'Ходовая' }));
+  await waitFor(() => expect(queries[queries.length - 1].getAll('category')).toEqual(['chassis']));
+  expect(await screen.findByText('Работ этой категории не было')).toBeInTheDocument();
 });

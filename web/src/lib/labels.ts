@@ -35,3 +35,10 @@ export const WORK_CATEGORY_LABELS: Record<WorkCategory, string> = {
   chassis: 'Ходовая',
   other: 'Прочее',
 };
+
+/** What to pick up first: in hand, not started, blocked, done (same order as the API's `urgency`). */
+export const WORK_URGENCY: WorkItemStatus[] = ['in_progress', 'not_ready', 'waiting_parts', 'ready'];
+
+export function byUrgency<T extends { status: WorkItemStatus }>(items: T[]): T[] {
+  return [...items].sort((a, b) => WORK_URGENCY.indexOf(a.status) - WORK_URGENCY.indexOf(b.status));
+}

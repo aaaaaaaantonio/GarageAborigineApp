@@ -131,3 +131,16 @@ test('PDF in a browser starts a plain download of the signed link', async () => 
   );
   download.mockRestore();
 });
+
+test('works are listed by urgency: in hand, not started, blocked, done', async () => {
+  mockVisitPage(makeVisit(), [
+    makeWorkLine({ id: 'a', name: 'Готовая', status: 'ready', parts: [] }),
+    makeWorkLine({ id: 'b', name: 'Не начатая', status: 'not_ready', parts: [] }),
+    makeWorkLine({ id: 'c', name: 'Ждёт', status: 'waiting_parts', parts: [] }),
+    makeWorkLine({ id: 'd', name: 'В работе', status: 'in_progress', parts: [] }),
+  ]);
+  renderApp('/visits/v1', { as: 'master' });
+  await screen.findByText('Готовая');
+  const names = screen.getAllByRole('link', { name: /Готовая|Не начатая|Ждёт|В работе/ }).map((l) => l.textContent);
+  expect(names.map((n) => n!.match(/Готовая|Не начатая|Ждёт|В работе/)![0])).toEqual(['В работе', 'Не начатая', 'Ждёт', 'Готовая']);
+});
