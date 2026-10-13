@@ -7,7 +7,7 @@ import { formatDate, formatRub } from '../lib/format';
 import { PERIOD_LABELS, sinceFor, type Period } from '../lib/periods';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
-import { Chips } from '../ui/Chips';
+import { Picker } from '../ui/Picker';
 import { EmptyState } from '../ui/EmptyState';
 import { Plate } from '../ui/Plate';
 import { ScreenHeader } from '../ui/ScreenHeader';
@@ -57,10 +57,10 @@ export function ArchiveScreen() {
   return (
     <>
       <ScreenHeader title="Архив заездов" back />
-      <Chips label="Период" value={period} options={PERIODS} onChange={setPeriod} />
-      <Chips label="Итог" value={outcome} options={OUTCOMES} onChange={setOutcome} />
       <div className="filters-row">
-        <SelectField label="Сортировка" value={sort} options={SORTS} onChange={(e) => setSort(e.target.value as VisitSort)} />
+        <Picker label="Период" value={period} options={PERIODS} onChange={setPeriod} />
+        <Picker label="Итог" value={outcome} options={OUTCOMES} onChange={setOutcome} />
+        <Picker label="Сортировка" value={sort} options={SORTS} onChange={setSort} />
         {isAdmin && (
           <SelectField
             label="Мастер"

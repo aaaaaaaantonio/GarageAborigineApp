@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { ApiError } from '../api/client';
 import { Button } from './Button';
-import { Chips } from './Chips';
+import { Picker } from './Picker';
 import { Loadable } from './Loadable';
 import { Plate } from './Plate';
 import { StatusTag } from './StatusTag';
@@ -86,12 +86,11 @@ test('toast shows text and retry', async () => {
   expect(screen.queryByText('Нет связи с сервером')).not.toBeInTheDocument();
 });
 
-test('chips mark the current option and report clicks', async () => {
+test('picker is a labelled select that reports the chosen value', async () => {
   const onChange = vi.fn();
-  render(<Chips label="Статус" value="b" onChange={onChange} options={[{ value: 'a', label: 'Альфа' }, { value: 'b', label: 'Бета' }]} />);
-  expect(screen.getByRole('group', { name: 'Статус' })).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Бета' })).toHaveAttribute('aria-pressed', 'true');
-  expect(screen.getByRole('button', { name: 'Альфа' })).toHaveAttribute('aria-pressed', 'false');
-  await userEvent.click(screen.getByRole('button', { name: 'Альфа' }));
+  render(<Picker label="Статус" value="b" onChange={onChange} options={[{ value: 'a', label: 'Альфа' }, { value: 'b', label: 'Бета' }]} />);
+  const select = screen.getByLabelText('Статус');
+  expect(select).toHaveValue('b');
+  await userEvent.selectOptions(select, 'a');
   expect(onChange).toHaveBeenCalledWith('a');
 });

@@ -4,7 +4,7 @@ import { usersApi, workItemsApi } from '../api/endpoints';
 import type { BoardGroup, BoardItem, BoardParams, WorkCategory, WorkItemStatus } from '../api/types';
 import { WORK_CATEGORY_LABELS, WORK_STATUS_ICONS, WORK_STATUS_LABELS } from '../lib/labels';
 import { Card } from '../ui/Card';
-import { Chips } from '../ui/Chips';
+import { Picker } from '../ui/Picker';
 import { EmptyState } from '../ui/EmptyState';
 import { Loadable } from '../ui/Loadable';
 import { Plate } from '../ui/Plate';
@@ -23,6 +23,10 @@ const GROUPS: { value: BoardGroup; label: string }[] = [
   { value: 'mechanic', label: 'По механику' },
   { value: 'status', label: 'По статусу' },
   { value: 'car', label: 'По машине' },
+];
+const APPROVALS: { value: 'all' | 'unapproved'; label: string }[] = [
+  { value: 'all', label: 'Все работы' },
+  { value: 'unapproved', label: 'Только не согласованные' },
 ];
 const CATEGORIES = [
   { value: '', label: 'Все категории' },
@@ -51,7 +55,7 @@ export function BoardScreen() {
   const [mechanic, setMechanic] = useState('');
   const [status, setStatus] = useState<WorkItemStatus | 'all'>('all');
   const [category, setCategory] = useState('');
-  const [unapproved, setUnapproved] = useState(false);
+  const [approval, setApproval] = useState<'all' | 'unapproved'>('all');
   const [group, setGroup] = useState<BoardGroup>('mechanic');
   const mechanics = useQuery({ queryKey: ['mechanics'], queryFn: usersApi.mechanics });
   const params: BoardParams = {
@@ -59,15 +63,15 @@ export function BoardScreen() {
     unassigned: mechanic === 'none',
     status: status === 'all' ? undefined : [status],
     category: category ? [category as WorkCategory] : undefined,
-    unapproved,
+    unapproved: approval === 'unapproved',
     group,
   };
   const query = useQuery({ queryKey: ['board', params], queryFn: () => workItemsApi.board(params), placeholderData: keepPreviousData });
   return (
     <>
       <ScreenHeader title="Доска работ" back />
-      <Chips label="Статус работы" value={status} options={STATUSES} onChange={setStatus} />
       <div className="filters-row">
+        <Picker label="Статус работы" value={status} options={STATUSES} onChange={setStatus} />
         <SelectField
           label="Механик"
           value={mechanic}
@@ -79,12 +83,8 @@ export function BoardScreen() {
           onChange={(e) => setMechanic(e.target.value)}
         />
         <SelectField label="Категория" value={category} options={CATEGORIES} onChange={(e) => setCategory(e.target.value)} />
-        <SelectField label="Группировка" value={group} options={GROUPS} onChange={(e) => setGroup(e.target.value as BoardGroup)} />
-      </div>
-      <div className="chips">
-        <button type="button" className="chip" aria-pressed={unapproved} onClick={() => setUnapproved(!unapproved)}>
-          Только не согласованные
-        </button>
+        <Picker label="Согласование" value={approval} options={APPROVALS} onChange={setApproval} />
+        <Picker label="Группировка" value={group} options={GROUPS} onChange={setGroup} />
       </div>
       <Loadable query={query}>
         {(data) =>

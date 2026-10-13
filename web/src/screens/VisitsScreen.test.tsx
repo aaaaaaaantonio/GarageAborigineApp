@@ -35,19 +35,21 @@ test('lists active visits as cards', async () => {
 });
 
 test.each([
-  ['Мои', 'master_id', 'u-master'],
-  ['Согласование', 'status', 'approval'],
-  ['Ждут запчасти', 'status', 'waiting_parts'],
-  ['Готовы', 'status', 'ready'],
-  ['Без механика', 'unassigned_work', 'true'],
-  ['Долго стоят', 'stale', 'true'],
-])('chip %s asks the server for %s=%s', async (chip, key, value) => {
+  ['mine', 'Мои', 'master_id', 'u-master'],
+  ['approval', 'Согласование', 'status', 'approval'],
+  ['parts', 'Ждут запчасти', 'status', 'waiting_parts'],
+  ['ready', 'Готовы', 'status', 'ready'],
+  ['unassigned', 'Без механика', 'unassigned_work', 'true'],
+  ['stale', 'Долго стоят', 'stale', 'true'],
+])('filter %s (%s) asks the server for %s=%s', async (option, label, key, value) => {
   const queries = serveVisits();
   const { user } = renderApp('/visits', { as: 'master' });
   await screen.findByLabelText('Госномер А123ВС77');
-  await user.click(screen.getByRole('button', { name: chip }));
+  const select = screen.getByLabelText('Фильтр');
+  expect(within(select).getByRole('option', { name: label })).toBeInTheDocument();
+  await user.selectOptions(select, option);
   await waitFor(() => expect(last(queries).get(key)).toBe(value));
-  expect(screen.getByRole('button', { name: chip })).toHaveAttribute('aria-pressed', 'true');
+  expect(select).toHaveValue(option);
 });
 
 test('sort select changes the sort param', async () => {
@@ -65,7 +67,7 @@ test('admin picks a master, master does not see the picker or a "mine" chip for 
   ])));
   const { user } = renderApp('/visits', { as: 'admin' });
   await screen.findByLabelText('Госномер А123ВС77');
-  expect(screen.queryByRole('button', { name: 'Мои' })).not.toBeInTheDocument();
+  expect(within(screen.getByLabelText('Фильтр')).queryByRole('option', { name: 'Мои' })).not.toBeInTheDocument();
   await user.selectOptions(await screen.findByLabelText('Мастер'), 'm1');
   await waitFor(() => expect(last(queries).get('master_id')).toBe('m1'));
 });
@@ -103,7 +105,7 @@ test('empty filter result says so', async () => {
   serveVisits([]);
   const { user } = renderApp('/visits', { as: 'master' });
   await screen.findByText('Нет заездов в работе');
-  await user.click(screen.getByRole('button', { name: 'Готовы' }));
+  await user.selectOptions(screen.getByLabelText('Фильтр'), 'ready');
   expect(await screen.findByText('Нет заездов с этим фильтром')).toBeInTheDocument();
 });
 

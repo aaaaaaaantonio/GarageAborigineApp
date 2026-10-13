@@ -5,7 +5,7 @@ from bot import nav
 from bot.api_client import ApiClient
 from bot.callback_ids import decode_id, encode_id
 from bot.formatting import format_day, format_number
-from bot.handlers.navigation import master_cycle, option_rows
+from bot.handlers.navigation import master_dropdown
 from bot.periods import PERIOD_LABELS, since_for
 from bot.visit_status import visit_status_label
 from bot.work_item_status import WORK_CATEGORY_LABELS, WORK_ITEM_STATUS_LABELS, work_item_icon
@@ -20,6 +20,7 @@ ARCHIVE_SORTS = [("date", "По дате"), ("amount", "По сумме")]
 OUTCOME_ICONS = {"issued": "✅", "cancelled": "❌"}
 
 BOARD_GROUPS = [("mechanic", "По механику"), ("status", "По статусу"), ("car", "По машине")]
+BOARD_APPROVALS = [("0", "Все работы"), ("1", "Не согласованные")]
 
 
 @nav.screen("archive")
@@ -32,11 +33,14 @@ async def render_archive(api: ApiClient, user: dict, args: dict) -> nav.Rendered
     if user["role"] == "admin" and master != "-":
         params["master_id"] = decode_id(master)
     result = await api.list_visits(**params)
-    rows = option_rows("p", ARCHIVE_PERIODS, period, per_row=4) + option_rows("o", ARCHIVE_OUTCOMES, outcome)
-    controls = [nav.cycle_button("↕", "s", ARCHIVE_SORTS, sort)]
+    opened = args.get(nav.OPEN, "-")
+    rows = (
+        nav.dropdown("Период", "p", ARCHIVE_PERIODS, period, opened)
+        + nav.dropdown("Итог", "o", ARCHIVE_OUTCOMES, outcome, opened)
+        + nav.dropdown("Сортировка", "s", ARCHIVE_SORTS, sort, opened)
+    )
     if user["role"] == "admin":
-        controls.append(await master_cycle(api, master))
-    rows.append(controls)
+        rows += await master_dropdown(api, master, opened)
     header = f"🗄 Архив заездов · {PERIOD_LABELS.get(period, period)}"
     visits = result["items"]
     if not visits:
@@ -100,14 +104,14 @@ async def render_board(api: ApiClient, user: dict, args: dict) -> nav.Rendered:
     mechanics = await api.list_mechanics()
     mech_options = [("all", "Все механики"), ("none", "Без исполнителя"),
                     *[(encode_id(m["id"]), m["full_name"]) for m in mechanics]]
-    rows = [
-        [nav.cycle_button("👤", "mech", mech_options, mech)],
-        [nav.cycle_button("🔧", "st", [("all", "Все статусы"), *WORK_ITEM_STATUS_LABELS.items()], status),
-         nav.cycle_button("🏷", "cat", [("all", "Все категории"), *WORK_CATEGORY_LABELS.items()], category)],
-        [InlineKeyboardButton(text=("✓ " if unapproved else "") + "Не согласованные",
-                              callback_data=f"{nav.OPT}:un:{'0' if unapproved else '1'}"),
-         nav.cycle_button("↕", "g", BOARD_GROUPS, group)],
-    ]
+    opened = args.get(nav.OPEN, "-")
+    rows = (
+        nav.dropdown("Механик", "mech", mech_options, mech, opened)
+        + nav.dropdown("Статус", "st", [("all", "Все статусы"), *WORK_ITEM_STATUS_LABELS.items()], status, opened)
+        + nav.dropdown("Категория", "cat", [("all", "Все категории"), *WORK_CATEGORY_LABELS.items()], category, opened)
+        + nav.dropdown("Согласование", "un", BOARD_APPROVALS, "1" if unapproved else "0", opened)
+        + nav.dropdown("Группировка", "g", BOARD_GROUPS, group, opened)
+    )
     items = result["items"]
     if not items:
         return "📋 Доска работ\nРабот с этим фильтром нет.", InlineKeyboardMarkup(inline_keyboard=rows)

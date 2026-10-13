@@ -42,9 +42,11 @@ async def test_archive_defaults_to_last_month_with_totals():
         ("01.10 · А123ВС77 · ✅ Выдан · 12 500 ₽", f"go:visit:{encode_id(V1)}"),
         ("01.10 · А123ВС77 · ❌ Отменён · 0 ₽", f"go:visit:{encode_id(W1)}"),
     ]
-    assert ("✓ Месяц", "opt:p:month") in _opts(markup)
-    assert ("✓ Все", "opt:o:all") in _opts(markup)
-    assert ("↕ По дате ›", "opt:s:amount") in _opts(markup)
+    assert _opts(markup) == [
+        ("Период: Месяц ▾", "opt:open:p"), ("Итог: Все ▾", "opt:open:o"), ("Сортировка: По дате ▾", "opt:open:s"),
+    ]
+    _, opened = await render_archive(api, MASTER, {"open": "p"})
+    assert ("✓ Месяц", "opt:p:month") in _opts(opened) and ("Квартал", "opt:p:quarter") in _opts(opened)
 
 
 async def test_archive_period_outcome_and_paging():
@@ -70,7 +72,7 @@ async def test_archive_empty_and_admin_master_picker():
 
     assert text.endswith("За этот период закрытых заездов нет.")
     assert api.list_visits.await_args_list[0].kwargs["master_id"] == M1
-    assert ("👤 Кузнецов ›", "opt:m:-") in _opts(markup)
+    assert ("Мастер: Кузнецов ▾", "opt:open:m") in _opts(markup)
     assert not [b for b in _opts(master_markup) if b[1].startswith("opt:m:")]
 
 
@@ -114,6 +116,7 @@ async def test_board_filters_go_to_the_api():
     api.list_work_board.assert_any_await(mechanic_id=M1, status=["ready"], category=["chassis"], unapproved=True, group="car")
     api.list_work_board.assert_awaited_with(unassigned=True, group="mechanic")
     assert text.endswith("Работ с этим фильтром нет.")
-    labels = [b[0] for b in _opts(markup)]
-    assert "👤 Морозов ›" in labels and "✓ Не согласованные" in labels
-    assert "↕ По машине ›" in labels
+    assert [b[0] for b in _opts(markup)] == [
+        "Механик: Морозов ▾", "Статус: Готово ▾", "Категория: Ходовая ▾",
+        "Согласование: Не согласованные ▾", "Группировка: По машине ▾",
+    ]

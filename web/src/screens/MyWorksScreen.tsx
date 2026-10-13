@@ -4,7 +4,7 @@ import { workItemsApi } from '../api/endpoints';
 import type { MineSort, MyWorkItem, WorkItemStatus } from '../api/types';
 import { WORK_STATUS_ICONS } from '../lib/labels';
 import { Card } from '../ui/Card';
-import { Chips } from '../ui/Chips';
+import { Picker } from '../ui/Picker';
 import { EmptyState } from '../ui/EmptyState';
 import { Loadable } from '../ui/Loadable';
 import { Plate } from '../ui/Plate';
@@ -62,8 +62,10 @@ export function MyWorksScreen() {
   return (
     <>
       <ScreenHeader title="Мои работы" />
-      <Chips label="Статус" value={status} options={STATUSES} onChange={setStatus} />
-      <Chips label="Порядок" value={sort} options={SORTS} onChange={setSort} />
+      <div className="filters-row">
+        <Picker label="Статус" value={status} options={STATUSES} onChange={setStatus} />
+        <Picker label="Порядок" value={sort} options={SORTS} onChange={setSort} />
+      </div>
       <Loadable query={query}>
         {(items) =>
           items.length === 0 ? (

@@ -56,11 +56,14 @@ async def test_active_visits_filter_and_sort_buttons():
     api.list_visits.return_value = {"items": [_visit(V1, ME)], "has_more": False, "total_count": 1}
 
     _, markup = await render_active_visits(api, MASTER, {})
+    _, opened = await render_active_visits(api, MASTER, {"open": "f", "f": "ready"})
 
-    assert _option_buttons(markup) == [
-        ("✓ Все", "opt:f:all"), ("Мои", "opt:f:mine"), ("Согласование", "opt:f:appr"), ("Запчасти", "opt:f:parts"),
-        ("Готовы", "opt:f:ready"), ("Без механика", "opt:f:free"), ("Долго стоят", "opt:f:stale"),
-        ("↕ По дате ›", "opt:s:stale"),
+    assert _option_buttons(markup) == [("Фильтр: Все ▾", "opt:open:f"), ("Сортировка: По дате ▾", "opt:open:s")]
+    assert _option_buttons(opened) == [
+        ("Фильтр ▴", "opt:open:-"),
+        ("Все", "opt:f:all"), ("Мои", "opt:f:mine"), ("Согласование", "opt:f:appr"), ("Запчасти", "opt:f:parts"),
+        ("✓ Готовы", "opt:f:ready"), ("Без механика", "opt:f:free"), ("Долго стоят", "opt:f:stale"),
+        ("Сортировка: По дате ▾", "opt:open:s"),
     ]
 
 
@@ -92,13 +95,14 @@ async def test_active_visits_admin_sees_no_stars_no_mine_and_picks_a_master():
     api.list_visits.return_value = {"items": [_visit(V1, OTHER)], "has_more": False, "total_count": 1}
     api.list_masters.return_value = [{"id": OTHER, "full_name": "Кузнецов"}]
 
-    _, markup = await render_active_visits(api, ADMIN, {})
+    _, markup = await render_active_visits(api, ADMIN, {"open": "f"})
+    _, masters = await render_active_visits(api, ADMIN, {"open": "m"})
     await render_active_visits(api, ADMIN, {"m": encode_id(OTHER)})
 
     assert not _visit_buttons(markup)[0][0].startswith("⭐")
-    options = _option_buttons(markup)
-    assert ("Мои", "opt:f:mine") not in options
-    assert ("👤 Все мастера ›", f"opt:m:{encode_id(OTHER)}") in options
+    assert ("Мои", "opt:f:mine") not in _option_buttons(markup)
+    assert ("Мастер: Все мастера ▾", "opt:open:m") in _option_buttons(markup)
+    assert ("Кузнецов", f"opt:m:{encode_id(OTHER)}") in _option_buttons(masters)
     api.list_visits.assert_awaited_with(active=True, sort="date", master_id=OTHER)
 
 
@@ -214,7 +218,7 @@ async def test_work_history_groups_by_visit():
     text, markup = await render_work_history(api, MECHANIC, {"vehicle_id": CAR})
 
     assert text == "🔧 История работ · А123ВС77\n02.10.2026 · 120 000 км\n  • Замена масла — Готово\n  • Фильтр — В работе"
-    assert buttons(markup) == [("🏷 Все категории ›", "opt:cat:diagnostics")]
+    assert buttons(markup) == [("Категория: Все категории ▾", "opt:open:cat")]
     api.get_vehicle_work_history.assert_awaited_once_with(CAR, category=None)
 
 
@@ -240,4 +244,4 @@ async def test_work_history_filters_by_category():
 
     api.get_vehicle_work_history.assert_awaited_once_with(CAR, category=["chassis"])
     assert text == "Работ этой категории не было."
-    assert buttons(markup) == [("🏷 Ходовая ›", "opt:cat:other")]
+    assert buttons(markup) == [("Категория: Ходовая ▾", "opt:open:cat")]

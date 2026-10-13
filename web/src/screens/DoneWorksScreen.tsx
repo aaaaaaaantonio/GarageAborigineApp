@@ -4,7 +4,7 @@ import { workItemsApi } from '../api/endpoints';
 import { formatDate, formatHours } from '../lib/format';
 import { PERIOD_LABELS, sinceFor, type Period } from '../lib/periods';
 import { Card } from '../ui/Card';
-import { Chips } from '../ui/Chips';
+import { Picker } from '../ui/Picker';
 import { EmptyState } from '../ui/EmptyState';
 import { Loadable } from '../ui/Loadable';
 import { Plate } from '../ui/Plate';
@@ -33,8 +33,10 @@ export function DoneWorksScreen() {
   return (
     <>
       <ScreenHeader title="Выполненные работы" />
-      <Chips label="Период" value={period} options={PERIODS} onChange={setPeriod} />
-      <Chips label="Итог" value={outcome} options={OUTCOMES} onChange={setOutcome} />
+      <div className="filters-row">
+        <Picker label="Период" value={period} options={PERIODS} onChange={setPeriod} />
+        <Picker label="Итог" value={outcome} options={OUTCOMES} onChange={setOutcome} />
+      </div>
       <Loadable query={query}>
         {({ items, count, total_norm_hours, has_more }) =>
           items.length === 0 ? (

@@ -3,7 +3,6 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from bot import nav
 from bot.api_client import ApiClient
 from bot.formatting import format_date, format_hours
-from bot.handlers.navigation import option_rows
 from bot.periods import PERIOD_LABELS, since_for
 from bot.work_item_status import work_item_icon
 
@@ -22,7 +21,8 @@ DONE_OUTCOMES = [("all", "Все"), ("issued", "Выданы"), ("cancelled", "�
 async def render_my_works(api: ApiClient, user: dict, args: dict) -> nav.Rendered:
     status, sort = args.get("st", "all"), args.get("s", "urgency")
     items = await api.list_my_work_items(status=None if status == "all" else [status], sort=sort)
-    rows = option_rows("st", MY_STATUSES, status) + [[nav.cycle_button("↕", "s", MY_SORTS, sort)]]
+    opened = args.get(nav.OPEN, "-")
+    rows = nav.dropdown("Статус", "st", MY_STATUSES, status, opened) + nav.dropdown("Порядок", "s", MY_SORTS, sort, opened)
     if not items:
         empty = "У вас нет назначенных работ." if status == "all" else "Нет работ с этим фильтром."
         return empty, InlineKeyboardMarkup(inline_keyboard=rows)
@@ -43,7 +43,10 @@ async def render_done_works(api: ApiClient, user: dict, args: dict) -> nav.Rende
     """Finished work in closed visits, newest first. Text only: closed work can't change."""
     period, outcome = args.get("p", "month"), args.get("o", "all")
     result = await api.list_my_done_work_items(since=since_for(period), outcome=None if outcome == "all" else outcome)
-    markup = InlineKeyboardMarkup(inline_keyboard=option_rows("p", DONE_PERIODS, period) + option_rows("o", DONE_OUTCOMES, outcome))
+    opened = args.get(nav.OPEN, "-")
+    markup = InlineKeyboardMarkup(
+        inline_keyboard=nav.dropdown("Период", "p", DONE_PERIODS, period, opened) + nav.dropdown("Итог", "o", DONE_OUTCOMES, outcome, opened)
+    )
     header = f"Выполненные работы · {PERIOD_LABELS.get(period, period)}"
     items = result["items"]
     if not items:

@@ -263,12 +263,42 @@ def test_option_button_marks_current_value():
     assert nav.option_button("Мои", "f", "mine", "all").text == "Мои"
 
 
-def test_cycle_button_shows_current_and_points_to_next():
+def _rows(rows):
+    return [[(b.text, b.callback_data) for b in row] for row in rows]
+
+
+def test_dropdown_closed_shows_current_choice():
+    options = [("date", "По дате"), ("stale", "Долго стоят")]
+    assert _rows(nav.dropdown("Сортировка", "s", options, "stale", opened="-")) == [
+        [("Сортировка: Долго стоят ▾", "opt:open:s")],
+    ]
+
+
+def test_dropdown_open_lists_choices_and_closes():
     options = [("date", "По дате"), ("stale", "Долго стоят"), ("status", "По статусу")]
-    first = nav.cycle_button("↕", "s", options, "date")
-    last = nav.cycle_button("↕", "s", options, "status")
-    assert (first.text, first.callback_data) == ("↕ По дате ›", "opt:s:stale")
-    assert last.callback_data == "opt:s:date"
+    assert _rows(nav.dropdown("Сортировка", "s", options, "date", opened="s")) == [
+        [("Сортировка ▴", "opt:open:-")],
+        [("✓ По дате", "opt:s:date"), ("Долго стоят", "opt:s:stale")],
+        [("По статусу", "opt:s:status")],
+    ]
+
+
+async def test_choosing_an_option_closes_the_dropdown():
+    state = fsm_context()
+    await on_screens(state, ("t_item", {"item_id": A, "open": "f"}), msg_id=5)
+
+    await nav.option_callback(make_callback("opt:f:mine", message_id=5), state, api=AsyncMock(), user=MASTER)
+
+    assert await _stack(state) == [["menu", {}], ["t_item", {"item_id": A, "f": "mine"}]]
+
+
+async def test_opening_a_dropdown_keeps_the_page():
+    state = fsm_context()
+    await on_screens(state, ("t_item", {"item_id": A, "page": "2"}), msg_id=5)
+
+    await nav.option_callback(make_callback("opt:open:s", message_id=5), state, api=AsyncMock(), user=MASTER)
+
+    assert await _stack(state) == [["menu", {}], ["t_item", {"item_id": A, "page": "2", "open": "s"}]]
 
 
 async def test_option_callback_updates_top_args_and_resets_page():

@@ -65,9 +65,9 @@ test('my works: status chips and car grouping go to the server', async () => {
   const { user } = renderApp('/my', { as: 'mechanic' });
   await screen.findByRole('link', { name: /Генератор/ });
   expect(lastOf(queries).get('sort')).toBe('urgency');
-  await user.click(screen.getByRole('button', { name: 'Ждут запчасти' }));
+  await user.selectOptions(screen.getByLabelText('Статус'), 'waiting_parts');
   await waitFor(() => expect(lastOf(queries).getAll('status')).toEqual(['waiting_parts']));
-  await user.click(screen.getByRole('button', { name: 'По машинам' }));
+  await user.selectOptions(screen.getByLabelText('Порядок'), 'car');
   await waitFor(() => expect(lastOf(queries).get('sort')).toBe('car'));
   expect(await screen.findByRole('heading', { name: 'А123ВС77 · Toyota Camry' })).toBeInTheDocument();
   expect(screen.getByRole('heading', { name: 'В222ВВ77 · Kia Rio' })).toBeInTheDocument();
@@ -77,7 +77,7 @@ test('my works: filtered empty state', async () => {
   record('/api/work-items/mine', []);
   const { user } = renderApp('/my', { as: 'mechanic' });
   await screen.findByText('Нет назначенных работ');
-  await user.click(screen.getByRole('button', { name: 'Готовы' }));
+  await user.selectOptions(screen.getByLabelText('Статус'), 'ready');
   expect(await screen.findByText('Нет работ с этим фильтром')).toBeInTheDocument();
 });
 
@@ -89,8 +89,8 @@ test('done: month by default with a norm-hours total, period and outcome go to t
   expect(await screen.findByText('Работ: 2 · 3 н/ч')).toBeInTheDocument();
   const since = new Date(lastOf(queries).get('since')!).getTime();
   expect(Math.abs(Date.now() - 30 * 86_400_000 - since)).toBeLessThan(60_000);
-  await user.click(screen.getByRole('button', { name: 'Всё' }));
+  await user.selectOptions(screen.getByLabelText('Период'), 'all');
   await waitFor(() => expect(lastOf(queries).has('since')).toBe(false));
-  await user.click(screen.getByRole('button', { name: 'Отменены' }));
+  await user.selectOptions(screen.getByLabelText('Итог'), 'cancelled');
   await waitFor(() => expect(lastOf(queries).get('outcome')).toBe('cancelled'));
 });

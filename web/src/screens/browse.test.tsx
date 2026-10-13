@@ -113,7 +113,7 @@ test('vehicle history filters by category on the server', async () => {
   );
   const { user } = renderApp('/vehicles/veh1', { as: 'mechanic' });
   await screen.findByText('Работ по машине ещё не было');
-  await user.click(screen.getByRole('button', { name: 'Ходовая' }));
+  await user.selectOptions(screen.getByLabelText('Категория'), 'chassis');
   await waitFor(() => expect(queries[queries.length - 1].getAll('category')).toEqual(['chassis']));
   expect(await screen.findByText('Работ этой категории не было')).toBeInTheDocument();
 });

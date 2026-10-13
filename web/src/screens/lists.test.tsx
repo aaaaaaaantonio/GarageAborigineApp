@@ -43,9 +43,9 @@ test('archive filters by period, outcome and sort', async () => {
   const queries = serveArchive([[issued]]);
   const { user } = renderApp('/visits/archive', { as: 'master' });
   await screen.findByText('✓ Выдан');
-  await user.click(screen.getByRole('button', { name: 'Всё' }));
+  await user.selectOptions(screen.getByLabelText('Период'), 'all');
   await waitFor(() => expect(last(queries).has('since')).toBe(false));
-  await user.click(screen.getByRole('button', { name: 'Отменены' }));
+  await user.selectOptions(screen.getByLabelText('Итог'), 'cancelled');
   await waitFor(() => expect(last(queries).getAll('status')).toEqual(['cancelled']));
   await user.selectOptions(screen.getByLabelText('Сортировка'), 'amount');
   await waitFor(() => expect(last(queries).get('sort')).toBe('amount'));
@@ -117,11 +117,11 @@ test('board filters go to the server', async () => {
   await waitFor(() => expect(last(queries).get('unassigned')).toBe('true'));
   await user.selectOptions(screen.getByLabelText('Механик'), 'm1');
   await waitFor(() => expect(last(queries).get('mechanic_id')).toBe('m1'));
-  await user.click(screen.getByRole('button', { name: 'Ждут запчасти' }));
+  await user.selectOptions(screen.getByLabelText('Статус работы'), 'waiting_parts');
   await waitFor(() => expect(last(queries).getAll('status')).toEqual(['waiting_parts']));
   await user.selectOptions(screen.getByLabelText('Категория'), 'electrical');
   await waitFor(() => expect(last(queries).getAll('category')).toEqual(['electrical']));
-  await user.click(screen.getByRole('button', { name: 'Только не согласованные' }));
+  await user.selectOptions(screen.getByLabelText('Согласование'), 'unapproved');
   await waitFor(() => expect(last(queries).get('unapproved')).toBe('true'));
   await user.selectOptions(screen.getByLabelText('Группировка'), 'car');
   await waitFor(() => expect(last(queries).get('group')).toBe('car'));

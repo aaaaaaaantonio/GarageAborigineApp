@@ -280,10 +280,7 @@ async def test_my_works_lists_items_with_car():
     api.list_my_work_items.assert_awaited_once_with(status=None, sort="urgency")
     assert text == "Мои работы (1)"
     assert _work_buttons(markup) == [("🔧 Замена масла · А123ВС77", f"go:work:{encode_id(VISIT)}:{encode_id(ITEM)}")]
-    assert _opt_buttons(markup) == [
-        ("✓ Все", "opt:st:all"), ("В работе", "opt:st:in_progress"), ("Не начаты", "opt:st:not_ready"),
-        ("Запчасти", "opt:st:waiting_parts"), ("Готовы", "opt:st:ready"), ("↕ По срочности ›", "opt:s:car"),
-    ]
+    assert _opt_buttons(markup) == [("Статус: Все ▾", "opt:open:st"), ("Порядок: По срочности ▾", "opt:open:s")]
 
 
 async def test_my_works_empty_and_filtered_empty():
@@ -393,10 +390,7 @@ async def test_done_works_lists_finished_work_as_text_with_outcome():
         "✅ 05.09.2026 · Т318ХА750 Lada Largus\nРабота 1\n\n"
         "❌ 05.09.2026 · заезд отменён\nРабота 2"
     )
-    assert buttons(markup) == [
-        ("Неделя", "opt:p:week"), ("✓ Месяц", "opt:p:month"), ("Всё", "opt:p:all"),
-        ("✓ Все", "opt:o:all"), ("Выданы", "opt:o:issued"), ("Отменены", "opt:o:cancelled"),
-    ]
+    assert buttons(markup) == [("Период: Месяц ▾", "opt:open:p"), ("Итог: Все ▾", "opt:open:o")]
 
 
 async def test_done_works_empty_and_filters():

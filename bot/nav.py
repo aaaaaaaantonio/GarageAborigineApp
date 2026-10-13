@@ -208,12 +208,21 @@ def option_button(label: str, key: str, value: str, current: str) -> InlineKeybo
     return InlineKeyboardButton(text=text, callback_data=f"{OPT}:{key}:{value}")
 
 
-def cycle_button(prefix: str, key: str, options: list[tuple[str, str]], current: str) -> InlineKeyboardButton:
-    """Shows the current choice; pressing moves to the next one in `options` (value, label)."""
-    values = [value for value, _ in options]
-    index = values.index(current) if current in values else 0
-    label = options[index][1]
-    return InlineKeyboardButton(text=f"{prefix} {label} ›", callback_data=f"{OPT}:{key}:{values[(index + 1) % len(values)]}")
+OPEN = "open"  # arg naming the dropdown that is unfolded; "-" or absent = all folded
+
+
+def dropdown(
+    title: str, key: str, options: list[tuple[str, str]], current: str, opened: str, per_row: int = 2
+) -> list[list[InlineKeyboardButton]]:
+    """Telegram has no select: one button shows the choice and unfolds the options in place."""
+    if opened != key:
+        label = dict(options).get(current, options[0][1])
+        return [[InlineKeyboardButton(text=f"{title}: {label} ▾", callback_data=f"{OPT}:{OPEN}:{key}")]]
+    choices = [option_button(label, key, value, current) for value, label in options]
+    return [
+        [InlineKeyboardButton(text=f"{title} ▴", callback_data=f"{OPT}:{OPEN}:-")],
+        *[choices[i : i + per_row] for i in range(0, len(choices), per_row)],
+    ]
 
 
 @router.callback_query(F.data.startswith(f"{OPT}:"))
@@ -225,6 +234,8 @@ async def option_callback(callback: CallbackQuery, state: FSMContext, api: ApiCl
         await callback.answer(STALE_BUTTON)
         return
     args = {**stack[-1][1], key: value}
-    if key != "page":
-        args.pop("page", None)  # a new filter starts from the first page
+    if key != OPEN:
+        args.pop(OPEN, None)  # a choice folds its dropdown
+        if key != "page":
+            args.pop("page", None)  # a new filter starts from the first page
     await replace_top(callback, state, api, user, args)

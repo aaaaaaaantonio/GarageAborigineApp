@@ -7,14 +7,14 @@ import { useAuth } from '../auth/AuthProvider';
 import { formatDate, formatKm } from '../lib/format';
 import { WORK_CATEGORY_LABELS, WORK_STATUS_ICONS } from '../lib/labels';
 import { Card } from '../ui/Card';
-import { Chips } from '../ui/Chips';
+import { Picker } from '../ui/Picker';
 import { EmptyState } from '../ui/EmptyState';
 import { Loadable } from '../ui/Loadable';
 import { Plate } from '../ui/Plate';
 import { ScreenHeader } from '../ui/ScreenHeader';
 import { VisitHistory } from './VisitHistory';
 
-const CATEGORY_CHIPS: { value: WorkCategory | 'all'; label: string }[] = [
+const CATEGORY_OPTIONS: { value: WorkCategory | 'all'; label: string }[] = [
   { value: 'all', label: 'Все' },
   ...(Object.keys(WORK_CATEGORY_LABELS) as WorkCategory[]).map((c) => ({ value: c, label: WORK_CATEGORY_LABELS[c] })),
 ];
@@ -64,7 +64,7 @@ export function VehicleScreen() {
               </>
             )}
             <h2 className="section-title">История работ</h2>
-            <Chips label="Категория" value={category} options={CATEGORY_CHIPS} onChange={setCategory} />
+            <Picker label="Категория" value={category} options={CATEGORY_OPTIONS} onChange={setCategory} />
             <Loadable query={history}>
               {(h) =>
                 h.items.length === 0 ? (

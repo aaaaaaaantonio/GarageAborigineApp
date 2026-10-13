@@ -6,7 +6,7 @@ import type { Visit, VisitListParams, VisitSort } from '../api/types';
 import { useAuth } from '../auth/AuthProvider';
 import { daysSince } from '../lib/format';
 import { Card } from '../ui/Card';
-import { Chips } from '../ui/Chips';
+import { Picker } from '../ui/Picker';
 import { EmptyState } from '../ui/EmptyState';
 import { Loadable } from '../ui/Loadable';
 import { Plate } from '../ui/Plate';
@@ -99,9 +99,9 @@ export function VisitsScreen() {
         <Link className="btn" to="/works">Доска работ</Link>
         <Link className="btn" to="/visits/archive">Архив</Link>
       </div>
-      <Chips label="Фильтр" value={filter} options={filters} onChange={setFilter} />
       <div className="filters-row">
-        <SelectField label="Сортировка" value={sort} options={SORTS} onChange={(e) => setSort(e.target.value as VisitSort)} />
+        <Picker label="Фильтр" value={filter} options={filters} onChange={setFilter} />
+        <Picker label="Сортировка" value={sort} options={SORTS} onChange={setSort} />
         {isAdmin && (
           <SelectField
             label="Мастер"

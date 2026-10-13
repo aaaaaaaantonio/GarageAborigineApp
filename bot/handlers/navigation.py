@@ -52,16 +52,11 @@ def _active_filter_params(code: str, user_id: str) -> dict:
     }.get(code, {})
 
 
-def option_rows(key: str, options: list[tuple[str, str]], current: str, per_row: int = 3) -> list[list[InlineKeyboardButton]]:
-    row_buttons = [nav.option_button(label, key, value, current) for value, label in options]
-    return [row_buttons[i : i + per_row] for i in range(0, len(row_buttons), per_row)]
-
-
-async def master_cycle(api: ApiClient, current: str) -> InlineKeyboardButton:
+async def master_dropdown(api: ApiClient, current: str, opened: str) -> list[list[InlineKeyboardButton]]:
     """Admin-only picker over masters; '-' means all of them."""
     masters = await api.list_masters()
     options = [("-", "Все мастера"), *[(encode_id(m["id"]), m["full_name"]) for m in masters]]
-    return nav.cycle_button("👤", "m", options, current)
+    return nav.dropdown("Мастер", "m", options, current, opened)
 
 
 @nav.screen("active_visits")
@@ -73,11 +68,10 @@ async def render_active_visits(api: ApiClient, user: dict, args: dict) -> nav.Re
     if is_admin and master != "-":
         params["master_id"] = decode_id(master)
     result = await api.list_visits(active=True, sort=sort, **params)
-    rows = option_rows("f", filters, code)
-    controls = [nav.cycle_button("↕", "s", ACTIVE_SORTS, sort)]
+    opened = args.get(nav.OPEN, "-")
+    rows = nav.dropdown("Фильтр", "f", filters, code, opened) + nav.dropdown("Сортировка", "s", ACTIVE_SORTS, sort, opened)
     if is_admin:
-        controls.append(await master_cycle(api, master))
-    rows.append(controls)
+        rows += await master_dropdown(api, master, opened)
     visits = result["items"]
     for visit in visits:
         label = " · ".join([visit["plate_number"], visit["client_name"], visit_status_label(visit["status"])])
@@ -147,9 +141,9 @@ async def render_work_history(api: ApiClient, user: dict, args: dict) -> nav.Ren
     category = args.get("cat", "all")
     vehicle = await api.get_vehicle(args["vehicle_id"])
     history = await api.get_vehicle_work_history(args["vehicle_id"], category=None if category == "all" else [category])
-    no_buttons = InlineKeyboardMarkup(inline_keyboard=[[
-        nav.cycle_button("🏷", "cat", [("all", "Все категории"), *WORK_CATEGORY_LABELS.items()], category)
-    ]])
+    no_buttons = InlineKeyboardMarkup(inline_keyboard=nav.dropdown(
+        "Категория", "cat", [("all", "Все категории"), *WORK_CATEGORY_LABELS.items()], category, args.get(nav.OPEN, "-")
+    ))
     if not history["items"]:
         return ("Работ по машине ещё не было." if category == "all" else "Работ этой категории не было."), no_buttons
     lines = [f"🔧 История работ · {vehicle['plate_number']}"]
