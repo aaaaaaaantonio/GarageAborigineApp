@@ -1,7 +1,8 @@
+import { buildQuery } from '../lib/query';
 import { api } from './client';
 import type {
-  AuthResponse, CatalogItem, Client, DoneWorkItem, MyWorkItem, PartItem, PartItemCreate, RecentView, SearchHit,
-  User, UserCreate, Vehicle, VehicleCreate, Visit, VisitCreate, VisitLines, VisitList, VisitStatus, WorkHistory,
+  AuthResponse, BoardList, BoardParams, CatalogItem, Client, DoneWorkList, MineSort, MyWorkItem, PartItem, PartItemCreate, RecentView, SearchHit,
+  User, UserCreate, Vehicle, VehicleCreate, Visit, VisitCreate, VisitLines, VisitList, VisitListParams, VisitStatus, WorkCategory, WorkHistory,
   WorkItem, WorkItemCreate, WorkItemStatus,
 } from './types';
 
@@ -15,6 +16,7 @@ export const authApi = {
 };
 
 export const visitsApi = {
+  list: (params: VisitListParams) => api.get<VisitList>(`/visits${buildQuery({ ...params })}`),
   listActive: () => api.get<VisitList>('/visits?active=true'),
   listForClient: (clientId: string) => api.get<VisitList>(`/visits?client_id=${q(clientId)}`),
   listForVehicle: (vehicleId: string) => api.get<VisitList>(`/visits?vehicle_id=${q(vehicleId)}`),
@@ -29,8 +31,11 @@ export const visitsApi = {
 
 export const workItemsApi = {
   list: (visitId: string) => api.get<WorkItem[]>(`/visits/${visitId}/work-items`),
-  mine: () => api.get<MyWorkItem[]>('/work-items/mine'),
-  done: () => api.get<DoneWorkItem[]>('/work-items/mine/done'),
+  mine: (params: { status?: WorkItemStatus[]; sort?: MineSort } = {}) =>
+    api.get<MyWorkItem[]>(`/work-items/mine${buildQuery(params)}`),
+  done: (params: { since?: string; outcome?: 'issued' | 'cancelled' } = {}) =>
+    api.get<DoneWorkList>(`/work-items/mine/done${buildQuery(params)}`),
+  board: (params: BoardParams = {}) => api.get<BoardList>(`/work-items/board${buildQuery({ ...params })}`),
   add: (visitId: string, body: WorkItemCreate) => api.post<WorkItem>(`/visits/${visitId}/work-items`, body),
   changeStatus: (visitId: string, itemId: string, newStatus: WorkItemStatus) =>
     api.patch<WorkItem>(`/visits/${visitId}/work-items/${itemId}/status`, { new_status: newStatus }),
@@ -50,7 +55,8 @@ export const clientsApi = {
 export const vehiclesApi = {
   get: (id: string) => api.get<Vehicle>(`/vehicles/${id}`),
   owner: (id: string) => api.get<Client | null>(`/vehicles/${id}/owner`),
-  workHistory: (id: string) => api.get<WorkHistory>(`/vehicles/${id}/work-history`),
+  workHistory: (id: string, category: WorkCategory[] = []) =>
+    api.get<WorkHistory>(`/vehicles/${id}/work-history${buildQuery({ category })}`),
   create: (body: VehicleCreate) => api.post<Vehicle>('/vehicles', body),
   attachOwner: (vehicleId: string, clientId: string) =>
     api.post<{ id: string }>(`/vehicles/${vehicleId}/owners`, {

@@ -9,7 +9,7 @@ import { ScreenHeader } from '../ui/ScreenHeader';
 import { StatusTag } from '../ui/StatusTag';
 
 export function MyWorksScreen() {
-  const query = useQuery({ queryKey: ['myWorks'], queryFn: workItemsApi.mine });
+  const query = useQuery({ queryKey: ['myWorks'], queryFn: () => workItemsApi.mine() });
   return (
     <>
       <ScreenHeader title="Мои работы" />

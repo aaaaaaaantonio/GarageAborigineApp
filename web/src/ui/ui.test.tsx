@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { ApiError } from '../api/client';
 import { Button } from './Button';
+import { Chips } from './Chips';
 import { Loadable } from './Loadable';
 import { Plate } from './Plate';
 import { StatusTag } from './StatusTag';
@@ -83,4 +84,14 @@ test('toast shows text and retry', async () => {
   await userEvent.click(screen.getByRole('button', { name: 'Повторить' }));
   expect(retry).toHaveBeenCalledOnce();
   expect(screen.queryByText('Нет связи с сервером')).not.toBeInTheDocument();
+});
+
+test('chips mark the current option and report clicks', async () => {
+  const onChange = vi.fn();
+  render(<Chips label="Статус" value="b" onChange={onChange} options={[{ value: 'a', label: 'Альфа' }, { value: 'b', label: 'Бета' }]} />);
+  expect(screen.getByRole('group', { name: 'Статус' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Бета' })).toHaveAttribute('aria-pressed', 'true');
+  expect(screen.getByRole('button', { name: 'Альфа' })).toHaveAttribute('aria-pressed', 'false');
+  await userEvent.click(screen.getByRole('button', { name: 'Альфа' }));
+  expect(onChange).toHaveBeenCalledWith('a');
 });

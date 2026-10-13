@@ -32,12 +32,32 @@ export interface Visit {
   make_model: string;
   assigned_master_id: string;
   master_name: string;
+  status_changed_at: string;
   allowed_next_statuses: VisitStatus[];
 }
 
 export interface VisitList {
   items: Visit[];
   has_more: boolean;
+  /** Over the whole filter, not just this page. */
+  total_count: number;
+  issued_amount: number;
+}
+
+export type VisitSort = 'date' | 'stale' | 'status' | 'amount';
+
+export interface VisitListParams {
+  active?: boolean;
+  closed?: boolean;
+  status?: VisitStatus[];
+  client_id?: string;
+  vehicle_id?: string;
+  master_id?: string;
+  unassigned_work?: boolean;
+  stale?: boolean;
+  since?: string;
+  sort?: VisitSort;
+  offset?: number;
 }
 
 export interface VisitCreate {
@@ -82,6 +102,47 @@ export interface DoneWorkItem {
   make_model: string | null;
   visit_status: Extract<VisitStatus, 'issued' | 'cancelled'>;
   visit_date: string;
+  closed_at: string;
+  norm_hours: number;
+}
+
+export interface DoneWorkList {
+  items: DoneWorkItem[];
+  count: number;
+  total_norm_hours: number;
+  has_more: boolean;
+}
+
+export type MineSort = 'urgency' | 'car';
+export type BoardGroup = 'mechanic' | 'status' | 'car';
+
+export interface BoardItem {
+  id: string;
+  visit_id: string;
+  name: string;
+  status: WorkItemStatus;
+  category: WorkCategory;
+  approved_by_client: boolean;
+  norm_hours: number;
+  assigned_mechanic_id: string | null;
+  assigned_mechanic_name: string | null;
+  plate_number: string | null;
+  make_model: string | null;
+  visit_status: VisitStatus;
+}
+
+export interface BoardList {
+  items: BoardItem[];
+  has_more: boolean;
+}
+
+export interface BoardParams {
+  mechanic_id?: string;
+  unassigned?: boolean;
+  status?: WorkItemStatus[];
+  category?: WorkCategory[];
+  unapproved?: boolean;
+  group?: BoardGroup;
 }
 
 export interface WorkItemCreate {
@@ -166,6 +227,7 @@ export interface WorkHistoryItem {
   mileage: number;
   name: string;
   status: WorkItemStatus;
+  category: WorkCategory;
 }
 
 export interface WorkHistory {

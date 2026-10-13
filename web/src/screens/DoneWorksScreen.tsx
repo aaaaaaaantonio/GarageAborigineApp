@@ -10,12 +10,12 @@ import { StatusTag } from '../ui/StatusTag';
 
 /** The mechanic's finished work in closed visits. Read-only: the car has left the shop. */
 export function DoneWorksScreen() {
-  const query = useQuery({ queryKey: ['doneWorks'], queryFn: workItemsApi.done });
+  const query = useQuery({ queryKey: ['doneWorks'], queryFn: () => workItemsApi.done() });
   return (
     <>
       <ScreenHeader title="Выполненные работы" />
       <Loadable query={query}>
-        {(items) =>
+        {({ items }) =>
           items.length === 0 ? (
             <EmptyState text="Выполненных работ пока нет" />
           ) : (
@@ -34,7 +34,7 @@ export function DoneWorksScreen() {
                     ) : (
                       <span />
                     )}
-                    <span className="hint">{formatDate(w.visit_date)}</span>
+                    <span className="hint">{formatDate(w.closed_at)}</span>
                   </div>
                 </Card>
               ))}

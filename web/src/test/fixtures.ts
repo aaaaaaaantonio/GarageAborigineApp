@@ -1,5 +1,5 @@
 import { http, HttpResponse } from 'msw';
-import type { Client, DoneWorkItem, MyWorkItem, Vehicle, Visit, WorkItem, WorkLine } from '../api/types';
+import type { Client, DoneWorkItem, DoneWorkList, MyWorkItem, Vehicle, Visit, WorkItem, WorkLine } from '../api/types';
 import { server } from './server';
 
 export function makeVisit(over: Partial<Visit> = {}): Visit {
@@ -7,7 +7,7 @@ export function makeVisit(over: Partial<Visit> = {}): Visit {
     id: 'v1', status: 'in_progress', mileage_at_intake: 120500, total_amount: 9850,
     created_at: '2026-10-10T09:00:00Z', client_id: 'c1', client_name: 'Петров Иван',
     vehicle_id: 'veh1', plate_number: 'А123ВС77', make_model: 'Toyota Camry',
-    assigned_master_id: 'u-master', master_name: 'Орлов Пётр',
+    assigned_master_id: 'u-master', master_name: 'Орлов Пётр', status_changed_at: '2026-10-10T09:00:00Z',
     allowed_next_statuses: ['waiting_parts', 'ready', 'cancelled'], ...over,
   };
 }
@@ -31,7 +31,15 @@ export function makeMyWork(over: Partial<MyWorkItem> = {}): MyWorkItem {
 export function makeDoneWork(over: Partial<DoneWorkItem> = {}): DoneWorkItem {
   return {
     id: 'd1', visit_id: 'v9', name: 'Замена масла ДВС', plate_number: 'А123ВС77', make_model: 'Toyota Camry',
-    visit_status: 'issued', visit_date: '2026-09-05T08:30:00Z', ...over,
+    visit_status: 'issued', visit_date: '2026-09-04T08:30:00Z', closed_at: '2026-09-05T08:30:00Z', norm_hours: 1.5,
+    ...over,
+  };
+}
+
+export function doneList(items: DoneWorkItem[], over: Partial<DoneWorkList> = {}): DoneWorkList {
+  return {
+    items, count: items.length, total_norm_hours: items.reduce((sum, w) => sum + w.norm_hours, 0), has_more: false,
+    ...over,
   };
 }
 

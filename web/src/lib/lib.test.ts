@@ -1,4 +1,6 @@
 import { formatDate, formatKm, formatRub } from './format';
+import { sinceFor } from './periods';
+import { buildQuery } from './query';
 import { WORK_STATUS_ICONS } from './labels';
 import { homePath } from './roles';
 import { isValidPhone, isValidVin, looksLikePlate, normalizePlate, normalizeVin } from './validators';
@@ -44,4 +46,19 @@ test('labels and roles', () => {
   expect(WORK_STATUS_ICONS.waiting_parts).toBe('📦');
   expect(homePath('mechanic')).toBe('/my');
   expect(homePath('master')).toBe('/visits');
+});
+
+test('buildQuery repeats array keys and skips empty values', () => {
+  expect(buildQuery({ status: ['approval', 'ready'], active: true, closed: false, master_id: undefined, sort: 'date', offset: 0 }))
+    .toBe('?status=approval&status=ready&active=true&sort=date&offset=0');
+  expect(buildQuery({ status: [], since: null })).toBe('');
+  expect(buildQuery({ since: '2026-10-06T00:00:00.000Z' })).toBe('?since=2026-10-06T00%3A00%3A00.000Z');
+});
+
+test('sinceFor turns a period into an ISO start, all = no limit', () => {
+  const now = new Date('2026-10-13T12:00:00Z');
+  expect(sinceFor('week', now)).toBe('2026-10-06T12:00:00.000Z');
+  expect(sinceFor('month', now)).toBe('2026-09-13T12:00:00.000Z');
+  expect(sinceFor('quarter', now)).toBe('2026-07-15T12:00:00.000Z');
+  expect(sinceFor('all', now)).toBeUndefined();
 });
