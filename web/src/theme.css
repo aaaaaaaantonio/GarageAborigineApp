@@ -121,3 +121,5 @@ button { font: inherit; color: inherit; }
 .app-full { padding-bottom: env(safe-area-inset-bottom, 0px); }
 .links-row { justify-content: flex-start; padding: 0 0 12px; }
 .filters-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; padding: 0 0 12px; }
+.filters-row .field { min-width: 0; }
+.filters-row select { width: 100%; min-width: 0; }

@@ -2,7 +2,7 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from bot import nav
 from bot.api_client import ApiClient
-from bot.formatting import format_date, format_number
+from bot.formatting import format_date, format_hours
 from bot.handlers.navigation import option_rows
 from bot.periods import PERIOD_LABELS, since_for
 from bot.work_item_status import work_item_icon
@@ -57,7 +57,7 @@ async def render_done_works(api: ApiClient, user: dict, args: dict) -> nav.Rende
         if cancelled:
             line += " · заезд отменён"
         entries.append(f"{line}\n{item['name']}")
-    text = f"{header}\nРабот: {result['count']} · {format_number(result['total_norm_hours'])} н/ч\n\n" + "\n\n".join(entries)
+    text = f"{header}\nРабот: {result['count']} · {format_hours(result['total_norm_hours'])}\n\n" + "\n\n".join(entries)
     if result["count"] > len(entries):
         text += f"\n\nПоказаны последние {len(entries)}."
     return text, markup

@@ -25,3 +25,10 @@ def format_number(value: float) -> str:
     if number.is_integer():
         return f"{int(number):,}".replace(",", " ")
     return f"{number:,.2f}".replace(",", " ")
+
+
+def format_hours(value: float) -> str:
+    """Norm-hours the Russian way: '12,4 н/ч', '3 н/ч', thousands space-grouped."""
+    whole, _, fraction = f"{float(value):,.2f}".replace(",", " ").partition(".")
+    fraction = fraction.rstrip("0")
+    return f"{whole},{fraction} н/ч" if fraction else f"{whole} н/ч"

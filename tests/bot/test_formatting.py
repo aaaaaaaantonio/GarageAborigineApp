@@ -1,4 +1,4 @@
-from bot.formatting import format_date, format_day, format_number
+from bot.formatting import format_date, format_day, format_number, format_hours
 from bot.visit_status import visit_status_label
 from bot.work_item_status import work_item_status_label
 
@@ -23,3 +23,10 @@ def test_format_number_groups_thousands_and_trims_whole_decimals():
     assert format_number(12400.5) == "12 400.50"
     assert format_number(0) == "0"
     assert format_number(950) == "950"
+
+
+def test_format_hours_uses_a_decimal_comma_without_trailing_zeros():
+    assert format_hours(12.4) == "12,4 н/ч"
+    assert format_hours(3.0) == "3 н/ч"
+    assert format_hours(0.25) == "0,25 н/ч"
+    assert format_hours(1234.5) == "1 234,5 н/ч"
