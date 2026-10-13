@@ -32,7 +32,7 @@ async def test_admin_menu_adds_staff():
 
 async def test_mechanic_menu():
     _, markup = await render_menu(AsyncMock(), MECHANIC, {})
-    assert buttons(markup) == [("🧰 Мои работы", "go:my_works"), ("🔍 Поиск", "go:search")]
+    assert buttons(markup) == [("🧰 Мои работы", "go:my_works"), ("✅ Выполненные", "go:done_works"), ("🔍 Поиск", "go:search")]
 
 
 async def test_start_removes_reply_keyboard_clears_wizard_and_shows_menu():

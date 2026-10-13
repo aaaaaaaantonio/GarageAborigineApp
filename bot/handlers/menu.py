@@ -17,7 +17,11 @@ _MASTER_ITEMS = [
     ("📝 Регистрация клиента (бумага)", actions.PAPER_CONSENT),
 ]
 _ADMIN_ITEMS = _MASTER_ITEMS + [("👥 Добавить сотрудника", actions.NEW_STAFF)]
-_MECHANIC_ITEMS = [("🧰 Мои работы", nav.go_data("my_works")), ("🔍 Поиск", nav.go_data("search"))]
+_MECHANIC_ITEMS = [
+    ("🧰 Мои работы", nav.go_data("my_works")),
+    ("✅ Выполненные", nav.go_data("done_works")),
+    ("🔍 Поиск", nav.go_data("search")),
+]
 
 
 @nav.screen(nav.MENU)

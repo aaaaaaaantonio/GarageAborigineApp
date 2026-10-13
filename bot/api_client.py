@@ -133,6 +133,9 @@ class ApiClient:
     async def list_my_work_items(self) -> list[dict]:
         return await self.get("/work-items/mine")
 
+    async def list_my_done_work_items(self) -> list[dict]:
+        return await self.get("/work-items/mine/done")
+
     async def update_work_item_status(self, visit_id: str, item_id: str, new_status: str) -> dict:
         return await self.patch(f"/visits/{visit_id}/work-items/{item_id}/status", json={"new_status": new_status})
 

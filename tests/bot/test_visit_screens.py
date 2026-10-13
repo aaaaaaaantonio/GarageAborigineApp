@@ -5,7 +5,7 @@ import pytest
 from bot.api_client import ApiForbidden, ApiNotFound
 from bot.callback_ids import encode_id
 from bot.handlers.documents import pdf_callback
-from bot.handlers.mechanic import render_my_works
+from bot.handlers.mechanic import DONE_WORKS_LIMIT, render_done_works, render_my_works
 from bot.handlers.visits import receive_cancel_reason, render_visit, render_visit_status, visit_header, visit_status_callback
 from bot.handlers.work_items import (
     approve_callback,
@@ -339,3 +339,46 @@ async def test_mechanic_reassign_and_approve_actions_are_refused():
 
     api.approve_work_item.assert_not_awaited()
     callback.answer.assert_awaited_once_with("Недостаточно прав")
+
+
+# --- done works ---
+
+def _done(n=0, status="issued", plate="Т318ХА750", make_model="Lada Largus"):
+    return {"id": f"{n:08d}-0000-0000-0000-000000000000", "visit_id": VISIT, "name": f"Работа {n}",
+            "plate_number": plate, "make_model": make_model, "visit_status": status,
+            "visit_date": "2026-09-05T08:30:00+00:00"}
+
+
+async def test_done_works_lists_finished_work_as_text_with_outcome():
+    api = AsyncMock()
+    api.list_my_done_work_items.return_value = [_done(1), _done(2, status="cancelled", plate=None, make_model=None)]
+
+    text, markup = await render_done_works(api, MECHANIC, {})
+
+    assert text == (
+        "Выполненные работы (2)\n\n"
+        "✅ 05.09.2026 · Т318ХА750 Lada Largus\nРабота 1\n\n"
+        "❌ 05.09.2026 · заезд отменён\nРабота 2"
+    )
+    assert buttons(markup) == []
+
+
+async def test_done_works_empty():
+    api = AsyncMock()
+    api.list_my_done_work_items.return_value = []
+
+    text, markup = await render_done_works(api, MECHANIC, {})
+
+    assert text == "Выполненных работ пока нет."
+    assert buttons(markup) == []
+
+
+async def test_done_works_caps_the_list():
+    api = AsyncMock()
+    api.list_my_done_work_items.return_value = [_done(n) for n in range(DONE_WORKS_LIMIT + 5)]
+
+    text, _ = await render_done_works(api, MECHANIC, {})
+
+    assert text.startswith(f"Выполненные работы (последние {DONE_WORKS_LIMIT})")
+    assert text.count("✅") == DONE_WORKS_LIMIT
+    assert len(text) < 4096

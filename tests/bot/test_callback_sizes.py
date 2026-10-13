@@ -16,6 +16,7 @@ def _api():
     api.get_visit.return_value = {"id": V, "status": "in_progress", "total_amount": 1, "plate_number": "А1"}
     api.list_work_items.return_value = [item]
     api.list_my_work_items.return_value = [item]
+    api.list_my_done_work_items.return_value = []
     api.list_mechanics.return_value = [{"id": M, "full_name": "Механик"}]
     api.list_visits.return_value = {"items": [{"id": V, "status": "in_progress", "plate_number": "А1", "client_name": "К",
                                                "assigned_master_id": M, "created_at": "2026-10-02T07:00:00+00:00"}], "has_more": False}
@@ -28,7 +29,7 @@ def _api():
 
 
 SCREEN_ARGS = {
-    "menu": {}, "active_visits": {}, "my_works": {}, "search": {},
+    "menu": {}, "active_visits": {}, "my_works": {}, "done_works": {}, "search": {},
     "visit": {"visit_id": V}, "visit_status": {"visit_id": V},
     "work": {"visit_id": V, "item_id": I}, "reassign": {"visit_id": V, "item_id": I},
     "client": {"client_id": C}, "vehicle": {"vehicle_id": CAR},

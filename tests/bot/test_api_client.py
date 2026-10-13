@@ -278,3 +278,11 @@ async def test_no_service_key_header_when_not_configured():
     route = respx.get("http://localhost:8000/clients/abc").mock(return_value=httpx.Response(200, json={}))
     await ApiClient(user_id="11111111-1111-1111-1111-111111111111").get("/clients/abc")
     assert "X-Service-Key" not in route.calls.last.request.headers
+
+
+@respx.mock
+async def test_api_client_list_my_done_work_items_gets_endpoint():
+    route = respx.get("http://localhost:8000/work-items/mine/done").mock(return_value=httpx.Response(200, json=[]))
+
+    assert await ApiClient().list_my_done_work_items() == []
+    assert route.called
