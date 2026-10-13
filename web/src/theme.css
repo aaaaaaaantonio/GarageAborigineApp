@@ -119,3 +119,5 @@ button { font: inherit; color: inherit; }
 .search-field { margin-bottom: 12px; }
 
 .app-full { padding-bottom: env(safe-area-inset-bottom, 0px); }
+.links-row { justify-content: flex-start; padding: 0 0 12px; }
+.filters-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; padding: 0 0 12px; }

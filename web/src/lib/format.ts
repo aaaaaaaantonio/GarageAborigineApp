@@ -23,3 +23,8 @@ export function parseNumber(raw: string): number | null {
   const n = Number(text);
   return Number.isFinite(n) ? n : null;
 }
+
+/** Whole days from `iso` to `now` (0 for less than a day). */
+export function daysSince(iso: string, now: number = Date.now()): number {
+  return Math.max(0, Math.floor((now - new Date(iso).getTime()) / 86_400_000));
+}
