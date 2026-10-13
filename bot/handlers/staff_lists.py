@@ -8,7 +8,7 @@ from bot.formatting import format_day, format_number
 from bot.handlers.navigation import master_cycle, option_rows
 from bot.periods import PERIOD_LABELS, since_for
 from bot.visit_status import visit_status_label
-from bot.work_item_status import WORK_ITEM_STATUS_LABELS, work_item_icon
+from bot.work_item_status import WORK_CATEGORY_LABELS, WORK_ITEM_STATUS_LABELS, work_item_icon
 
 ARCHIVE_PAGE = 30  # GET /visits page size
 BOARD_TEXT_LIMIT = 40  # lines in the message; keeps it far below Telegram's 4096 chars
@@ -19,10 +19,6 @@ ARCHIVE_OUTCOMES = [("all", "Все"), ("issued", "Выданы"), ("cancelled",
 ARCHIVE_SORTS = [("date", "По дате"), ("amount", "По сумме")]
 OUTCOME_ICONS = {"issued": "✅", "cancelled": "❌"}
 
-CATEGORY_LABELS = {
-    "diagnostics": "Диагностика", "maintenance": "ТО", "body": "Кузовные",
-    "electrical": "Электрика", "chassis": "Ходовая", "other": "Прочее",
-}
 BOARD_GROUPS = [("mechanic", "По механику"), ("status", "По статусу"), ("car", "По машине")]
 
 
@@ -107,7 +103,7 @@ async def render_board(api: ApiClient, user: dict, args: dict) -> nav.Rendered:
     rows = [
         [nav.cycle_button("👤", "mech", mech_options, mech)],
         [nav.cycle_button("🔧", "st", [("all", "Все статусы"), *WORK_ITEM_STATUS_LABELS.items()], status),
-         nav.cycle_button("🏷", "cat", [("all", "Все категории"), *CATEGORY_LABELS.items()], category)],
+         nav.cycle_button("🏷", "cat", [("all", "Все категории"), *WORK_CATEGORY_LABELS.items()], category)],
         [InlineKeyboardButton(text=("✓ " if unapproved else "") + "Не согласованные",
                               callback_data=f"{nav.OPT}:un:{'0' if unapproved else '1'}"),
          nav.cycle_button("↕", "g", BOARD_GROUPS, group)],

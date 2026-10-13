@@ -32,3 +32,20 @@ def work_item_icon(code: str) -> str:
 
 def work_item_status_label(code: str) -> str:
     return WORK_ITEM_STATUS_LABELS.get(code, code)
+
+
+WORK_CATEGORY_LABELS: dict[str, str] = {
+    "diagnostics": "Диагностика",
+    "maintenance": "ТО",
+    "body": "Кузовные",
+    "electrical": "Электрика",
+    "chassis": "Ходовая",
+    "other": "Прочее",
+}
+
+# What to pick up first (same order as the API's `urgency` sort).
+URGENCY = ["in_progress", "not_ready", "waiting_parts", "ready"]
+
+
+def by_urgency(items: list[dict]) -> list[dict]:
+    return sorted(items, key=lambda i: URGENCY.index(i["status"]) if i["status"] in URGENCY else len(URGENCY))

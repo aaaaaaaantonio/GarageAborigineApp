@@ -214,7 +214,8 @@ async def test_work_history_groups_by_visit():
     text, markup = await render_work_history(api, MECHANIC, {"vehicle_id": CAR})
 
     assert text == "🔧 История работ · А123ВС77\n02.10.2026 · 120 000 км\n  • Замена масла — Готово\n  • Фильтр — В работе"
-    assert buttons(markup) == []
+    assert buttons(markup) == [("🏷 Все категории ›", "opt:cat:diagnostics")]
+    api.get_vehicle_work_history.assert_awaited_once_with(CAR, category=None)
 
 
 async def test_work_history_empty_and_truncated():
@@ -228,3 +229,15 @@ async def test_work_history_empty_and_truncated():
         "has_more": True,
     }
     assert (await render_work_history(api, MASTER, {"vehicle_id": CAR}))[0].endswith("Показаны последние 30 работ.")
+
+
+async def test_work_history_filters_by_category():
+    api = AsyncMock()
+    api.get_vehicle.return_value = _car()
+    api.get_vehicle_work_history.return_value = {"items": [], "has_more": False}
+
+    text, markup = await render_work_history(api, MECHANIC, {"vehicle_id": CAR, "cat": "chassis"})
+
+    api.get_vehicle_work_history.assert_awaited_once_with(CAR, category=["chassis"])
+    assert text == "Работ этой категории не было."
+    assert buttons(markup) == [("🏷 Ходовая ›", "opt:cat:other")]

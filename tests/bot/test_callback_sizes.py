@@ -16,7 +16,7 @@ def _api():
     api.get_visit.return_value = {"id": V, "status": "in_progress", "total_amount": 1, "plate_number": "А1"}
     api.list_work_items.return_value = [item]
     api.list_my_work_items.return_value = [item]
-    api.list_my_done_work_items.return_value = []
+    api.list_my_done_work_items.return_value = {"items": [], "count": 0, "total_norm_hours": 0, "has_more": False}
     api.list_masters.return_value = [{"id": M, "full_name": "Мастер с очень длинным именем"}]
     api.list_work_board.return_value = {"items": [item | {"approved_by_client": True}], "has_more": False}
     api.list_mechanics.return_value = [{"id": M, "full_name": "Механик"}]

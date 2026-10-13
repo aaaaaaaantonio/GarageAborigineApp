@@ -8,7 +8,7 @@ from bot.callback_ids import decode_id, encode_id
 from bot.formatting import format_date, format_day, format_number
 from bot.periods import days_since
 from bot.visit_status import visit_status_label
-from bot.work_item_status import work_item_status_label
+from bot.work_item_status import WORK_CATEGORY_LABELS, work_item_status_label
 
 LIST_TRUNCATED = "Показаны последние 30."
 STAFF_ROLES = {"admin", "master"}
@@ -144,11 +144,14 @@ async def render_vehicle_visits(api: ApiClient, user: dict, args: dict) -> nav.R
 
 @nav.screen("work_history", params=("vehicle_id",))
 async def render_work_history(api: ApiClient, user: dict, args: dict) -> nav.Rendered:
+    category = args.get("cat", "all")
     vehicle = await api.get_vehicle(args["vehicle_id"])
-    history = await api.get_vehicle_work_history(args["vehicle_id"])
-    no_buttons = InlineKeyboardBuilder().as_markup()
+    history = await api.get_vehicle_work_history(args["vehicle_id"], category=None if category == "all" else [category])
+    no_buttons = InlineKeyboardMarkup(inline_keyboard=[[
+        nav.cycle_button("🏷", "cat", [("all", "Все категории"), *WORK_CATEGORY_LABELS.items()], category)
+    ]])
     if not history["items"]:
-        return "Работ по машине ещё не было.", no_buttons
+        return ("Работ по машине ещё не было." if category == "all" else "Работ этой категории не было."), no_buttons
     lines = [f"🔧 История работ · {vehicle['plate_number']}"]
     current_visit = None
     for item in history["items"]:

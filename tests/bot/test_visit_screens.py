@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock
 
 import pytest
@@ -64,6 +65,14 @@ async def test_visit_card_is_compact_one_button_per_work_item():
         ("🔄 Статус заезда", f"go:visit_status:{encode_id(VISIT)}"),
         ("📄 PDF", "act:pdf"),
     ]
+
+
+async def test_visit_card_lists_works_by_urgency():
+    api = _api(items=[_item(ITEM2, "Готовая", "ready"), _item(ITEM, "Делаю", "in_progress")])
+
+    text, _ = await render_visit(api, MASTER, {"visit_id": VISIT})
+
+    assert text.splitlines()[4:] == ["1. Делаю — В работе · Сидоров", "2. Готовая — Готово · Сидоров"]
 
 
 async def test_closed_visit_has_no_status_button():
@@ -252,6 +261,14 @@ async def test_reassign_screen_and_choice_returns_to_work():
 
 # --- my works ---
 
+def _work_buttons(markup):
+    return [btn for btn in buttons(markup) if btn[1].startswith("go:work:")]
+
+
+def _opt_buttons(markup):
+    return [btn for btn in buttons(markup) if btn[1].startswith("opt:")]
+
+
 async def test_my_works_lists_items_with_car():
     api = AsyncMock()
     api.list_my_work_items.return_value = [
@@ -260,18 +277,37 @@ async def test_my_works_lists_items_with_car():
 
     text, markup = await render_my_works(api, MECHANIC, {})
 
+    api.list_my_work_items.assert_awaited_once_with(status=None, sort="urgency")
     assert text == "Мои работы (1)"
-    assert buttons(markup) == [("🔧 Замена масла · А123ВС77", f"go:work:{encode_id(VISIT)}:{encode_id(ITEM)}")]
+    assert _work_buttons(markup) == [("🔧 Замена масла · А123ВС77", f"go:work:{encode_id(VISIT)}:{encode_id(ITEM)}")]
+    assert _opt_buttons(markup) == [
+        ("✓ Все", "opt:st:all"), ("В работе", "opt:st:in_progress"), ("Не начаты", "opt:st:not_ready"),
+        ("Запчасти", "opt:st:waiting_parts"), ("Готовы", "opt:st:ready"), ("↕ По срочности ›", "opt:s:car"),
+    ]
 
 
-async def test_my_works_empty():
+async def test_my_works_empty_and_filtered_empty():
     api = AsyncMock()
     api.list_my_work_items.return_value = []
 
     text, markup = await render_my_works(api, MECHANIC, {})
+    filtered, _ = await render_my_works(api, MECHANIC, {"st": "ready", "s": "car"})
 
     assert text == "У вас нет назначенных работ."
-    assert buttons(markup) == []
+    assert _work_buttons(markup) == []
+    assert filtered == "Нет работ с этим фильтром."
+    api.list_my_work_items.assert_awaited_with(status=["ready"], sort="car")
+
+
+async def test_my_works_by_car_puts_the_plate_first():
+    api = AsyncMock()
+    api.list_my_work_items.return_value = [
+        {"id": ITEM, "visit_id": VISIT, "name": "Замена масла", "status": "ready", "plate_number": "А123ВС77"},
+    ]
+
+    _, markup = await render_my_works(api, MECHANIC, {"s": "car"})
+
+    assert _work_buttons(markup)[0][0] == "А123ВС77 · ✅ Замена масла"
 
 
 # --- pdf ---
@@ -293,27 +329,17 @@ async def test_pdf_action_sends_document_without_redrawing():
     callback.answer.assert_awaited_once_with()
 
 
-async def test_my_works_hides_finished_items_and_caps_the_list():
+async def test_my_works_caps_the_list():
     api = AsyncMock()
-    done = {"id": ITEM2, "visit_id": VISIT, "name": "Готовая", "status": "ready"}
-    active = [
+    api.list_my_work_items.return_value = [
         {"id": f"{n:08d}-0000-0000-0000-000000000000", "visit_id": VISIT, "name": f"Работа {n}", "status": "in_progress"}
         for n in range(35)
     ]
-    api.list_my_work_items.return_value = [done, *active]
 
     text, markup = await render_my_works(api, MECHANIC, {})
 
     assert text == "Мои работы (35)\nПоказаны первые 30."
-    assert len(buttons(markup)) == 30
-    assert all("Готовая" not in label for label, _ in buttons(markup))
-
-
-async def test_my_works_with_only_finished_items_is_empty():
-    api = AsyncMock()
-    api.list_my_work_items.return_value = [{"id": ITEM, "visit_id": VISIT, "name": "Готовая", "status": "ready"}]
-
-    assert (await render_my_works(api, MECHANIC, {}))[0] == "У вас нет назначенных работ."
+    assert len(_work_buttons(markup)) == 30
 
 
 async def test_mechanic_cannot_open_reassign_screen():
@@ -345,40 +371,51 @@ async def test_mechanic_reassign_and_approve_actions_are_refused():
 
 def _done(n=0, status="issued", plate="Т318ХА750", make_model="Lada Largus"):
     return {"id": f"{n:08d}-0000-0000-0000-000000000000", "visit_id": VISIT, "name": f"Работа {n}",
-            "plate_number": plate, "make_model": make_model, "visit_status": status,
-            "visit_date": "2026-09-05T08:30:00+00:00"}
+            "plate_number": plate, "make_model": make_model, "visit_status": status, "norm_hours": 1.5,
+            "visit_date": "2026-09-04T08:30:00+00:00", "closed_at": "2026-09-05T08:30:00+00:00"}
+
+
+def _done_list(items, **over):
+    return {"items": items, "count": len(items), "total_norm_hours": 1.5 * len(items), "has_more": False} | over
 
 
 async def test_done_works_lists_finished_work_as_text_with_outcome():
     api = AsyncMock()
-    api.list_my_done_work_items.return_value = [_done(1), _done(2, status="cancelled", plate=None, make_model=None)]
+    api.list_my_done_work_items.return_value = _done_list([_done(1), _done(2, status="cancelled", plate=None, make_model=None)])
 
     text, markup = await render_done_works(api, MECHANIC, {})
 
+    since = datetime.fromisoformat(api.list_my_done_work_items.await_args.kwargs["since"])
+    assert abs(datetime.now(timezone.utc) - timedelta(days=30) - since) < timedelta(minutes=1)
+    assert api.list_my_done_work_items.await_args.kwargs["outcome"] is None
     assert text == (
-        "Выполненные работы (2)\n\n"
+        "Выполненные работы · Месяц\nРабот: 2 · 3 н/ч\n\n"
         "✅ 05.09.2026 · Т318ХА750 Lada Largus\nРабота 1\n\n"
         "❌ 05.09.2026 · заезд отменён\nРабота 2"
     )
-    assert buttons(markup) == []
+    assert buttons(markup) == [
+        ("Неделя", "opt:p:week"), ("✓ Месяц", "opt:p:month"), ("Всё", "opt:p:all"),
+        ("✓ Все", "opt:o:all"), ("Выданы", "opt:o:issued"), ("Отменены", "opt:o:cancelled"),
+    ]
 
 
-async def test_done_works_empty():
+async def test_done_works_empty_and_filters():
     api = AsyncMock()
-    api.list_my_done_work_items.return_value = []
+    api.list_my_done_work_items.return_value = _done_list([])
 
-    text, markup = await render_done_works(api, MECHANIC, {})
+    text, _ = await render_done_works(api, MECHANIC, {"p": "all", "o": "cancelled"})
 
-    assert text == "Выполненных работ пока нет."
-    assert buttons(markup) == []
+    assert text == "Выполненные работы · Всё\nВыполненных работ пока нет."
+    api.list_my_done_work_items.assert_awaited_once_with(since=None, outcome="cancelled")
 
 
 async def test_done_works_caps_the_list():
     api = AsyncMock()
-    api.list_my_done_work_items.return_value = [_done(n) for n in range(DONE_WORKS_LIMIT + 5)]
+    api.list_my_done_work_items.return_value = _done_list([_done(n) for n in range(DONE_WORKS_LIMIT + 5)], count=99)
 
     text, _ = await render_done_works(api, MECHANIC, {})
 
-    assert text.startswith(f"Выполненные работы (последние {DONE_WORKS_LIMIT})")
+    assert text.startswith("Выполненные работы · Месяц\nРабот: 99 · ")
     assert text.count("✅") == DONE_WORKS_LIMIT
+    assert text.endswith(f"Показаны последние {DONE_WORKS_LIMIT}.")
     assert len(text) < 4096

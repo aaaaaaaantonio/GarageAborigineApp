@@ -12,7 +12,7 @@ from bot.states import NewClientStates, NewVehicleStates, NewVisitStates, VisitC
 from bot.texts import TEXT_REQUIRED
 from bot.validators import is_valid_phone, is_valid_vin, looks_like_plate, normalize_plate, normalize_vin
 from bot.visit_status import visit_status_label
-from bot.work_item_status import work_item_icon, work_item_status_label
+from bot.work_item_status import by_urgency, work_item_icon, work_item_status_label
 
 router = Router()
 
@@ -48,7 +48,7 @@ def visit_card(visit: dict, work_items: list[dict]) -> nav.Rendered:
     builder = InlineKeyboardBuilder()
     if work_items:
         lines.append("Работы:")
-    for index, item in enumerate(work_items, start=1):
+    for index, item in enumerate(by_urgency(work_items), start=1):
         mechanic = item.get("assigned_mechanic_name") or "без исполнителя"
         lines.append(f"{index}. {item['name']} — {work_item_status_label(item['status'])} · {mechanic}")
         builder.button(
