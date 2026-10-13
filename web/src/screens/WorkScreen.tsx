@@ -33,7 +33,8 @@ export function WorkScreen() {
   // Parts only exist inside /lines (staff only; mechanics never see prices).
   const lines = useQuery({ queryKey: ['visitLines', visitId], queryFn: () => visitsApi.lines(visitId), enabled: !isMechanic });
   const mechanics = useQuery({ queryKey: ['mechanics'], queryFn: usersApi.mechanics, enabled: assignOpen });
-  const invalidate = [['workItems', visitId], ['myWorks'], ['visit', visitId], ['visitLines', visitId]];
+  // Board and visit lists show work status, mechanic and approval ("Без механика" filter) too.
+  const invalidate = [['workItems', visitId], ['myWorks'], ['visit', visitId], ['visitLines', visitId], ['board'], ['visits']];
   const status = useAction((s: WorkItemStatus) => workItemsApi.changeStatus(visitId, itemId, s), { invalidate });
   const approve = useAction(() => workItemsApi.approve(visitId, itemId), { invalidate });
   const assign = useAction((mechanicId: string | null) => workItemsApi.assign(visitId, itemId, mechanicId), {

@@ -23,7 +23,7 @@ export function VisitScreen() {
   const [statusOpen, setStatusOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
   const changeStatus = useAction((status: VisitStatus) => visitsApi.changeStatus(visitId, status), {
-    invalidate: [['visit', visitId], ['visits']],
+    invalidate: [['visit', visitId], ['visits'], ['board']],
     onSuccess: () => setStatusOpen(false),
   });
   const pdf = useAction(() => visitsApi.documentLink(visitId), {

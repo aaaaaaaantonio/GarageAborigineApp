@@ -107,3 +107,17 @@ test('missing item shows not found', async () => {
   renderApp('/visits/v1/works/zzz', { as: 'mechanic' });
   expect(await screen.findByText('Работа не найдена')).toBeInTheDocument();
 });
+
+test('changing a work refreshes the work board and visit lists', async () => {
+  staffItem();
+  server.use(
+    http.get('/api/users/mechanics', () => HttpResponse.json([{ ...USERS.mechanic, id: 'u-m2', full_name: 'Ахмедов Руслан' }])),
+    http.patch('/api/visits/v1/work-items/w1/mechanic', () => HttpResponse.json(makeWorkItem())),
+  );
+  const { user, queryClient } = renderApp('/visits/v1/works/w1', { as: 'master' });
+  const spy = vi.spyOn(queryClient, 'invalidateQueries');
+  await user.click(await screen.findByRole('button', { name: 'Сменить исполнителя' }));
+  await user.click(await within(screen.getByRole('dialog')).findByRole('button', { name: 'Ахмедов Руслан' }));
+  await waitFor(() => expect(spy).toHaveBeenCalledWith(expect.objectContaining({ queryKey: ['board'] })));
+  expect(spy).toHaveBeenCalledWith(expect.objectContaining({ queryKey: ['visits'] }));
+});

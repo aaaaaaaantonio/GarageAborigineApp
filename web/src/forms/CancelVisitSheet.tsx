@@ -15,7 +15,7 @@ export function CancelVisitSheet({ visitId, open, onClose }: { visitId: string; 
     }
   }, [open]);
   const cancel = useAction(() => visitsApi.changeStatus(visitId, 'cancelled', reason.trim()), {
-    invalidate: [['visit', visitId], ['visits']],
+    invalidate: [['visit', visitId], ['visits'], ['board']],
     onSuccess: onClose,
   });
   return (

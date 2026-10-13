@@ -45,6 +45,8 @@ export function AddWorkForm() {
         queryClient.invalidateQueries({ queryKey: ['workItems', visitId] }),
         queryClient.invalidateQueries({ queryKey: ['visit', visitId] }),
         queryClient.invalidateQueries({ queryKey: ['visitLines', visitId] }),
+        queryClient.invalidateQueries({ queryKey: ['board'] }),
+        queryClient.invalidateQueries({ queryKey: ['visits'] }),
       ]);
       navigate(`/visits/${visitId}`, { replace: true });
     },
