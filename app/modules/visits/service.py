@@ -22,7 +22,7 @@ from app.modules.users.repository import UserRepository
 from app.modules.vehicles.service import VehicleService
 from app.modules.visits.fsm import ALLOWED_TRANSITIONS
 from app.modules.visits.models import Visit, VisitPartItem, VisitStatusLog, VisitWorkItem
-from app.modules.visits.repository import VisitRepository
+from app.modules.visits.repository import VisitFilters, VisitRepository
 from app.modules.visits.schemas import VisitCreate, VisitListOut, VisitOut
 
 
@@ -43,6 +43,7 @@ def _summary_out(row) -> VisitOut:
         make_model=f"{row.make} {row.model}",
         assigned_master_id=row.assigned_master_id,
         master_name=row.master_name,
+        status_changed_at=row.status_changed_at,
     )
 
 
@@ -94,24 +95,16 @@ class VisitService:
         row = await self.repo.get_summary(visit_id)
         return None if row is None else _summary_out(row)
 
-    async def list_visits(
-        self,
-        acting_user: User,
-        *,
-        active: bool = False,
-        client_id: uuid.UUID | None = None,
-        vehicle_id: uuid.UUID | None = None,
-    ) -> VisitListOut:
+    async def list_visits(self, acting_user: User, filters: VisitFilters, offset: int = 0) -> VisitListOut:
         rows = await self.repo.list_summaries(
-            viewer_id=acting_user.id,
-            active=active,
-            client_id=client_id,
-            vehicle_id=vehicle_id,
-            limit=VISIT_LIST_LIMIT + 1,
+            filters, viewer_id=acting_user.id, limit=VISIT_LIST_LIMIT + 1, offset=offset
         )
+        total_count, issued_amount = await self.repo.count_and_issued_amount(filters)
         return VisitListOut(
             items=[_summary_out(r) for r in rows[:VISIT_LIST_LIMIT]],
             has_more=len(rows) > VISIT_LIST_LIMIT,
+            total_count=total_count,
+            issued_amount=issued_amount,
         )
 
     async def change_status(

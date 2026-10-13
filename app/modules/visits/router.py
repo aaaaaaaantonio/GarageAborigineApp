@@ -1,10 +1,11 @@
 import uuid
+from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_session
-from app.core.enums import UserRole
+from app.core.enums import UserRole, VisitStatus
 from app.core.exceptions import (
     CancelReasonRequired,
     InvalidAssignedMaster,
@@ -19,6 +20,7 @@ from app.modules.users.models import User
 from app.modules.visits.lines_schemas import VisitLinesOut
 from app.modules.visits.lines_service import VisitLinesService
 from app.modules.visits.schemas import VisitCreate, VisitListOut, VisitOut, VisitStatusChange
+from app.modules.visits.repository import VisitFilters, VisitSort
 from app.modules.visits.service import VisitService
 
 router = APIRouter(prefix="/visits", tags=["visits"])
@@ -48,13 +50,24 @@ async def create_visit(
 @router.get("", response_model=VisitListOut)
 async def list_visits(
     active: bool = False,
+    closed: bool = False,
+    status: list[VisitStatus] = Query(default=[]),
     client_id: uuid.UUID | None = None,
     vehicle_id: uuid.UUID | None = None,
+    master_id: uuid.UUID | None = None,
+    unassigned_work: bool = False,
+    stale: bool = False,
+    since: datetime | None = None,
+    sort: VisitSort = "date",
+    offset: int = Query(default=0, ge=0),
     session: AsyncSession = Depends(get_session),
     acting_user: User = Depends(require_role(UserRole.ADMIN, UserRole.MASTER)),
 ):
-    service = VisitService(session)
-    return await service.list_visits(acting_user, active=active, client_id=client_id, vehicle_id=vehicle_id)
+    filters = VisitFilters(
+        active=active, closed=closed, statuses=status, client_id=client_id, vehicle_id=vehicle_id,
+        master_id=master_id, unassigned_work=unassigned_work, stale=stale, since=since, sort=sort,
+    )
+    return await VisitService(session).list_visits(acting_user, filters, offset)
 
 
 @router.get("/{visit_id}", response_model=VisitOut)

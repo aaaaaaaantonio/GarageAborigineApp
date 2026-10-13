@@ -15,6 +15,7 @@ def _visit(status: VisitStatus) -> VisitOut:
         id=uuid.uuid4(), status=status, mileage_at_intake=1, total_amount=0, created_at=datetime.now(timezone.utc),
         client_id=uuid.uuid4(), client_name="К", vehicle_id=uuid.uuid4(), plate_number="А123ВС77",
         make_model="Kia Rio", assigned_master_id=uuid.uuid4(), master_name="М",
+        status_changed_at=datetime.now(timezone.utc),
     )
 
 

@@ -37,6 +37,7 @@ class VisitOut(BaseModel):
     make_model: str
     assigned_master_id: uuid.UUID
     master_name: str
+    status_changed_at: datetime
 
     @computed_field
     @property
@@ -48,3 +49,5 @@ class VisitOut(BaseModel):
 class VisitListOut(BaseModel):
     items: list[VisitOut]
     has_more: bool
+    total_count: int
+    issued_amount: float
