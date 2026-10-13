@@ -63,7 +63,7 @@ test('client card shows vehicles and visits', async () => {
   expect(screen.getByRole('link', { name: '+7 900 123-45-67' })).toHaveAttribute('href', 'tel:+79001234567');
   const links = await screen.findAllByRole('link', { name: /Toyota Camry/ });
   expect(links.map((l) => l.getAttribute('href'))).toContain('/vehicles/veh1');
-  expect(await screen.findByText('Выдан')).toBeInTheDocument();
+  expect(await screen.findByText('✓ Выдан')).toBeInTheDocument();
   expect(screen.getByRole('link', { name: '+ Автомобиль' })).toHaveAttribute('href', '/vehicles/new?client_id=c1');
 });
 

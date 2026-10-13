@@ -31,6 +31,13 @@ test('status tag shows russian label and tone', () => {
   expect(screen.getByText('Ждём запчасти')).toHaveClass('tag-parts');
 });
 
+test('closed visits get their own tones: issued solid green with a check, cancelled red', () => {
+  render(<><StatusTag kind="visit" status="issued" /><StatusTag kind="visit" status="cancelled" /></>);
+  expect(screen.getByText(/Выдан/)).toHaveClass('tag-issued');
+  expect(screen.getByText(/Выдан/)).toHaveTextContent('✓ Выдан');
+  expect(screen.getByText('Отменён')).toHaveClass('tag-cancelled');
+});
+
 function Harness({ error }: { error: Error }) {
   const query = useQuery({ queryKey: ['x', error.message], queryFn: () => Promise.reject(error), retry: false });
   return <Loadable query={query} notFound="Заезд не найден" backTo="/visits">{() => <p>data</p>}</Loadable>;

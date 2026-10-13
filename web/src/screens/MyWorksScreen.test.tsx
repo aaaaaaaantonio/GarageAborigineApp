@@ -28,7 +28,7 @@ test('done tab lists finished works with visit date and outcome, read-only', asy
   expect(await screen.findByText('Замена масла ДВС')).toBeInTheDocument();
   expect(screen.getByLabelText('Госномер А123ВС77')).toBeInTheDocument();
   expect(screen.getAllByText('05.09.2026')).toHaveLength(2);
-  expect(screen.getByText('Выдан')).toBeInTheDocument();
+  expect(screen.getByText('✓ Выдан')).toBeInTheDocument();
   expect(screen.getByText('Отменён')).toBeInTheDocument();
   expect(screen.queryByRole('link', { name: /Замена масла ДВС/ })).not.toBeInTheDocument();
 });

@@ -12,6 +12,7 @@
   --tone-approval: #ff8e84;
   --tone-ready: #7fd99a;
   --tone-neutral: #b8bdc4;
+  --tone-cancelled: #ff5f5f;
   --danger: #ff8e84;
   --sans: "Golos Text", system-ui, -apple-system, "Segoe UI", sans-serif;
   --mono: "JetBrains Mono", ui-monospace, monospace;
@@ -63,6 +64,8 @@ button { font: inherit; color: inherit; }
 .tag-approval { background: rgba(255,142,132,.16); color: var(--tone-approval); }
 .tag-ready { background: rgba(127,217,154,.16); color: var(--tone-ready); }
 .tag-neutral { background: rgba(184,189,196,.14); color: var(--tone-neutral); }
+.tag-issued { background: var(--tone-ready); color: var(--amber-ink); }
+.tag-cancelled { background: rgba(255,95,95,.18); color: var(--tone-cancelled); }
 
 .chips { display: flex; gap: 6px; flex-wrap: wrap; padding: 0 0 12px; }
 .chip { min-height: 44px; border: 1px solid var(--line); color: var(--hint); background: none; padding: 6px 12px; border-radius: 8px; font-size: 13px; cursor: pointer; }
