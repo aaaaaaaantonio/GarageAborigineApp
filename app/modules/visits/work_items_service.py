@@ -19,6 +19,7 @@ from app.modules.visits.work_items_schemas import (
 )
 
 WORK_HISTORY_LIMIT = 30
+DONE_LIST_LIMIT = 100
 
 
 class WorkItemService:
@@ -179,8 +180,30 @@ class WorkItemService:
             )
             .order_by(VisitWorkItem.created_at, VisitWorkItem.id)
         )
-        items = await self._with_names(list(result.scalars()))
-        # The mechanic can't read GET /visits/{id}; the bot labels work items by car.
+        return await self._with_vehicles(await self._with_names(list(result.scalars())))
+
+    async def list_done(self, acting_user: User) -> list[VisitWorkItem]:
+        """The mechanic's finished work in closed visits, newest visit first."""
+        result = await self.session.execute(
+            select(VisitWorkItem, Visit.status, Visit.created_at)
+            .join(Visit, Visit.id == VisitWorkItem.visit_id)
+            .where(
+                VisitWorkItem.assigned_mechanic_id == acting_user.id,
+                VisitWorkItem.status == WorkItemStatus.READY,
+                Visit.status.in_((VisitStatus.ISSUED, VisitStatus.CANCELLED)),
+                Visit.deleted_at.is_(None),
+            )
+            .order_by(Visit.created_at.desc(), VisitWorkItem.created_at.desc(), VisitWorkItem.id)
+            .limit(DONE_LIST_LIMIT)
+        )
+        items = []
+        for item, visit_status, visit_date in result.all():
+            item.visit_status, item.visit_date = visit_status, visit_date
+            items.append(item)
+        return await self._with_vehicles(await self._with_names(items))
+
+    async def _with_vehicles(self, items: list[VisitWorkItem]) -> list[VisitWorkItem]:
+        # The mechanic can't read GET /visits/{id}; clients label work items by car.
         visit_ids = {i.visit_id for i in items}
         vehicles = {}
         if visit_ids:

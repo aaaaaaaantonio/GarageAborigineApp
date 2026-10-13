@@ -1,6 +1,6 @@
 import { api } from './client';
 import type {
-  AuthResponse, CatalogItem, Client, MyWorkItem, PartItem, PartItemCreate, RecentView, SearchHit,
+  AuthResponse, CatalogItem, Client, DoneWorkItem, MyWorkItem, PartItem, PartItemCreate, RecentView, SearchHit,
   User, UserCreate, Vehicle, VehicleCreate, Visit, VisitCreate, VisitLines, VisitList, VisitStatus, WorkHistory,
   WorkItem, WorkItemCreate, WorkItemStatus,
 } from './types';
@@ -30,6 +30,7 @@ export const visitsApi = {
 export const workItemsApi = {
   list: (visitId: string) => api.get<WorkItem[]>(`/visits/${visitId}/work-items`),
   mine: () => api.get<MyWorkItem[]>('/work-items/mine'),
+  done: () => api.get<DoneWorkItem[]>('/work-items/mine/done'),
   add: (visitId: string, body: WorkItemCreate) => api.post<WorkItem>(`/visits/${visitId}/work-items`, body),
   changeStatus: (visitId: string, itemId: string, newStatus: WorkItemStatus) =>
     api.patch<WorkItem>(`/visits/${visitId}/work-items/${itemId}/status`, { new_status: newStatus }),

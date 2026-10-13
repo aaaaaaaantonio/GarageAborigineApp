@@ -73,6 +73,17 @@ export interface MyWorkItem {
   allowed_next_statuses: WorkItemStatus[];
 }
 
+/** A finished work item in a closed visit — read-only history for the mechanic. */
+export interface DoneWorkItem {
+  id: string;
+  visit_id: string;
+  name: string;
+  plate_number: string | null;
+  make_model: string | null;
+  visit_status: Extract<VisitStatus, 'issued' | 'cancelled'>;
+  visit_date: string;
+}
+
 export interface WorkItemCreate {
   catalog_item_id: string | null;
   free_text_name: string | null;

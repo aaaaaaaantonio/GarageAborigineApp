@@ -3,7 +3,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, computed_field, model_validator
 
-from app.core.enums import WorkCategory, WorkItemStatus
+from app.core.enums import VisitStatus, WorkCategory, WorkItemStatus
 from app.modules.visits.work_item_flow import WORK_ITEM_NEXT_STATUSES
 
 
@@ -82,3 +82,17 @@ class VehicleWorkHistoryItemOut(BaseModel):
 class VehicleWorkHistoryOut(BaseModel):
     items: list[VehicleWorkHistoryItemOut]
     has_more: bool
+
+
+class WorkItemDoneOut(BaseModel):
+    """A finished work item in a closed visit — read-only history for the mechanic."""
+
+    id: uuid.UUID
+    visit_id: uuid.UUID
+    name: str
+    plate_number: str | None = None
+    make_model: str | None = None
+    visit_status: VisitStatus
+    visit_date: datetime
+
+    model_config = ConfigDict(from_attributes=True)

@@ -8,7 +8,8 @@ const STAFF_TABS = [
   { to: '/more', icon: '☰', label: 'Ещё', end: false },
 ];
 const MECHANIC_TABS = [
-  { to: '/my', icon: '🧰', label: 'Мои работы', end: false },
+  { to: '/my', icon: '🧰', label: 'Мои работы', end: true },
+  { to: '/my/done', icon: '✅', label: 'Выполненные', end: false },
   { to: '/search', icon: '🔍', label: 'Поиск', end: false },
 ];
 

@@ -1,5 +1,5 @@
 import { http, HttpResponse } from 'msw';
-import type { Client, MyWorkItem, Vehicle, Visit, WorkItem, WorkLine } from '../api/types';
+import type { Client, DoneWorkItem, MyWorkItem, Vehicle, Visit, WorkItem, WorkLine } from '../api/types';
 import { server } from './server';
 
 export function makeVisit(over: Partial<Visit> = {}): Visit {
@@ -25,6 +25,13 @@ export function makeMyWork(over: Partial<MyWorkItem> = {}): MyWorkItem {
     id: 'w1', visit_id: 'v1', name: 'Замена масла ДВС', status: 'not_ready', free_text_name: null,
     catalog_item_id: 'cat1', plate_number: 'А123ВС77', make_model: 'Toyota Camry',
     allowed_next_statuses: ['in_progress'], ...over,
+  };
+}
+
+export function makeDoneWork(over: Partial<DoneWorkItem> = {}): DoneWorkItem {
+  return {
+    id: 'd1', visit_id: 'v9', name: 'Замена масла ДВС', plate_number: 'А123ВС77', make_model: 'Toyota Camry',
+    visit_status: 'issued', visit_date: '2026-09-05T08:30:00Z', ...over,
   };
 }
 

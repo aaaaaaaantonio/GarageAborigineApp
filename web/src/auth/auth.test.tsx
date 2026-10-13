@@ -59,9 +59,10 @@ test('stored token is checked with /auth/me and lands on the role home', async (
   expect(screen.getByRole('link', { name: /Заезды/ })).toBeInTheDocument();
 });
 
-test('mechanic tab bar has only my works and search', async () => {
+test('mechanic tab bar has my works, done works and search', async () => {
   renderApp('/my', { as: 'mechanic' });
   expect(await screen.findByRole('link', { name: /Мои работы/ })).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: /Выполненные/ })).toHaveAttribute('href', '/my/done');
   expect(screen.getByRole('link', { name: /Поиск/ })).toBeInTheDocument();
   expect(screen.queryByRole('link', { name: /Заезды/ })).not.toBeInTheDocument();
 });

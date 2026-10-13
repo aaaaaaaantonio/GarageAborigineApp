@@ -125,6 +125,65 @@ async def test_list_mine_keeps_ready_items_of_open_visits(session):
     assert [i.id for i in mine] == [item.id]
 
 
+async def _close(session, item, status, work_status=WorkItemStatus.READY):
+    item.status = work_status
+    visit = await session.get(Visit, item.visit_id)
+    visit.status = status
+    await session.flush()
+    return visit
+
+
+@pytest.mark.parametrize("closed", [VisitStatus.ISSUED, VisitStatus.CANCELLED])
+async def test_list_done_returns_ready_items_of_closed_visits(session, closed):
+    admin, mechanic_a, mechanic_b, item = await _setup_visit_with_mechanic(session)
+    visit = await _close(session, item, closed)
+
+    done = await WorkItemService(session).list_done(mechanic_a)
+    assert [i.id for i in done] == [item.id]
+    assert done[0].name == "Замена масла"
+    assert done[0].plate_number == "А123"
+    assert done[0].visit_status == closed
+    assert done[0].visit_date == visit.created_at
+    assert await WorkItemService(session).list_done(mechanic_b) == []
+
+
+async def test_list_done_skips_open_visits_unfinished_and_deleted(session):
+    admin, mechanic_a, mechanic_b, item = await _setup_visit_with_mechanic(session)
+    item.status = WorkItemStatus.READY  # готова, но машина ещё в сервисе
+    await session.flush()
+    assert await WorkItemService(session).list_done(mechanic_a) == []
+
+    await _close(session, item, VisitStatus.CANCELLED, WorkItemStatus.NOT_READY)
+    assert await WorkItemService(session).list_done(mechanic_a) == []
+
+    visit = await _close(session, item, VisitStatus.ISSUED)
+    visit.deleted_at = datetime.now(timezone.utc)
+    await session.flush()
+    assert await WorkItemService(session).list_done(mechanic_a) == []
+
+
+async def test_list_done_newest_visit_first(session):
+    admin, mechanic_a, mechanic_b, old = await _setup_visit_with_mechanic(session)
+    old_visit = await _close(session, old, VisitStatus.ISSUED)
+    new_visit = await VisitService(session).create_visit(
+        VisitCreate(client_id=old_visit.client_id, vehicle_id=old_visit.vehicle_id,
+                    assigned_master_id=old_visit.assigned_master_id, mileage_at_intake=2000),
+        admin,
+    )
+    new = await WorkItemService(session).add_item(
+        new_visit.id,
+        WorkItemCreate(free_text_name="Развал", category=WorkCategory.CHASSIS, norm_hours=1.0,
+                       hourly_rate=1500, assigned_mechanic_id=mechanic_a.id),
+        admin,
+    )
+    await _close(session, new, VisitStatus.ISSUED)
+    old_visit.created_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    await session.flush()
+
+    done = await WorkItemService(session).list_done(mechanic_a)
+    assert [i.id for i in done] == [new.id, old.id]
+
+
 async def test_list_for_visit_returns_items_for_that_visit(session):
     admin, mechanic_a, mechanic_b, item = await _setup_visit_with_mechanic(session)
 
