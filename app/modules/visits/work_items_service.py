@@ -170,7 +170,13 @@ class WorkItemService:
     async def list_mine(self, acting_user: User) -> list[VisitWorkItem]:
         result = await self.session.execute(
             select(VisitWorkItem)
-            .where(VisitWorkItem.assigned_mechanic_id == acting_user.id)
+            .join(Visit, Visit.id == VisitWorkItem.visit_id)
+            .where(
+                VisitWorkItem.assigned_mechanic_id == acting_user.id,
+                # Closed visits are history: the car has left the shop.
+                Visit.status.not_in((VisitStatus.ISSUED, VisitStatus.CANCELLED)),
+                Visit.deleted_at.is_(None),
+            )
             .order_by(VisitWorkItem.created_at, VisitWorkItem.id)
         )
         items = await self._with_names(list(result.scalars()))

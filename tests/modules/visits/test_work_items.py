@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 import pytest
 from sqlalchemy import select
 
-from app.core.enums import ApprovedVia, UserRole, WorkCategory, WorkItemStatus
+from app.core.enums import ApprovedVia, UserRole, VisitStatus, WorkCategory, WorkItemStatus
 from app.core.exceptions import InvalidAssignedMechanic, NotAssignedMechanic, VisitNotFound, WorkItemNotFound
 from app.modules.clients.schemas import ClientCreate
 from app.modules.clients.service import ClientService
@@ -12,6 +12,7 @@ from app.modules.users.audit import AuditLog
 from app.modules.users.models import User
 from app.modules.vehicles.schemas import VehicleCreate
 from app.modules.vehicles.service import VehicleService
+from app.modules.visits.models import Visit
 from app.modules.visits.schemas import VisitCreate
 from app.modules.visits.service import VisitService
 from app.modules.visits.work_items_schemas import WorkItemCreate
@@ -101,6 +102,27 @@ async def test_list_mine_returns_only_own_assigned_items(session):
 
     other = await WorkItemService(session).list_mine(mechanic_b)
     assert other == []
+
+
+@pytest.mark.parametrize("closed", [VisitStatus.ISSUED, VisitStatus.CANCELLED, "deleted"])
+async def test_list_mine_skips_items_of_closed_visits(session, closed):
+    admin, mechanic_a, mechanic_b, item = await _setup_visit_with_mechanic(session)
+    visit = await session.get(Visit, item.visit_id)
+    if closed == "deleted":
+        visit.deleted_at = datetime.now(timezone.utc)
+    else:
+        visit.status = closed
+    await session.flush()
+
+    assert await WorkItemService(session).list_mine(mechanic_a) == []
+
+
+async def test_list_mine_keeps_ready_items_of_open_visits(session):
+    admin, mechanic_a, mechanic_b, item = await _setup_visit_with_mechanic(session)
+    await WorkItemService(session).update_status(item.id, WorkItemStatus.READY, mechanic_a)
+
+    mine = await WorkItemService(session).list_mine(mechanic_a)
+    assert [i.id for i in mine] == [item.id]
 
 
 async def test_list_for_visit_returns_items_for_that_visit(session):
