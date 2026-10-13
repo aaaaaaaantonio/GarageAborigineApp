@@ -23,10 +23,12 @@ from app.modules.visits.work_items_schemas import (
 
 WORK_HISTORY_LIMIT = 30
 DONE_LIST_LIMIT = 100
+BOARD_LIMIT = 200
 
 # What to pick up first: work in hand, then not started, then blocked, then done.
 URGENCY = [WorkItemStatus.IN_PROGRESS, WorkItemStatus.NOT_READY, WorkItemStatus.WAITING_PARTS, WorkItemStatus.READY]
 MineSort = Literal["urgency", "car"]
+BoardGroup = Literal["mechanic", "status", "car"]
 
 
 def urgency_expr():
@@ -249,6 +251,52 @@ class WorkItemService:
             total_norm_hours=float(hours),
             has_more=len(items) > DONE_LIST_LIMIT,
         )
+
+    async def list_board(
+        self,
+        *,
+        mechanic_id: uuid.UUID | None = None,
+        unassigned: bool = False,
+        statuses: list[WorkItemStatus] | None = None,
+        categories: list[WorkCategory] | None = None,
+        unapproved: bool = False,
+        group: BoardGroup = "mechanic",
+    ) -> tuple[list[VisitWorkItem], bool]:
+        """Every work item of open visits for the shop floor; ordered so equal groups sit together."""
+        stmt = (
+            select(VisitWorkItem, Visit.status)
+            .join(Visit, Visit.id == VisitWorkItem.visit_id)
+            .join(Vehicle, Vehicle.id == Visit.vehicle_id)
+            .outerjoin(User, User.id == VisitWorkItem.assigned_mechanic_id)
+            .where(Visit.status.not_in(CLOSED_STATUSES), Visit.deleted_at.is_(None))
+        )
+        if mechanic_id is not None:
+            stmt = stmt.where(VisitWorkItem.assigned_mechanic_id == mechanic_id)
+        if unassigned:
+            stmt = stmt.where(VisitWorkItem.assigned_mechanic_id.is_(None))
+        if statuses:
+            stmt = stmt.where(VisitWorkItem.status.in_(statuses))
+        if categories:
+            stmt = stmt.where(VisitWorkItem.category.in_(categories))
+        if unapproved:
+            stmt = stmt.where(VisitWorkItem.approved_by_client.is_(False))
+        urgency = urgency_expr()
+        if group == "status":
+            order = [urgency, Vehicle.plate_number]
+        elif group == "car":
+            order = [Vehicle.plate_number, Visit.id, urgency]
+        else:
+            order = [User.full_name.asc().nulls_first(), urgency, Vehicle.plate_number]
+        rows = (
+            await self.session.execute(
+                stmt.order_by(*order, VisitWorkItem.created_at, VisitWorkItem.id).limit(BOARD_LIMIT + 1)
+            )
+        ).all()
+        items = []
+        for item, visit_status in rows[:BOARD_LIMIT]:
+            item.visit_status = visit_status
+            items.append(item)
+        return await self._with_vehicles(await self._with_names(items)), len(rows) > BOARD_LIMIT
 
     async def _with_vehicles(self, items: list[VisitWorkItem]) -> list[VisitWorkItem]:
         # The mechanic can't read GET /visits/{id}; clients label work items by car.

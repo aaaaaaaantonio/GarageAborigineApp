@@ -13,6 +13,7 @@ from app.modules.catalog.router import router as catalog_router
 from app.modules.visits.router import router as visits_router
 from app.modules.visits.work_items_router import router as work_items_router
 from app.modules.visits.work_items_mine_router import router as work_items_mine_router
+from app.modules.visits.board_router import router as work_board_router
 from app.modules.visits.part_items_router import router as part_items_router
 from app.modules.visits.vehicle_history_router import router as vehicle_history_router
 from app.modules.consent.router import router as consent_router
@@ -35,6 +36,7 @@ app.include_router(catalog_router)
 app.include_router(visits_router)
 app.include_router(work_items_router)
 app.include_router(work_items_mine_router)
+app.include_router(work_board_router)
 app.include_router(part_items_router)
 app.include_router(vehicle_history_router)
 app.include_router(consent_router)

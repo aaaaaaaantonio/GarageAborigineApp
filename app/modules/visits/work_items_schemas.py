@@ -110,3 +110,25 @@ class WorkItemDoneListOut(BaseModel):
     has_more: bool
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class WorkItemBoardOut(BaseModel):
+    id: uuid.UUID
+    visit_id: uuid.UUID
+    name: str
+    status: WorkItemStatus
+    category: WorkCategory
+    approved_by_client: bool
+    norm_hours: float
+    assigned_mechanic_id: uuid.UUID | None
+    assigned_mechanic_name: str | None = None
+    plate_number: str | None = None
+    make_model: str | None = None
+    visit_status: VisitStatus
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class WorkItemBoardListOut(BaseModel):
+    items: list[WorkItemBoardOut]
+    has_more: bool
