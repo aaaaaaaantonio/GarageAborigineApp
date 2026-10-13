@@ -13,6 +13,8 @@ router = Router()
 _MASTER_ITEMS = [
     ("🆕 Новый заезд", actions.NEW_VISIT),
     ("🔧 Заезды в работе", nav.go_data("active_visits")),
+    ("📋 Доска работ", nav.go_data("board")),
+    ("🗄 Архив заездов", nav.go_data("archive")),
     ("🔍 Поиск", nav.go_data("search")),
     ("📝 Регистрация клиента (бумага)", actions.PAPER_CONSENT),
 ]

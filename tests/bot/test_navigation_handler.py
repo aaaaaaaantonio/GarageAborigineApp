@@ -26,49 +26,101 @@ def _visit(visit_id, master_id, status="in_progress", plate="А123ВС77", clien
     }
 
 
+def _visit_buttons(markup):
+    return [b for b in buttons(markup) if b[1].startswith("go:visit:")]
+
+
+def _option_buttons(markup):
+    return [b for b in buttons(markup) if b[1].startswith("opt:")]
+
+
 async def test_active_visits_marks_own_with_star_and_opens_card():
     api = AsyncMock()
     api.list_visits.return_value = {
         "items": [_visit(V1, ME), _visit(V2, OTHER, status="diagnostics", plate="В001ОР50", client="Петрова")],
-        "has_more": False,
+        "has_more": False, "total_count": 2,
     }
 
     text, markup = await render_active_visits(api, MASTER, {})
 
-    api.list_visits.assert_awaited_once_with(active=True)
+    api.list_visits.assert_awaited_once_with(active=True, sort="date")
     assert text == "Заезды в работе (2)"
-    assert buttons(markup) == [
+    assert _visit_buttons(markup) == [
         ("⭐ А123ВС77 · Иванов Пётр · Ремонт", f"go:visit:{encode_id(V1)}"),
         ("В001ОР50 · Петрова · Диагностика", f"go:visit:{encode_id(V2)}"),
     ]
 
 
-async def test_active_visits_admin_sees_no_stars():
+async def test_active_visits_filter_and_sort_buttons():
     api = AsyncMock()
-    api.list_visits.return_value = {"items": [_visit(V1, OTHER)], "has_more": False}
+    api.list_visits.return_value = {"items": [_visit(V1, ME)], "has_more": False, "total_count": 1}
+
+    _, markup = await render_active_visits(api, MASTER, {})
+
+    assert _option_buttons(markup) == [
+        ("✓ Все", "opt:f:all"), ("Мои", "opt:f:mine"), ("Согласование", "opt:f:appr"), ("Запчасти", "opt:f:parts"),
+        ("Готовы", "opt:f:ready"), ("Без механика", "opt:f:free"), ("Долго стоят", "opt:f:stale"),
+        ("↕ По дате ›", "opt:s:stale"),
+    ]
+
+
+async def test_active_visits_filters_go_to_the_api():
+    api = AsyncMock()
+    api.list_visits.return_value = {"items": [], "has_more": False, "total_count": 0}
+    cases = {
+        "mine": {"master_id": ME}, "appr": {"status": ["approval"]}, "parts": {"status": ["waiting_parts"]},
+        "ready": {"status": ["ready"]}, "free": {"unassigned_work": True}, "stale": {"stale": True},
+    }
+    for code, expected in cases.items():
+        await render_active_visits(api, MASTER, {"f": code, "s": "status"})
+        api.list_visits.assert_awaited_with(active=True, sort="status", **expected)
+
+
+async def test_active_visits_days_in_status_on_the_button():
+    api = AsyncMock()
+    visit = _visit(V1, OTHER) | {"status_changed_at": "2000-01-01T00:00:00+00:00"}
+    api.list_visits.return_value = {"items": [visit], "has_more": False, "total_count": 1}
+
+    _, markup = await render_active_visits(api, MASTER, {})
+
+    assert _visit_buttons(markup)[0][0].startswith("А123ВС77 · Иванов Пётр · Ремонт · ")
+    assert _visit_buttons(markup)[0][0].endswith(" дн.")
+
+
+async def test_active_visits_admin_sees_no_stars_no_mine_and_picks_a_master():
+    api = AsyncMock()
+    api.list_visits.return_value = {"items": [_visit(V1, OTHER)], "has_more": False, "total_count": 1}
+    api.list_masters.return_value = [{"id": OTHER, "full_name": "Кузнецов"}]
 
     _, markup = await render_active_visits(api, ADMIN, {})
+    await render_active_visits(api, ADMIN, {"m": encode_id(OTHER)})
 
-    assert not buttons(markup)[0][0].startswith("⭐")
+    assert not _visit_buttons(markup)[0][0].startswith("⭐")
+    options = _option_buttons(markup)
+    assert ("Мои", "opt:f:mine") not in options
+    assert ("👤 Все мастера ›", f"opt:m:{encode_id(OTHER)}") in options
+    api.list_visits.assert_awaited_with(active=True, sort="date", master_id=OTHER)
 
 
 async def test_active_visits_empty():
     api = AsyncMock()
-    api.list_visits.return_value = {"items": [], "has_more": False}
+    api.list_visits.return_value = {"items": [], "has_more": False, "total_count": 0}
 
     text, markup = await render_active_visits(api, MASTER, {})
+    filtered, _ = await render_active_visits(api, MASTER, {"f": "ready"})
 
     assert text == "Незакрытых заездов нет."
-    assert buttons(markup) == []
+    assert _visit_buttons(markup) == []
+    assert filtered == "Нет заездов с этим фильтром."
 
 
 async def test_active_visits_warns_when_truncated():
     api = AsyncMock()
-    api.list_visits.return_value = {"items": [_visit(V1, ME)], "has_more": True}
+    api.list_visits.return_value = {"items": [_visit(V1, ME)], "has_more": True, "total_count": 45}
 
     text, _ = await render_active_visits(api, MASTER, {})
 
-    assert text == "Заезды в работе (1)\nПоказаны последние 30."
+    assert text == "Заезды в работе (45)\nПоказаны первые 1."
 
 
 async def test_client_card_lists_vehicles_and_visits_button():

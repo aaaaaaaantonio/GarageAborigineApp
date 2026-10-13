@@ -19,6 +19,8 @@ async def test_master_menu():
     assert buttons(markup) == [
         ("🆕 Новый заезд", "wiz:new_visit"),
         ("🔧 Заезды в работе", "go:active_visits"),
+        ("📋 Доска работ", "go:board"),
+        ("🗄 Архив заездов", "go:archive"),
         ("🔍 Поиск", "go:search"),
         ("📝 Регистрация клиента (бумага)", "wiz:paper_consent"),
     ]
@@ -27,7 +29,7 @@ async def test_master_menu():
 async def test_admin_menu_adds_staff():
     _, markup = await render_menu(AsyncMock(), ADMIN, {})
     assert buttons(markup)[-1] == ("👥 Добавить сотрудника", "wiz:new_staff")
-    assert len(buttons(markup)) == 5
+    assert len(buttons(markup)) == 7
 
 
 async def test_mechanic_menu():

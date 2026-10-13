@@ -17,9 +17,13 @@ def _api():
     api.list_work_items.return_value = [item]
     api.list_my_work_items.return_value = [item]
     api.list_my_done_work_items.return_value = []
+    api.list_masters.return_value = [{"id": M, "full_name": "Мастер с очень длинным именем"}]
+    api.list_work_board.return_value = {"items": [item | {"approved_by_client": True}], "has_more": False}
     api.list_mechanics.return_value = [{"id": M, "full_name": "Механик"}]
     api.list_visits.return_value = {"items": [{"id": V, "status": "in_progress", "plate_number": "А1", "client_name": "К",
-                                               "assigned_master_id": M, "created_at": "2026-10-02T07:00:00+00:00"}], "has_more": False}
+                                               "assigned_master_id": M, "created_at": "2026-10-02T07:00:00+00:00",
+                                               "status_changed_at": "2026-10-02T07:00:00+00:00", "total_amount": 1}],
+                                    "has_more": True, "total_count": 90, "issued_amount": 1}
     api.get_client.return_value = {"id": C, "full_name": "К", "phone_display": "+7"}
     api.list_client_vehicles.return_value = [{"id": CAR, "make": "A", "model": "B", "plate_number": "А1"}]
     api.get_vehicle.return_value = {"id": CAR, "make": "A", "model": "B", "plate_number": "А1", "vin": "X" * 17, "mileage_current": 1}
@@ -29,7 +33,7 @@ def _api():
 
 
 SCREEN_ARGS = {
-    "menu": {}, "active_visits": {}, "my_works": {}, "done_works": {}, "search": {},
+    "menu": {}, "active_visits": {}, "my_works": {}, "done_works": {}, "search": {}, "archive": {}, "board": {},
     "visit": {"visit_id": V}, "visit_status": {"visit_id": V},
     "work": {"visit_id": V, "item_id": I}, "reassign": {"visit_id": V, "item_id": I},
     "client": {"client_id": C}, "vehicle": {"vehicle_id": CAR},
