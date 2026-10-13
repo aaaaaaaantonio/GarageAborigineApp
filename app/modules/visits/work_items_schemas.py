@@ -77,6 +77,7 @@ class VehicleWorkHistoryItemOut(BaseModel):
     mileage: int
     name: str
     status: WorkItemStatus
+    category: WorkCategory
 
 
 class VehicleWorkHistoryOut(BaseModel):
@@ -94,5 +95,18 @@ class WorkItemDoneOut(BaseModel):
     make_model: str | None = None
     visit_status: VisitStatus
     visit_date: datetime
+    closed_at: datetime
+    norm_hours: float
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class WorkItemDoneListOut(BaseModel):
+    """No money here: the mechanic sees norm-hours only."""
+
+    items: list[WorkItemDoneOut]
+    count: int
+    total_norm_hours: float
+    has_more: bool
 
     model_config = ConfigDict(from_attributes=True)

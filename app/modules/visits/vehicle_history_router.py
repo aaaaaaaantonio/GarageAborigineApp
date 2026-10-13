@@ -1,10 +1,10 @@
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_session
-from app.core.enums import UserRole
+from app.core.enums import UserRole, WorkCategory
 from app.modules.users.auth import require_role
 from app.modules.users.models import User
 from app.modules.vehicles.service import VehicleService
@@ -17,9 +17,10 @@ router = APIRouter(prefix="/vehicles/{vehicle_id}/work-history", tags=["vehicle-
 @router.get("", response_model=VehicleWorkHistoryOut)
 async def get_vehicle_work_history(
     vehicle_id: uuid.UUID,
+    category: list[WorkCategory] = Query(default=[]),
     session: AsyncSession = Depends(get_session),
     acting_user: User = Depends(require_role(UserRole.ADMIN, UserRole.MASTER, UserRole.MECHANIC)),
 ):
     if await VehicleService(session).get(vehicle_id) is None:
         raise HTTPException(404, "Vehicle not found")
-    return await WorkItemService(session).list_vehicle_history(vehicle_id)
+    return await WorkItemService(session).list_vehicle_history(vehicle_id, categories=category)

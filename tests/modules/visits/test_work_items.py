@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from sqlalchemy import select
@@ -12,7 +12,7 @@ from app.modules.users.audit import AuditLog
 from app.modules.users.models import User
 from app.modules.vehicles.schemas import VehicleCreate
 from app.modules.vehicles.service import VehicleService
-from app.modules.visits.models import Visit
+from app.modules.visits.models import Visit, VisitStatusLog
 from app.modules.visits.schemas import VisitCreate
 from app.modules.visits.service import VisitService
 from app.modules.visits.work_items_schemas import WorkItemCreate
@@ -138,28 +138,28 @@ async def test_list_done_returns_ready_items_of_closed_visits(session, closed):
     admin, mechanic_a, mechanic_b, item = await _setup_visit_with_mechanic(session)
     visit = await _close(session, item, closed)
 
-    done = await WorkItemService(session).list_done(mechanic_a)
+    done = (await WorkItemService(session).list_done(mechanic_a)).items
     assert [i.id for i in done] == [item.id]
     assert done[0].name == "Замена масла"
     assert done[0].plate_number == "А123"
     assert done[0].visit_status == closed
     assert done[0].visit_date == visit.created_at
-    assert await WorkItemService(session).list_done(mechanic_b) == []
+    assert (await WorkItemService(session).list_done(mechanic_b)).items == []
 
 
 async def test_list_done_skips_open_visits_unfinished_and_deleted(session):
     admin, mechanic_a, mechanic_b, item = await _setup_visit_with_mechanic(session)
     item.status = WorkItemStatus.READY  # готова, но машина ещё в сервисе
     await session.flush()
-    assert await WorkItemService(session).list_done(mechanic_a) == []
+    assert (await WorkItemService(session).list_done(mechanic_a)).items == []
 
     await _close(session, item, VisitStatus.CANCELLED, WorkItemStatus.NOT_READY)
-    assert await WorkItemService(session).list_done(mechanic_a) == []
+    assert (await WorkItemService(session).list_done(mechanic_a)).items == []
 
     visit = await _close(session, item, VisitStatus.ISSUED)
     visit.deleted_at = datetime.now(timezone.utc)
     await session.flush()
-    assert await WorkItemService(session).list_done(mechanic_a) == []
+    assert (await WorkItemService(session).list_done(mechanic_a)).items == []
 
 
 async def test_list_done_newest_visit_first(session):
@@ -180,8 +180,93 @@ async def test_list_done_newest_visit_first(session):
     old_visit.created_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
     await session.flush()
 
-    done = await WorkItemService(session).list_done(mechanic_a)
+    done = (await WorkItemService(session).list_done(mechanic_a)).items
     assert [i.id for i in done] == [new.id, old.id]
+
+
+async def _extra_item(session, admin, visit_id, mechanic, name, status, hours=1.0):
+    item = await WorkItemService(session).add_item(
+        visit_id,
+        WorkItemCreate(free_text_name=name, category=WorkCategory.OTHER, norm_hours=hours, hourly_rate=1000,
+                       assigned_mechanic_id=mechanic.id),
+        admin,
+    )
+    item.status = status
+    await session.flush()
+    return item
+
+
+async def _second_visit(session, admin, first_visit_id, created_at):
+    first = await session.get(Visit, first_visit_id)
+    visit = await VisitService(session).create_visit(
+        VisitCreate(client_id=first.client_id, vehicle_id=first.vehicle_id, assigned_master_id=first.assigned_master_id,
+                    mileage_at_intake=5000),
+        admin,
+    )
+    visit.created_at = created_at
+    await session.flush()
+    return visit
+
+
+async def test_list_mine_orders_by_urgency_and_filters_by_status(session):
+    admin, mechanic_a, mechanic_b, item = await _setup_visit_with_mechanic(session)  # not_ready
+    ready = await _extra_item(session, admin, item.visit_id, mechanic_a, "Готовая", WorkItemStatus.READY)
+    parts = await _extra_item(session, admin, item.visit_id, mechanic_a, "Ждёт", WorkItemStatus.WAITING_PARTS)
+    doing = await _extra_item(session, admin, item.visit_id, mechanic_a, "Делаю", WorkItemStatus.IN_PROGRESS)
+    service = WorkItemService(session)
+
+    assert [i.id for i in await service.list_mine(mechanic_a)] == [doing.id, item.id, parts.id, ready.id]
+    only = await service.list_mine(mechanic_a, statuses=[WorkItemStatus.WAITING_PARTS, WorkItemStatus.READY])
+    assert [i.id for i in only] == [parts.id, ready.id]
+
+
+async def test_list_mine_by_car_groups_works_of_one_visit(session):
+    admin, mechanic_a, mechanic_b, first = await _setup_visit_with_mechanic(session)  # not_ready, older visit
+    first_visit = await session.get(Visit, first.visit_id)
+    first_visit.created_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    second_visit = await _second_visit(session, admin, first.visit_id, datetime(2026, 2, 1, tzinfo=timezone.utc))
+    other_car_doing = await _extra_item(session, admin, second_visit.id, mechanic_a, "Б-в работе", WorkItemStatus.IN_PROGRESS)
+    first_car_ready = await _extra_item(session, admin, first.visit_id, mechanic_a, "А-готово", WorkItemStatus.READY)
+    other_car_waiting = await _extra_item(session, admin, second_visit.id, mechanic_a, "Б-ждёт", WorkItemStatus.WAITING_PARTS)
+
+    by_car = await WorkItemService(session).list_mine(mechanic_a, sort="car")
+
+    assert [i.id for i in by_car] == [other_car_doing.id, other_car_waiting.id, first.id, first_car_ready.id]
+
+
+async def _closed_visit_with_work(session, admin, mechanic, closed_at, status=VisitStatus.ISSUED, hours=1.5, name="Работа"):
+    visit = await _second_visit(session, admin, (await _any_visit_id(session)), closed_at - timedelta(days=1))
+    item = await _extra_item(session, admin, visit.id, mechanic, name, WorkItemStatus.READY, hours)
+    visit.status = status
+    session.add(VisitStatusLog(visit_id=visit.id, to_status=status, changed_by_user_id=admin.id, changed_at=closed_at))
+    await session.flush()
+    return item
+
+
+async def _any_visit_id(session):
+    from sqlalchemy import select as sa_select
+    return (await session.execute(sa_select(Visit.id).limit(1))).scalar_one()
+
+
+async def test_list_done_filters_by_period_and_outcome_and_sums_norm_hours(session):
+    admin, mechanic_a, mechanic_b, _ = await _setup_visit_with_mechanic(session)
+    now = datetime.now(timezone.utc)
+    recent = await _closed_visit_with_work(session, admin, mechanic_a, now - timedelta(days=2), hours=1.5)
+    recent_cancel = await _closed_visit_with_work(session, admin, mechanic_a, now - timedelta(days=3),
+                                                  status=VisitStatus.CANCELLED, hours=0.5)
+    old = await _closed_visit_with_work(session, admin, mechanic_a, now - timedelta(days=40), hours=4)
+    service = WorkItemService(session)
+
+    everything = await service.list_done(mechanic_a)
+    week = await service.list_done(mechanic_a, since=now - timedelta(days=7))
+    week_issued = await service.list_done(mechanic_a, since=now - timedelta(days=7), outcome=VisitStatus.ISSUED)
+
+    assert [i.id for i in everything.items] == [recent.id, recent_cancel.id, old.id]
+    assert everything.count == 3 and everything.total_norm_hours == 6.0
+    assert [i.id for i in week.items] == [recent.id, recent_cancel.id] and week.total_norm_hours == 2.0
+    assert [i.id for i in week_issued.items] == [recent.id] and week_issued.count == 1
+    assert week.items[0].closed_at == now - timedelta(days=2)
+    assert week.items[0].norm_hours == 1.5
 
 
 async def test_list_for_visit_returns_items_for_that_visit(session):

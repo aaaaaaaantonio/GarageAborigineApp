@@ -1,10 +1,12 @@
 import uuid
+from dataclasses import dataclass
 from datetime import datetime, timezone
+from typing import Literal
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.enums import ApprovedVia, UserRole, VisitStatus, WorkItemStatus
+from app.core.enums import ApprovedVia, UserRole, VisitStatus, WorkCategory, WorkItemStatus
 from app.core.exceptions import InvalidAssignedMechanic, NotAssignedMechanic, VisitNotFound, WorkItemNotFound
 from app.modules.catalog.models import WorkCatalog
 from app.modules.catalog.repository import CatalogRepository
@@ -12,6 +14,7 @@ from app.modules.users.audit import record_audit
 from app.modules.users.models import User
 from app.modules.vehicles.models import Vehicle
 from app.modules.visits.models import Visit, VisitWorkItem
+from app.modules.visits.repository import CLOSED_STATUSES, status_changed_at_expr
 from app.modules.visits.work_items_schemas import (
     VehicleWorkHistoryItemOut,
     VehicleWorkHistoryOut,
@@ -20,6 +23,22 @@ from app.modules.visits.work_items_schemas import (
 
 WORK_HISTORY_LIMIT = 30
 DONE_LIST_LIMIT = 100
+
+# What to pick up first: work in hand, then not started, then blocked, then done.
+URGENCY = [WorkItemStatus.IN_PROGRESS, WorkItemStatus.NOT_READY, WorkItemStatus.WAITING_PARTS, WorkItemStatus.READY]
+MineSort = Literal["urgency", "car"]
+
+
+def urgency_expr():
+    return case(*[(VisitWorkItem.status == s, i) for i, s in enumerate(URGENCY)])
+
+
+@dataclass
+class DoneWorks:
+    items: list[VisitWorkItem]
+    count: int
+    total_norm_hours: float
+    has_more: bool
 
 
 class WorkItemService:
@@ -168,39 +187,68 @@ class WorkItemService:
         )
         return (await self._with_names([item]))[0]
 
-    async def list_mine(self, acting_user: User) -> list[VisitWorkItem]:
-        result = await self.session.execute(
+    async def list_mine(
+        self, acting_user: User, statuses: list[WorkItemStatus] | None = None, sort: MineSort = "urgency"
+    ) -> list[VisitWorkItem]:
+        stmt = (
             select(VisitWorkItem)
             .join(Visit, Visit.id == VisitWorkItem.visit_id)
             .where(
                 VisitWorkItem.assigned_mechanic_id == acting_user.id,
                 # Closed visits are history: the car has left the shop.
-                Visit.status.not_in((VisitStatus.ISSUED, VisitStatus.CANCELLED)),
+                Visit.status.not_in(CLOSED_STATUSES),
                 Visit.deleted_at.is_(None),
             )
-            .order_by(VisitWorkItem.created_at, VisitWorkItem.id)
         )
+        if statuses:
+            stmt = stmt.where(VisitWorkItem.status.in_(statuses))
+        urgency = urgency_expr()
+        if sort == "car":
+            # Cars ordered by their most urgent work; a car's works stay together.
+            car_urgency = func.min(urgency).over(partition_by=VisitWorkItem.visit_id)
+            order = [car_urgency, Visit.created_at, Visit.id, urgency]
+        else:
+            order = [urgency, Visit.created_at]
+        result = await self.session.execute(stmt.order_by(*order, VisitWorkItem.created_at, VisitWorkItem.id))
         return await self._with_vehicles(await self._with_names(list(result.scalars())))
 
-    async def list_done(self, acting_user: User) -> list[VisitWorkItem]:
-        """The mechanic's finished work in closed visits, newest visit first."""
+    async def list_done(
+        self, acting_user: User, since: datetime | None = None, outcome: VisitStatus | None = None
+    ) -> DoneWorks:
+        """The mechanic's finished work in closed visits, most recently closed first."""
+        closed_at = status_changed_at_expr()
+        conditions = [
+            VisitWorkItem.assigned_mechanic_id == acting_user.id,
+            VisitWorkItem.status == WorkItemStatus.READY,
+            Visit.status.in_([outcome] if outcome else CLOSED_STATUSES),
+            Visit.deleted_at.is_(None),
+        ]
+        if since is not None:
+            conditions.append(closed_at >= since)
         result = await self.session.execute(
-            select(VisitWorkItem, Visit.status, Visit.created_at)
+            select(VisitWorkItem, Visit.status, Visit.created_at, closed_at)
             .join(Visit, Visit.id == VisitWorkItem.visit_id)
-            .where(
-                VisitWorkItem.assigned_mechanic_id == acting_user.id,
-                VisitWorkItem.status == WorkItemStatus.READY,
-                Visit.status.in_((VisitStatus.ISSUED, VisitStatus.CANCELLED)),
-                Visit.deleted_at.is_(None),
-            )
-            .order_by(Visit.created_at.desc(), VisitWorkItem.created_at.desc(), VisitWorkItem.id)
-            .limit(DONE_LIST_LIMIT)
+            .where(*conditions)
+            .order_by(closed_at.desc(), VisitWorkItem.created_at.desc(), VisitWorkItem.id)
+            .limit(DONE_LIST_LIMIT + 1)
         )
         items = []
-        for item, visit_status, visit_date in result.all():
-            item.visit_status, item.visit_date = visit_status, visit_date
+        for item, visit_status, visit_date, item_closed_at in result.all():
+            item.visit_status, item.visit_date, item.closed_at = visit_status, visit_date, item_closed_at
             items.append(item)
-        return await self._with_vehicles(await self._with_names(items))
+        count, hours = (
+            await self.session.execute(
+                select(func.count(VisitWorkItem.id), func.coalesce(func.sum(VisitWorkItem.norm_hours), 0))
+                .join(Visit, Visit.id == VisitWorkItem.visit_id)
+                .where(*conditions)
+            )
+        ).one()
+        return DoneWorks(
+            items=await self._with_vehicles(await self._with_names(items[:DONE_LIST_LIMIT])),
+            count=count,
+            total_norm_hours=float(hours),
+            has_more=len(items) > DONE_LIST_LIMIT,
+        )
 
     async def _with_vehicles(self, items: list[VisitWorkItem]) -> list[VisitWorkItem]:
         # The mechanic can't read GET /visits/{id}; clients label work items by car.
@@ -228,7 +276,9 @@ class WorkItemService:
         )
         return await self._with_names(list(result.scalars()))
 
-    async def list_vehicle_history(self, vehicle_id: uuid.UUID) -> VehicleWorkHistoryOut:
+    async def list_vehicle_history(
+        self, vehicle_id: uuid.UUID, categories: list[WorkCategory] | None = None
+    ) -> VehicleWorkHistoryOut:
         stmt = (
             select(
                 Visit.id.label("visit_id"),
@@ -236,6 +286,7 @@ class WorkItemService:
                 Visit.mileage_at_intake.label("mileage"),
                 func.coalesce(WorkCatalog.name, VisitWorkItem.free_text_name).label("name"),
                 VisitWorkItem.status,
+                VisitWorkItem.category,
             )
             .join(Visit, Visit.id == VisitWorkItem.visit_id)
             .outerjoin(WorkCatalog, WorkCatalog.id == VisitWorkItem.catalog_item_id)
@@ -243,6 +294,7 @@ class WorkItemService:
                 Visit.vehicle_id == vehicle_id,
                 Visit.deleted_at.is_(None),
                 Visit.status != VisitStatus.CANCELLED,
+                *([VisitWorkItem.category.in_(categories)] if categories else []),
             )
             .order_by(Visit.created_at.desc(), Visit.id, VisitWorkItem.created_at, VisitWorkItem.id)
             .limit(WORK_HISTORY_LIMIT + 1)
@@ -251,7 +303,8 @@ class WorkItemService:
         return VehicleWorkHistoryOut(
             items=[
                 VehicleWorkHistoryItemOut(
-                    visit_id=r.visit_id, visit_at=r.visit_at, mileage=r.mileage, name=r.name or "—", status=r.status
+                    visit_id=r.visit_id, visit_at=r.visit_at, mileage=r.mileage, name=r.name or "—", status=r.status,
+                    category=r.category,
                 )
                 for r in rows[:WORK_HISTORY_LIMIT]
             ],

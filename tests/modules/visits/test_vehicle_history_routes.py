@@ -70,13 +70,13 @@ async def _visit(session, admin, master, client, vehicle, hours, mileage, status
     return visit
 
 
-async def _work(session, admin, visit, *, name=None, catalog_item_id=None):
+async def _work(session, admin, visit, *, name=None, catalog_item_id=None, category=WorkCategory.MAINTENANCE):
     return await WorkItemService(session).add_item(
         visit.id,
         WorkItemCreate(
             free_text_name=name,
             catalog_item_id=catalog_item_id,
-            category=WorkCategory.MAINTENANCE,
+            category=category,
             norm_hours=1.5,
             hourly_rate=2000,
         ),
@@ -109,6 +109,7 @@ async def test_history_lists_works_newest_visit_first_with_catalog_names(api_app
         "mileage": 76_200,
         "name": "Диагностика подвески",
         "status": "not_ready",
+        "category": "maintenance",
     }
     assert items[2]["visit_at"].startswith("2026-09-01T10:00:00")
     assert resp.json()["has_more"] is False
@@ -139,7 +140,7 @@ async def test_history_has_no_price_or_client_fields_and_is_open_to_mechanic(api
 
     assert resp.status_code == 200
     assert set(resp.json()) == {"items", "has_more"}
-    assert set(resp.json()["items"][0]) == {"visit_id", "visit_at", "mileage", "name", "status"}
+    assert set(resp.json()["items"][0]) == {"visit_id", "visit_at", "mileage", "name", "status", "category"}
 
 
 async def test_history_reports_has_more_over_limit(api_app, session):
@@ -160,3 +161,19 @@ async def test_history_404_for_unknown_vehicle(api_app, session):
     resp = await _get(api_app, f"/vehicles/{uuid.uuid4()}/work-history", master)
 
     assert resp.status_code == 404
+
+
+async def test_history_filters_by_category_and_reports_it(api_app, session):
+    admin, master, mechanic, client, vehicle = await _world(session)
+    visit = await _visit(session, admin, master, client, vehicle, hours=1, mileage=10_000)
+    await _work(session, admin, visit, name="Масло")
+    await _work(session, admin, visit, name="Колодки", category=WorkCategory.CHASSIS)
+    await _work(session, admin, visit, name="Лампа", category=WorkCategory.ELECTRICAL)
+
+    everything = (await _get(api_app, f"/vehicles/{vehicle.id}/work-history", master)).json()["items"]
+    picked = await _get(api_app, f"/vehicles/{vehicle.id}/work-history?category=chassis&category=electrical", mechanic)
+
+    assert {w["category"] for w in everything} == {"maintenance", "chassis", "electrical"}
+    assert {w["name"] for w in picked.json()["items"]} == {"Колодки", "Лампа"}
+    bad = await _get(api_app, f"/vehicles/{vehicle.id}/work-history?category=bogus", master)
+    assert bad.status_code == 422
