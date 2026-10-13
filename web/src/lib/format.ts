@@ -28,3 +28,7 @@ export function parseNumber(raw: string): number | null {
 export function daysSince(iso: string, now: number = Date.now()): number {
   return Math.max(0, Math.floor((now - new Date(iso).getTime()) / 86_400_000));
 }
+
+export function formatHours(n: number): string {
+  return `${number.format(n).replace(GROUP_SPACE, ' ')} н/ч`;
+}

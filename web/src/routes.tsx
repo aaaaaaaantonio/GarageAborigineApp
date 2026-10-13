@@ -12,6 +12,8 @@ import { ALL_ROLES, STAFF, homePath } from './lib/roles';
 import { ClientScreen } from './screens/ClientScreen';
 import { LoginScreen } from './screens/LoginScreen';
 import { MoreScreen } from './screens/MoreScreen';
+import { ArchiveScreen } from './screens/ArchiveScreen';
+import { BoardScreen } from './screens/BoardScreen';
 import { DoneWorksScreen } from './screens/DoneWorksScreen';
 import { MyWorksScreen } from './screens/MyWorksScreen';
 import { SearchScreen } from './screens/SearchScreen';
@@ -31,6 +33,8 @@ export function AppRoutes() {
       <Route path="/login" element={<LoginScreen />} />
       <Route element={<RequireAuth />}>
         <Route path="/visits" element={<RoleGate roles={STAFF}><VisitsScreen /></RoleGate>} />
+        <Route path="/visits/archive" element={<RoleGate roles={STAFF}><ArchiveScreen /></RoleGate>} />
+        <Route path="/works" element={<RoleGate roles={STAFF}><BoardScreen /></RoleGate>} />
         <Route path="/visits/new" element={<RoleGate roles={STAFF}><NewVisitWizard /></RoleGate>} />
         <Route path="/visits/:visitId" element={<RoleGate roles={STAFF}><VisitScreen /></RoleGate>} />
         <Route path="/visits/:visitId/works/new" element={<RoleGate roles={STAFF}><AddWorkForm /></RoleGate>} />
