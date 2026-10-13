@@ -253,3 +253,48 @@ async def test_inaccessible_message_gets_a_new_live_message():
     callback.bot.send_message.assert_awaited_once()
     assert callback.bot.send_message.await_args.args[:2] == (1, f"item {A}")
     assert (await state.get_data())["nav_msg_id"] == 300
+
+
+# --- options (opt: buttons) ---
+
+def test_option_button_marks_current_value():
+    assert (nav.option_button("Все", "f", "all", "all").text, nav.option_button("Все", "f", "all", "all").callback_data) == (
+        "✓ Все", "opt:f:all")
+    assert nav.option_button("Мои", "f", "mine", "all").text == "Мои"
+
+
+def test_cycle_button_shows_current_and_points_to_next():
+    options = [("date", "По дате"), ("stale", "Долго стоят"), ("status", "По статусу")]
+    first = nav.cycle_button("↕", "s", options, "date")
+    last = nav.cycle_button("↕", "s", options, "status")
+    assert (first.text, first.callback_data) == ("↕ По дате ›", "opt:s:stale")
+    assert last.callback_data == "opt:s:date"
+
+
+async def test_option_callback_updates_top_args_and_resets_page():
+    state = fsm_context()
+    await on_screens(state, ("t_item", {"item_id": A, "page": 3}), msg_id=5)
+
+    await nav.option_callback(make_callback("opt:f:mine", message_id=5), state, api=AsyncMock(), user=MASTER)
+
+    assert await _stack(state) == [["menu", {}], ["t_item", {"item_id": A, "f": "mine"}]]
+
+
+async def test_option_callback_page_keeps_other_args():
+    state = fsm_context()
+    await on_screens(state, ("t_item", {"item_id": A, "f": "mine"}), msg_id=5)
+
+    await nav.option_callback(make_callback("opt:page:2", message_id=5), state, api=AsyncMock(), user=MASTER)
+
+    assert await _stack(state) == [["menu", {}], ["t_item", {"item_id": A, "f": "mine", "page": "2"}]]
+
+
+async def test_option_callback_on_old_message_is_stale():
+    state = fsm_context()
+    await on_screens(state, ("t_item", {"item_id": A}), msg_id=5)
+    callback = make_callback("opt:f:mine", message_id=4)
+
+    await nav.option_callback(callback, state, api=AsyncMock(), user=MASTER)
+
+    callback.answer.assert_awaited_once_with("Кнопка устарела — начните действие заново.")
+    assert await _stack(state) == [["menu", {}], ["t_item", {"item_id": A}]]

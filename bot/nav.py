@@ -29,6 +29,7 @@ NAV_MSG = "nav_msg_id"
 MENU = "menu"
 BACK = "back"
 HOME = "home"
+OPT = "opt"  # opt:<key>:<value> sets one arg of the top screen (filters, sorting, pages)
 
 Event = Message | CallbackQuery
 Rendered = tuple[str, InlineKeyboardMarkup]
@@ -199,3 +200,31 @@ async def back_callback(callback: CallbackQuery, state: FSMContext, api: ApiClie
 async def home_callback(callback: CallbackQuery, state: FSMContext, api: ApiClient, user: dict, **kwargs) -> None:
     await clear_wizard(state)
     await home(callback, state, api, user)
+
+
+def option_button(label: str, key: str, value: str, current: str) -> InlineKeyboardButton:
+    """One choice of a filter row; the current one is ticked."""
+    text = f"✓ {label}" if value == current else label
+    return InlineKeyboardButton(text=text, callback_data=f"{OPT}:{key}:{value}")
+
+
+def cycle_button(prefix: str, key: str, options: list[tuple[str, str]], current: str) -> InlineKeyboardButton:
+    """Shows the current choice; pressing moves to the next one in `options` (value, label)."""
+    values = [value for value, _ in options]
+    index = values.index(current) if current in values else 0
+    label = options[index][1]
+    return InlineKeyboardButton(text=f"{prefix} {label} ›", callback_data=f"{OPT}:{key}:{values[(index + 1) % len(values)]}")
+
+
+@router.callback_query(F.data.startswith(f"{OPT}:"))
+async def option_callback(callback: CallbackQuery, state: FSMContext, api: ApiClient, user: dict, **kwargs) -> None:
+    _, key, value = callback.data.split(":", 2)
+    data = await state.get_data()
+    stack = data.get(NAV_STACK) or _base_stack()
+    if data.get(NAV_MSG) != callback.message.message_id:
+        await callback.answer(STALE_BUTTON)
+        return
+    args = {**stack[-1][1], key: value}
+    if key != "page":
+        args.pop("page", None)  # a new filter starts from the first page
+    await replace_top(callback, state, api, user, args)

@@ -57,6 +57,19 @@ def _detail_text(detail) -> str:
     return ""
 
 
+def _query(params: dict) -> str:
+    """`?a=1&s=x&s=y`: lists repeat the key; None, False and empty lists are left out."""
+    pairs = []
+    for key, value in params.items():
+        if value is None or value is False or value == []:
+            continue
+        if isinstance(value, list):
+            pairs.extend((key, v) for v in value)
+        else:
+            pairs.append((key, "true" if value is True else str(value)))
+    return f"?{urlencode(pairs)}" if pairs else ""
+
+
 class ApiClient:
     def __init__(self, user_id: str | None = None):
         self.user_id = user_id
@@ -130,11 +143,15 @@ class ApiClient:
     async def list_mechanics(self) -> list[dict]:
         return await self.get("/users/mechanics")
 
-    async def list_my_work_items(self) -> list[dict]:
-        return await self.get("/work-items/mine")
+    async def list_my_work_items(self, status: list[str] | None = None, sort: str | None = None) -> list[dict]:
+        return await self.get(f"/work-items/mine{_query({'status': status, 'sort': sort})}")
 
-    async def list_my_done_work_items(self) -> list[dict]:
-        return await self.get("/work-items/mine/done")
+    async def list_my_done_work_items(self, since: str | None = None, outcome: str | None = None) -> dict:
+        return await self.get(f"/work-items/mine/done{_query({'since': since, 'outcome': outcome})}")
+
+    async def list_work_board(self, **filters) -> dict:
+        """Filters as in GET /work-items/board: mechanic_id, unassigned, status, category, unapproved, group."""
+        return await self.get(f"/work-items/board{_query(filters)}")
 
     async def update_work_item_status(self, visit_id: str, item_id: str, new_status: str) -> dict:
         return await self.patch(f"/visits/{visit_id}/work-items/{item_id}/status", json={"new_status": new_status})
@@ -219,18 +236,10 @@ class ApiClient:
             "/users", json={"role": role, "full_name": full_name, "telegram_id": telegram_id}
         )
 
-    async def list_visits(
-        self, active: bool = False, client_id: str | None = None, vehicle_id: str | None = None
-    ) -> dict:
-        params: dict[str, str] = {}
-        if active:
-            params["active"] = "true"
-        if client_id is not None:
-            params["client_id"] = client_id
-        if vehicle_id is not None:
-            params["vehicle_id"] = vehicle_id
-        path = f"/visits?{urlencode(params)}" if params else "/visits"
-        return await self.get(path)
+    async def list_visits(self, **filters) -> dict:
+        """Filters as in GET /visits: active, closed, status (list), client_id, vehicle_id,
+        master_id, unassigned_work, stale, since, sort, offset."""
+        return await self.get(f"/visits{_query(filters)}")
 
     async def list_client_vehicles(self, client_id: str) -> list[dict]:
         return await self.get(f"/clients/{client_id}/vehicles")
@@ -241,5 +250,5 @@ class ApiClient:
     async def list_masters(self) -> list[dict]:
         return await self.get("/users/masters")
 
-    async def get_vehicle_work_history(self, vehicle_id: str) -> dict:
-        return await self.get(f"/vehicles/{vehicle_id}/work-history")
+    async def get_vehicle_work_history(self, vehicle_id: str, category: list[str] | None = None) -> dict:
+        return await self.get(f"/vehicles/{vehicle_id}/work-history{_query({'category': category})}")

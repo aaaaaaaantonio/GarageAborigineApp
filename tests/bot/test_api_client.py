@@ -286,3 +286,39 @@ async def test_api_client_list_my_done_work_items_gets_endpoint():
 
     assert await ApiClient().list_my_done_work_items() == []
     assert route.called
+
+
+@respx.mock
+async def test_list_visits_passes_every_filter():
+    route = respx.route(method="GET", host="localhost", path="/visits").mock(
+        return_value=httpx.Response(200, json={"items": [], "has_more": False})
+    )
+    await ApiClient(user_id="u1").list_visits(
+        closed=True, status=["issued", "cancelled"], master_id="m1", unassigned_work=False, stale=True,
+        since="2026-10-01T00:00:00+00:00", sort="amount", offset=30,
+    )
+    params = route.calls.last.request.url.params
+    assert params.get_list("status") == ["issued", "cancelled"]
+    assert dict(params) | {"status": None} == {
+        "closed": "true", "status": None, "master_id": "m1", "stale": "true",
+        "since": "2026-10-01T00:00:00+00:00", "sort": "amount", "offset": "30",
+    }
+
+
+@respx.mock
+async def test_mechanic_lists_board_and_history_pass_params():
+    mine = respx.get("http://localhost:8000/work-items/mine").mock(return_value=httpx.Response(200, json=[]))
+    done = respx.get("http://localhost:8000/work-items/mine/done").mock(return_value=httpx.Response(200, json={}))
+    board = respx.get("http://localhost:8000/work-items/board").mock(return_value=httpx.Response(200, json={}))
+    history = respx.get("http://localhost:8000/vehicles/v1/work-history").mock(return_value=httpx.Response(200, json={}))
+    api = ApiClient(user_id="u1")
+
+    await api.list_my_work_items(status=["ready"], sort="car")
+    await api.list_my_done_work_items(since="2026-10-01T00:00:00+00:00", outcome="issued")
+    await api.list_work_board(unassigned=True, category=["chassis"], group="status")
+    await api.get_vehicle_work_history("v1", category=["body", "other"])
+
+    assert dict(mine.calls.last.request.url.params) == {"status": "ready", "sort": "car"}
+    assert dict(done.calls.last.request.url.params) == {"since": "2026-10-01T00:00:00+00:00", "outcome": "issued"}
+    assert dict(board.calls.last.request.url.params) == {"unassigned": "true", "category": "chassis", "group": "status"}
+    assert history.calls.last.request.url.params.get_list("category") == ["body", "other"]
