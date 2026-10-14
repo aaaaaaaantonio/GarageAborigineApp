@@ -1,6 +1,7 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { workItemsApi } from '../api/endpoints';
+import { useAuth } from '../auth/AuthProvider';
 import { formatDate, formatHours } from '../lib/format';
 import { PERIOD_LABELS, sinceFor, type Period } from '../lib/periods';
 import { Card } from '../ui/Card';
@@ -22,6 +23,7 @@ const OUTCOMES: { value: Outcome; label: string }[] = [
 
 /** The mechanic's finished work in closed visits. Read-only: the car has left the shop. */
 export function DoneWorksScreen() {
+  const isMechanic = useAuth().user?.role === 'mechanic';
   const [period, setPeriod] = useState<Period>('month');
   const [outcome, setOutcome] = useState<Outcome>('all');
   const query = useQuery({
@@ -32,7 +34,7 @@ export function DoneWorksScreen() {
   });
   return (
     <>
-      <ScreenHeader title="Выполненные работы" />
+      <ScreenHeader title="Выполненные работы" back={!isMechanic} />
       <div className="filters-row">
         <Picker label="Период" value={period} options={PERIODS} onChange={setPeriod} />
         <Picker label="Итог" value={outcome} options={OUTCOMES} onChange={setOutcome} />

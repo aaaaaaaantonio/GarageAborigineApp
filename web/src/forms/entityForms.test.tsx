@@ -146,3 +146,14 @@ test('retry after owner attach failure does not re-create the vehicle', async ()
   expect(posts).toHaveBeenCalledTimes(1);
   expect(attaches).toBe(2);
 });
+
+
+test('more: admin gets his own work lists, master does not', async () => {
+  const { unmount } = renderApp('/more', { as: 'admin' });
+  expect(await screen.findByRole('link', { name: 'Мои работы' })).toHaveAttribute('href', '/my');
+  expect(screen.getByRole('link', { name: 'Мои выполненные' })).toHaveAttribute('href', '/my/done');
+  unmount();
+  renderApp('/more', { as: 'master' });
+  await screen.findByRole('link', { name: 'Бумажное согласие' });
+  expect(screen.queryByRole('link', { name: 'Мои работы' })).not.toBeInTheDocument();
+});

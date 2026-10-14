@@ -27,6 +27,11 @@ export const WORK_STATUS_ICONS: Record<WorkItemStatus, string> = {
 
 export const ROLE_LABELS: Record<Role, string> = { admin: 'Админ', master: 'Мастер', mechanic: 'Механик' };
 
+/** Name in assignee pickers; admins can take work too and are marked as such. */
+export function assigneeLabel(user: { full_name: string; role: Role }): string {
+  return user.role === 'admin' ? `${user.full_name} (админ)` : user.full_name;
+}
+
 export const WORK_CATEGORY_LABELS: Record<WorkCategory, string> = {
   diagnostics: 'Диагностика',
   maintenance: 'ТО',

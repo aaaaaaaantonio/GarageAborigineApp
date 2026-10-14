@@ -5,7 +5,7 @@ import { usersApi, visitsApi, workItemsApi } from '../api/endpoints';
 import type { MyWorkItem, WorkItem, WorkItemStatus } from '../api/types';
 import { useAuth } from '../auth/AuthProvider';
 import { formatRub } from '../lib/format';
-import { WORK_STATUS_ICONS, WORK_STATUS_LABELS } from '../lib/labels';
+import { WORK_STATUS_ICONS, WORK_STATUS_LABELS, assigneeLabel } from '../lib/labels';
 import { useAction } from '../lib/useAction';
 import { Button } from '../ui/Button';
 import { EmptyState } from '../ui/EmptyState';
@@ -115,7 +115,7 @@ export function WorkScreen() {
                     <>
                       {list.map((m) => (
                         <Button key={m.id} block busy={assign.isPending && assign.variables === m.id} disabled={assign.isPending} onClick={() => assign.mutate(m.id)}>
-                          {m.full_name}
+                          {assigneeLabel(m)}
                         </Button>
                       ))}
                       <Button block variant="ghost" disabled={assign.isPending} onClick={() => assign.mutate(null)}>Без исполнителя</Button>

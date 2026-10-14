@@ -8,7 +8,7 @@ import { NewVisitWizard } from './forms/NewVisitWizard';
 import { NewClientRoute, NewVehicleRoute } from './forms/entryRoutes';
 import { PaperConsentForm } from './forms/PaperConsentForm';
 import { StaffForm } from './forms/StaffForm';
-import { ALL_ROLES, STAFF, homePath } from './lib/roles';
+import { ALL_ROLES, STAFF, WORKERS, homePath } from './lib/roles';
 import { ClientScreen } from './screens/ClientScreen';
 import { LoginScreen } from './screens/LoginScreen';
 import { MoreScreen } from './screens/MoreScreen';
@@ -40,8 +40,8 @@ export function AppRoutes() {
         <Route path="/visits/:visitId/works/new" element={<RoleGate roles={STAFF}><AddWorkForm /></RoleGate>} />
         <Route path="/visits/:visitId/works/:itemId" element={<RoleGate roles={ALL_ROLES}><WorkScreen /></RoleGate>} />
         <Route path="/visits/:visitId/works/:itemId/parts/new" element={<RoleGate roles={STAFF}><AddPartForm /></RoleGate>} />
-        <Route path="/my" element={<RoleGate roles={['mechanic']}><MyWorksScreen /></RoleGate>} />
-        <Route path="/my/done" element={<RoleGate roles={['mechanic']}><DoneWorksScreen /></RoleGate>} />
+        <Route path="/my" element={<RoleGate roles={WORKERS}><MyWorksScreen /></RoleGate>} />
+        <Route path="/my/done" element={<RoleGate roles={WORKERS}><DoneWorksScreen /></RoleGate>} />
         <Route path="/search" element={<RoleGate roles={ALL_ROLES}><SearchScreen /></RoleGate>} />
         <Route path="/clients/new" element={<RoleGate roles={STAFF}><NewClientRoute /></RoleGate>} />
         <Route path="/clients/:clientId" element={<RoleGate roles={STAFF}><ClientScreen /></RoleGate>} />

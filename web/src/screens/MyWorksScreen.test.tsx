@@ -113,3 +113,11 @@ test('done tab has the header sign-out too', async () => {
   await screen.findByRole('heading', { name: 'Выполненные работы' });
   expect(screen.getByRole('button', { name: 'Выйти' })).toBeInTheDocument();
 });
+
+
+test('admin opens his own works, with a way back', async () => {
+  server.use(http.get('/api/work-items/mine', () => HttpResponse.json([makeMyWork()])));
+  renderApp('/my', { as: 'admin' });
+  expect(await screen.findByRole('link', { name: /Замена масла ДВС/ })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Назад' })).toBeInTheDocument();
+});

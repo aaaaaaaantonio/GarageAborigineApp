@@ -1,6 +1,7 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { workItemsApi } from '../api/endpoints';
+import { useAuth } from '../auth/AuthProvider';
 import type { MineSort, MyWorkItem, WorkItemStatus } from '../api/types';
 import { WORK_STATUS_ICONS } from '../lib/labels';
 import { Card } from '../ui/Card';
@@ -55,13 +56,15 @@ function byCar(items: MyWorkItem[]): MyWorkItem[][] {
 }
 
 export function MyWorksScreen() {
+  // Admins reach this from «Ещё», not the tab bar, so they get a way back.
+  const isMechanic = useAuth().user?.role === 'mechanic';
   const [status, setStatus] = useState<WorkItemStatus | 'all'>('all');
   const [sort, setSort] = useState<MineSort>('urgency');
   const params = { status: status === 'all' ? undefined : [status], sort };
   const query = useQuery({ queryKey: ['myWorks', params], queryFn: () => workItemsApi.mine(params), placeholderData: keepPreviousData });
   return (
     <>
-      <ScreenHeader title="Мои работы" />
+      <ScreenHeader title="Мои работы" back={!isMechanic} />
       <div className="filters-row">
         <Picker label="Статус" value={status} options={STATUSES} onChange={setStatus} />
         <Picker label="Порядок" value={sort} options={SORTS} onChange={setSort} />

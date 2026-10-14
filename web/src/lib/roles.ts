@@ -2,6 +2,8 @@ import type { Role } from '../api/types';
 
 export const STAFF: Role[] = ['admin', 'master'];
 export const ALL_ROLES: Role[] = ['admin', 'master', 'mechanic'];
+/** Who can be assigned work and has «Мои работы»; matches the API's assignee roles. */
+export const WORKERS: Role[] = ['mechanic', 'admin'];
 /** Tab roots: no back button here. */
 export const ROOT_PATHS = ['/visits', '/visits/new', '/my', '/my/done', '/search', '/more'];
 

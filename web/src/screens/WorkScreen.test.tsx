@@ -71,7 +71,7 @@ test('reassign picks a mechanic or none', async () => {
   staffItem();
   const bodies: unknown[] = [];
   server.use(
-    http.get('/api/users/mechanics', () => HttpResponse.json([USERS.mechanic, { ...USERS.mechanic, id: 'u-m2', full_name: 'Ахмедов Руслан' }])),
+    http.get('/api/users/mechanics', () => HttpResponse.json([USERS.mechanic, { ...USERS.mechanic, id: 'u-m2', full_name: 'Ахмедов Руслан' }, USERS.admin])),
     http.patch('/api/visits/v1/work-items/w1/mechanic', async ({ request }) => {
       bodies.push(await request.json());
       return HttpResponse.json(makeWorkItem());
@@ -80,7 +80,9 @@ test('reassign picks a mechanic or none', async () => {
   const { user } = renderApp('/visits/v1/works/w1', { as: 'master' });
   await user.click(await screen.findByRole('button', { name: 'Сменить исполнителя' }));
   const sheet = screen.getByRole('dialog', { name: 'Кому передать работу?' });
-  await user.click(await within(sheet).findByRole('button', { name: 'Ахмедов Руслан' }));
+  // An admin can take work too; he is marked so nobody mistakes him for a mechanic.
+  expect(await within(sheet).findByRole('button', { name: 'Админ Админов (админ)' })).toBeInTheDocument();
+  await user.click(within(sheet).getByRole('button', { name: 'Ахмедов Руслан' }));
   await waitFor(() => expect(bodies).toEqual([{ assigned_mechanic_id: 'u-m2' }]));
   await user.click(screen.getByRole('button', { name: 'Сменить исполнителя' }));
   await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Без исполнителя' }));

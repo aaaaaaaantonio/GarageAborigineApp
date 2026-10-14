@@ -2,7 +2,7 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { usersApi, workItemsApi } from '../api/endpoints';
 import type { BoardGroup, BoardItem, BoardParams, WorkCategory, WorkItemStatus } from '../api/types';
-import { WORK_CATEGORY_LABELS, WORK_STATUS_ICONS, WORK_STATUS_LABELS } from '../lib/labels';
+import { WORK_CATEGORY_LABELS, WORK_STATUS_ICONS, WORK_STATUS_LABELS, assigneeLabel } from '../lib/labels';
 import { Card } from '../ui/Card';
 import { Picker } from '../ui/Picker';
 import { EmptyState } from '../ui/EmptyState';
@@ -78,7 +78,7 @@ export function BoardScreen() {
           options={[
             { value: '', label: 'Все механики' },
             { value: 'none', label: 'Без исполнителя' },
-            ...(mechanics.data ?? []).map((m) => ({ value: m.id, label: m.full_name })),
+            ...(mechanics.data ?? []).map((m) => ({ value: m.id, label: assigneeLabel(m) })),
           ]}
           onChange={(e) => setMechanic(e.target.value)}
         />

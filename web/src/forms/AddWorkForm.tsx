@@ -4,7 +4,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { catalogApi, usersApi, workItemsApi } from '../api/endpoints';
 import type { CatalogItem, WorkCategory, WorkItemCreate } from '../api/types';
 import { parseNumber } from '../lib/format';
-import { WORK_CATEGORY_LABELS } from '../lib/labels';
+import { WORK_CATEGORY_LABELS, assigneeLabel } from '../lib/labels';
 import { useDebounced } from '../lib/useDebounced';
 import { telegram } from '../telegram/webapp';
 import { Button } from '../ui/Button';
@@ -115,7 +115,7 @@ export function AddWorkForm() {
         <Field label="Ставка, ₽/ч" inputMode="decimal" value={rate} onChange={(e) => setRate(e.target.value)} error={errors.fields.hourly_rate} />
         <SelectField label="Исполнитель" value={mechanicId} onChange={(e) => setMechanicId(e.target.value)}
           error={errors.fields.assigned_mechanic_id}
-          options={[{ value: '', label: 'Без исполнителя' }, ...(mechanics.data ?? []).map((m) => ({ value: m.id, label: m.full_name }))]} />
+          options={[{ value: '', label: 'Без исполнителя' }, ...(mechanics.data ?? []).map((m) => ({ value: m.id, label: assigneeLabel(m) }))]} />
         {errors.general && <p className="form-error" role="alert">{errors.general}</p>}
         <Button type="submit" variant="primary" block busy={save.isPending}>Добавить работу</Button>
       </form>
