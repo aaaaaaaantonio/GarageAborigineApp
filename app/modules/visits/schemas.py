@@ -38,6 +38,7 @@ class VisitOut(BaseModel):
     assigned_master_id: uuid.UUID
     master_name: str
     status_changed_at: datetime
+    last_activity_at: datetime
 
     @computed_field
     @property

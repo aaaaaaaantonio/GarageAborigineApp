@@ -52,7 +52,7 @@ function filterParams(filter: Filter, userId: string): VisitListParams {
 }
 
 function VisitCard({ visit }: { visit: Visit }) {
-  const days = daysSince(visit.status_changed_at);
+  const days = daysSince(visit.last_activity_at);
   return (
     <Card to={`/visits/${visit.id}`}>
       <div className="row">
@@ -65,7 +65,7 @@ function VisitCard({ visit }: { visit: Visit }) {
       </div>
       <div className="row">
         <span className="hint">Мастер: {visit.master_name}</span>
-        {days >= 1 && <span className="hint">{days} дн. в статусе</span>}
+        {days >= 1 && <span className="hint">{days} дн. без движения</span>}
       </div>
     </Card>
   );

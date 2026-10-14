@@ -53,6 +53,8 @@ class VisitWorkItem(Base, UUIDPkMixin, TimestampMixin):
     approved_by_client: Mapped[bool] = mapped_column(Boolean, default=False)
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     approved_via: Mapped[ApprovedVia | None] = mapped_column(nullable=True)
+    # Last status change; NULL until the first one (created_at stands in).
+    status_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     progress_photos: Mapped[list | None] = mapped_column(JSON, nullable=True)
 
 

@@ -75,7 +75,7 @@ async def render_active_visits(api: ApiClient, user: dict, args: dict) -> nav.Re
     visits = result["items"]
     for visit in visits:
         label = " · ".join([visit["plate_number"], visit["client_name"], visit_status_label(visit["status"])])
-        if (days := days_since(visit.get("status_changed_at"))) >= 1:
+        if (days := days_since(visit.get("last_activity_at"))) >= 1:
             label += f" · {days} дн."
         star = "⭐ " if str(visit["assigned_master_id"]) == str(user["id"]) else ""
         rows.append([InlineKeyboardButton(text=star + label, callback_data=nav.go_data("visit", visit["id"]))])

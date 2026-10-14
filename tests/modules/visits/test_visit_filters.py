@@ -3,7 +3,7 @@ from urllib.parse import quote
 
 import pytest
 
-from app.core.enums import VisitStatus, WorkCategory
+from app.core.enums import VisitStatus, WorkCategory, WorkItemStatus
 from app.modules.visits.models import VisitStatusLog
 from app.modules.visits.service import VISIT_LIST_LIMIT
 from app.modules.visits.work_items_schemas import WorkItemCreate
@@ -101,6 +101,33 @@ async def test_stale_filter_and_sort(api_app, session):
 
     assert _ids(stale) == [str(stuck_longer.id), str(stuck.id)]
     assert _ids(by_stale) == [str(stuck_longer.id), str(stuck.id), str(fresh.id)]
+
+
+async def test_work_movement_keeps_a_visit_from_being_stale(api_app, session):
+    admin, me, other, mechanic, client, vehicle = await _world(session)
+    worked_on = await _visit(session, admin, client, vehicle, me, 1, VisitStatus.IN_PROGRESS)
+    await _log(session, worked_on, VisitStatus.IN_PROGRESS, NOW - timedelta(days=6))
+    added_to = await _visit(session, admin, client, vehicle, me, 2, VisitStatus.IN_PROGRESS)
+    await _log(session, added_to, VisitStatus.IN_PROGRESS, NOW - timedelta(days=6))
+    idle = await _visit(session, admin, client, vehicle, me, 3, VisitStatus.IN_PROGRESS)
+    await _log(session, idle, VisitStatus.IN_PROGRESS, NOW - timedelta(days=6))
+    service = WorkItemService(session)
+    body = dict(free_text_name="Работа", category=WorkCategory.OTHER, norm_hours=1, hourly_rate=1000)
+    item = await service.add_item(worked_on.id, WorkItemCreate(**body), admin)
+    item.created_at = NOW - timedelta(days=6)
+    await session.flush()
+    await service.update_status(item.id, WorkItemStatus.IN_PROGRESS, admin)
+    old = await service.add_item(idle.id, WorkItemCreate(**body), admin)
+    old.created_at = NOW - timedelta(days=6)
+    await service.add_item(added_to.id, WorkItemCreate(**body), admin)
+    await session.flush()
+
+    stale = await _get(api_app, "/visits?stale=true", me)
+    items = {i["id"]: i for i in (await _get(api_app, "/visits", me)).json()["items"]}
+
+    assert _ids(stale) == [str(idle.id)]
+    assert NOW - datetime.fromisoformat(items[str(worked_on.id)]["last_activity_at"]) < timedelta(hours=1)
+    assert NOW - datetime.fromisoformat(items[str(idle.id)]["last_activity_at"]) > timedelta(days=5)
 
 
 async def test_sort_by_status_follows_the_funnel(api_app, session):

@@ -79,9 +79,9 @@ async def test_active_visits_filters_go_to_the_api():
         api.list_visits.assert_awaited_with(active=True, sort="status", **expected)
 
 
-async def test_active_visits_days_in_status_on_the_button():
+async def test_active_visits_days_without_movement_on_the_button():
     api = AsyncMock()
-    visit = _visit(V1, OTHER) | {"status_changed_at": "2000-01-01T00:00:00+00:00"}
+    visit = _visit(V1, OTHER) | {"status_changed_at": "2026-10-14T00:00:00+00:00", "last_activity_at": "2000-01-01T00:00:00+00:00"}
     api.list_visits.return_value = {"items": [visit], "has_more": False, "total_count": 1}
 
     _, markup = await render_active_visits(api, MASTER, {})

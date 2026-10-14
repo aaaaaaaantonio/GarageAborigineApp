@@ -33,6 +33,7 @@ export interface Visit {
   assigned_master_id: string;
   master_name: string;
   status_changed_at: string;
+  last_activity_at: string;
   allowed_next_statuses: VisitStatus[];
 }
 

@@ -123,6 +123,8 @@ class WorkItemService:
             raise NotAssignedMechanic()
         old_status = item.status
         item.status = new_status
+        if new_status != old_status:
+            item.status_changed_at = datetime.now(timezone.utc)
         await self.session.flush()
         await record_audit(
             self.session,

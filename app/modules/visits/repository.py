@@ -13,7 +13,7 @@ from app.modules.vehicles.models import Vehicle
 from app.modules.visits.models import Visit, VisitStatusLog, VisitWorkItem
 
 CLOSED_STATUSES = (VisitStatus.ISSUED, VisitStatus.CANCELLED)
-# An open visit whose status hasn't changed for this long counts as stuck.
+# An open visit with no movement (status or works) for this long counts as stuck.
 STALE_DAYS = 3
 FUNNEL = list(VisitStatus)  # enum order is the visit funnel, closed statuses last
 
@@ -29,6 +29,18 @@ def status_changed_at_expr():
         .scalar_subquery()
     )
     return func.coalesce(last_change, Visit.created_at)
+
+
+def last_activity_at_expr():
+    """Latest movement on the visit: its own status change, a work added, or a work's status change."""
+    last_work = (
+        select(func.max(func.coalesce(VisitWorkItem.status_changed_at, VisitWorkItem.created_at)))
+        .where(VisitWorkItem.visit_id == Visit.id)
+        .correlate(Visit)
+        .scalar_subquery()
+    )
+    # GREATEST skips NULLs, so a visit without works falls back to its status change.
+    return func.greatest(status_changed_at_expr(), last_work)
 
 
 @dataclass
@@ -63,6 +75,7 @@ def _summary_select() -> Select:
             Visit.assigned_master_id,
             User.full_name.label("master_name"),
             status_changed_at_expr().label("status_changed_at"),
+            last_activity_at_expr().label("last_activity_at"),
         )
         .join(Client, Client.id == Visit.client_id)
         .join(Vehicle, Vehicle.id == Visit.vehicle_id)
@@ -106,7 +119,7 @@ class VisitRepository:
                 exists().where(VisitWorkItem.visit_id == Visit.id, VisitWorkItem.assigned_mechanic_id.is_(None))
             )
         if f.stale:
-            stmt = stmt.where(changed_at <= datetime.now(timezone.utc) - timedelta(days=STALE_DAYS))
+            stmt = stmt.where(last_activity_at_expr() <= datetime.now(timezone.utc) - timedelta(days=STALE_DAYS))
         if f.since is not None:
             stmt = stmt.where(changed_at >= f.since)
         return stmt
@@ -114,7 +127,7 @@ class VisitRepository:
     async def list_summaries(self, f: VisitFilters, *, viewer_id: uuid.UUID, limit: int, offset: int = 0) -> list[Row]:
         stmt = self._filtered(_summary_select(), f)
         if f.sort == "stale":
-            order = [status_changed_at_expr().asc()]
+            order = [last_activity_at_expr().asc()]
         elif f.sort == "status":
             funnel = case(*[(Visit.status == s, i) for i, s in enumerate(FUNNEL)])
             order = [funnel, Visit.created_at.desc()]

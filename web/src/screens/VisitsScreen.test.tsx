@@ -79,12 +79,17 @@ test('master has no master picker', async () => {
   expect(screen.queryByLabelText('Мастер')).not.toBeInTheDocument();
 });
 
-test('card shows how long the visit sits in its status', async () => {
+test('card shows how long the visit has had no movement', async () => {
   const fourDaysAgo = new Date(Date.now() - 4 * 86_400_000 - 3_600_000).toISOString();
-  serveVisits([makeVisit({ status_changed_at: fourDaysAgo }), makeVisit({ id: 'v3', plate_number: 'О001ОО77', status_changed_at: new Date().toISOString() })]);
+  const now = new Date().toISOString();
+  serveVisits([
+    makeVisit({ status_changed_at: fourDaysAgo, last_activity_at: fourDaysAgo }),
+    // Status is old, but a work moved today: not idle.
+    makeVisit({ id: 'v3', plate_number: 'О001ОО77', status_changed_at: fourDaysAgo, last_activity_at: now }),
+  ]);
   renderApp('/visits', { as: 'master' });
-  expect(await screen.findByText('4 дн. в статусе')).toBeInTheDocument();
-  expect(screen.getAllByText(/дн\. в статусе/)).toHaveLength(1);
+  expect(await screen.findByText('4 дн. без движения')).toBeInTheDocument();
+  expect(screen.getAllByText(/дн\. без движения/)).toHaveLength(1);
 });
 
 test('links to the work board and the archive', async () => {

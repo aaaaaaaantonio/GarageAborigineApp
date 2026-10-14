@@ -7,7 +7,7 @@ export function makeVisit(over: Partial<Visit> = {}): Visit {
     id: 'v1', status: 'in_progress', mileage_at_intake: 120500, total_amount: 9850,
     created_at: '2026-10-10T09:00:00Z', client_id: 'c1', client_name: 'Петров Иван',
     vehicle_id: 'veh1', plate_number: 'А123ВС77', make_model: 'Toyota Camry',
-    assigned_master_id: 'u-master', master_name: 'Орлов Пётр', status_changed_at: '2026-10-10T09:00:00Z',
+    assigned_master_id: 'u-master', master_name: 'Орлов Пётр', status_changed_at: '2026-10-10T09:00:00Z', last_activity_at: '2026-10-10T09:00:00Z',
     allowed_next_statuses: ['waiting_parts', 'ready', 'cancelled'], ...over,
   };
 }

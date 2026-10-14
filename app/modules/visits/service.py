@@ -44,6 +44,7 @@ def _summary_out(row) -> VisitOut:
         assigned_master_id=row.assigned_master_id,
         master_name=row.master_name,
         status_changed_at=row.status_changed_at,
+        last_activity_at=row.last_activity_at,
     )
 
 
