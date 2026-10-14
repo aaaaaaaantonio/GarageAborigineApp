@@ -242,8 +242,8 @@ class StatsService:
             kpis=[
                 _kpi("new_clients", "Новые клиенты", new, "count", new_prev),
                 _kpi("repeat_clients", "Повторные клиенты", repeat, "count", repeat_prev),
-                _kpi("extra_approved", "Доп. работ согласовано", approved if approved is not None else 0, "pct",
-                     approved_prev),
+                _kpi("extra_approved", "Доп. работ согласовано", "—", "text", compare=False) if approved is None
+                else _kpi("extra_approved", "Доп. работ согласовано", approved, "pct", approved_prev),
                 _kpi("top_make", "Популярная марка", top_make, "text", compare=False),
             ],
             charts=[

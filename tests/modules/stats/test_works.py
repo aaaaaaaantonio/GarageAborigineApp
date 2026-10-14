@@ -35,4 +35,19 @@ async def test_works_empty(session):
     out = await StatsService(session, now=NOW).works("month")
 
     k = {x.key: x for x in out.kpis}
-    assert (k["extra_approved"].value, k["top_make"].value) == (0, "—")
+    assert (k["extra_approved"].value, k["extra_approved"].unit, k["extra_approved"].compare) == ("—", "text", False)
+    assert k["top_make"].value == "—"
+
+
+async def test_extra_approved_delta(session):
+    w = await world(session)
+    prev = await visit(session, w, master=w.master_a, created=msk(9, 1), closed=msk(9, 3))
+    await work(session, prev, name="Развал", hours=1, rate=1000, category=C.CHASSIS, extra=True, approved=True)
+    await work(session, prev, name="Стойки", hours=1, rate=1000, category=C.CHASSIS, extra=True, approved=False)
+    cur = await visit(session, w, master=w.master_a, created=msk(10, 2), closed=msk(10, 4))
+    await work(session, cur, name="Колодки", hours=1, rate=1000, category=C.CHASSIS, extra=True, approved=True)
+
+    out = await StatsService(session, now=NOW).works("month")
+
+    k = {x.key: x for x in out.kpis}
+    assert (k["extra_approved"].value, k["extra_approved"].unit, k["extra_approved"].delta_pct) == (100, "pct", 100)
