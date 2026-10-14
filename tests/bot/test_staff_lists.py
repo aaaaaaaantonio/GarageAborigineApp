@@ -108,7 +108,7 @@ async def test_board_groups_in_text_and_links_works():
 async def test_board_filters_go_to_the_api():
     api = AsyncMock()
     api.list_work_board.return_value = {"items": [], "has_more": False}
-    api.list_mechanics.return_value = [{"id": M1, "full_name": "Морозов"}]
+    api.list_mechanics.return_value = [{"id": M1, "full_name": "Морозов", "role": "admin"}]
 
     text, markup = await render_board(api, MASTER, {"mech": encode_id(M1), "st": "ready", "cat": "chassis", "un": "1", "g": "car"})
     await render_board(api, MASTER, {"mech": "none"})
@@ -117,6 +117,6 @@ async def test_board_filters_go_to_the_api():
     api.list_work_board.assert_awaited_with(unassigned=True, group="mechanic")
     assert text.endswith("Работ с этим фильтром нет.")
     assert [b[0] for b in _opts(markup)] == [
-        "Механик: Морозов ▾", "Статус: Готово ▾", "Категория: Ходовая ▾",
+        "Механик: Морозов (админ) ▾", "Статус: Готово ▾", "Категория: Ходовая ▾",
         "Согласование: Не согласованные ▾", "Группировка: По машине ▾",
     ]

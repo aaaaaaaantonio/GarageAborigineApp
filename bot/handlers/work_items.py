@@ -6,6 +6,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from bot import actions, nav, wizard
 from bot.api_client import ApiClient, ApiForbidden, ApiNotFound
 from bot.callback_ids import decode_id, encode_id
+from bot.formatting import assignee_label
 from bot.handlers.navigation import STAFF_ROLES
 from bot.states import AddWorkItemStates
 from bot.texts import TEXT_REQUIRED
@@ -90,7 +91,7 @@ async def render_reassign(api: ApiClient, user: dict, args: dict) -> nav.Rendere
         raise ApiForbidden("Недостаточно прав")
     builder = InlineKeyboardBuilder()
     for mechanic in await api.list_mechanics():
-        builder.button(text=mechanic["full_name"], callback_data=f"{actions.REASSIGN}:{encode_id(mechanic['id'])}")
+        builder.button(text=assignee_label(mechanic), callback_data=f"{actions.REASSIGN}:{encode_id(mechanic['id'])}")
     builder.button(text="Без исполнителя", callback_data=f"{actions.REASSIGN}:none")
     builder.adjust(1)
     return "Кому передать работу?", builder.as_markup()
@@ -212,7 +213,7 @@ async def receive_hours_and_rate(message: Message, state: FSMContext, api: ApiCl
     if not mechanics:
         await _create_work_item(message, state, api, user, assigned_mechanic_id=None)
         return
-    await state.update_data(mechanic_choices=[[encode_id(m["id"]), m["full_name"]] for m in mechanics])
+    await state.update_data(mechanic_choices=[[encode_id(m["id"]), assignee_label(m)] for m in mechanics])
     await wizard.goto(message, state, api, user, AddWorkItemStates.choosing_mechanic)
 
 

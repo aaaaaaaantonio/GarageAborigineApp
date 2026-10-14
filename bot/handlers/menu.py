@@ -18,7 +18,12 @@ _MASTER_ITEMS = [
     ("🔍 Поиск", nav.go_data("search")),
     ("📝 Регистрация клиента (бумага)", actions.PAPER_CONSENT),
 ]
-_ADMIN_ITEMS = _MASTER_ITEMS + [("👥 Добавить сотрудника", actions.NEW_STAFF)]
+# Admins can be assigned work, so they get their own lists too.
+_ADMIN_ITEMS = _MASTER_ITEMS + [
+    ("🧰 Мои работы", nav.go_data("my_works")),
+    ("✅ Мои выполненные", nav.go_data("done_works")),
+    ("👥 Добавить сотрудника", actions.NEW_STAFF),
+]
 _MECHANIC_ITEMS = [
     ("🧰 Мои работы", nav.go_data("my_works")),
     ("✅ Выполненные", nav.go_data("done_works")),

@@ -241,11 +241,16 @@ async def test_approve_action():
 
 async def test_reassign_screen_and_choice_returns_to_work():
     api = _api()
-    api.list_mechanics.return_value = [{"id": MECH, "full_name": "Петров"}]
+    admin_id = "cccccccc-cccc-cccc-cccc-cccccccccccc"
+    api.list_mechanics.return_value = [{"id": MECH, "full_name": "Петров", "role": "mechanic"},
+                                       {"id": admin_id, "full_name": "Иванов", "role": "admin"}]
 
     text, markup = await render_reassign(api, MASTER, {"visit_id": VISIT, "item_id": ITEM})
     assert text == "Кому передать работу?"
-    assert buttons(markup) == [("Петров", f"act:reassign:{encode_id(MECH)}"), ("Без исполнителя", "act:reassign:none")]
+    assert buttons(markup) == [
+        ("Петров", f"act:reassign:{encode_id(MECH)}"), ("Иванов (админ)", f"act:reassign:{encode_id(admin_id)}"),
+        ("Без исполнителя", "act:reassign:none"),
+    ]
 
     state = fsm_context()
     args = {"visit_id": VISIT, "item_id": ITEM}

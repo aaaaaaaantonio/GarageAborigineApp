@@ -156,3 +156,15 @@ async def test_name_must_be_text():
     await receive_work_name(message, state, api=_api(), user=MASTER)
 
     assert shown(message)[0] == "Пожалуйста, отправьте ответ текстом.\n\nВведите название работы:"
+
+
+async def test_add_work_marks_admins_among_assignees():
+    state = fsm_context()
+    await _at(state, AddWorkItemStates.waiting_for_hours_and_rate, catalog_item_id="cat1", category="maintenance", norm_hours=1.0)
+    api = _api()
+    api.list_mechanics.return_value = [{"id": MECH, "full_name": "Петров", "role": "admin"}]
+    message = make_message("1500")
+
+    await receive_hours_and_rate(message, state, api=api, user=MASTER)
+
+    assert buttons(shown(message)[1])[0] == ("Петров (админ)", f"assign_mech:{encode_id(MECH)}")

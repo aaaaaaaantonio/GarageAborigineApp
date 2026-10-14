@@ -32,3 +32,8 @@ def format_hours(value: float) -> str:
     whole, _, fraction = f"{float(value):,.2f}".replace(",", " ").partition(".")
     fraction = fraction.rstrip("0")
     return f"{whole},{fraction} н/ч" if fraction else f"{whole} н/ч"
+
+
+def assignee_label(user: dict) -> str:
+    """Name in assignee pickers; admins can take work too and are marked as such."""
+    return f"{user['full_name']} (админ)" if user.get("role") == "admin" else user["full_name"]

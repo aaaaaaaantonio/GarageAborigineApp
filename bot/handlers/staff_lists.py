@@ -4,7 +4,7 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from bot import nav
 from bot.api_client import ApiClient
 from bot.callback_ids import decode_id, encode_id
-from bot.formatting import format_day, format_number
+from bot.formatting import assignee_label, format_day, format_number
 from bot.handlers.navigation import master_dropdown
 from bot.periods import PERIOD_LABELS, since_for
 from bot.visit_status import visit_status_label
@@ -103,7 +103,7 @@ async def render_board(api: ApiClient, user: dict, args: dict) -> nav.Rendered:
     result = await api.list_work_board(**params, group=group)
     mechanics = await api.list_mechanics()
     mech_options = [("all", "Все механики"), ("none", "Без исполнителя"),
-                    *[(encode_id(m["id"]), m["full_name"]) for m in mechanics]]
+                    *[(encode_id(m["id"]), assignee_label(m)) for m in mechanics]]
     opened = args.get(nav.OPEN, "-")
     rows = (
         nav.dropdown("Механик", "mech", mech_options, mech, opened)
