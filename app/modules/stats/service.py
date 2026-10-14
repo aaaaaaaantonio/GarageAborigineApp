@@ -57,10 +57,21 @@ def _ranked(totals: dict[str, float]) -> tuple[list[str], list[float]]:
     return [label for label, _ in rows], [round(value, 2) for _, value in rows]
 
 
+def _ranked_by(totals: dict, labels: dict) -> tuple[list[str], list[float]]:
+    """Rows keyed by identity (id), shown under `labels[key]`; sorted like `_ranked` by value, then label."""
+    rows = sorted(totals.items(), key=lambda item: (-item[1], labels[item[0]]))
+    return [labels[key] for key, _ in rows], [round(value, 2) for _, value in rows]
+
+
 def _split(totals: dict[str, float], name: str) -> tuple[list[str], tuple[str, list[float]]]:
     """`_ranked` shaped as `_chart(..., labels, (name, values))` arguments."""
     labels, values = _ranked(totals)
     return labels, (name, values)
+
+
+def _split_by(totals: dict, labels: dict, name: str) -> tuple[list[str], tuple[str, list[float]]]:
+    labels_, values = _ranked_by(totals, labels)
+    return labels_, (name, values)
 
 
 def _assignee(line) -> str:
@@ -179,12 +190,16 @@ class StatsService:
         issued_prev = await self.repo.closed_visits(VisitStatus.ISSUED, previous, master_id)
         lines = await self.repo.work_lines([v.id for v in issued])
         lines_prev = await self.repo.work_lines([v.id for v in issued_prev])
-        hours: dict[str, float] = defaultdict(float)
+        hours: dict[uuid.UUID | None, float] = defaultdict(float)
+        names: dict[uuid.UUID | None, str] = {}
         for line in lines:
-            hours[_assignee(line)] += float(line.norm_hours)
-        revenue: dict[str, float] = defaultdict(float)
+            hours[line.mechanic_id] += float(line.norm_hours)
+            names[line.mechanic_id] = _assignee(line)
+        revenue: dict[uuid.UUID, float] = defaultdict(float)
+        master_names: dict[uuid.UUID, str] = {}
         for v in issued:
-            revenue[v.master_name] += float(v.total_amount)
+            revenue[v.master_id] += float(v.total_amount)
+            master_names[v.master_id] = v.master_name
         total = sum(hours.values())
         total_prev = sum(float(line.norm_hours) for line in lines_prev)
         return StatsOut(
@@ -194,8 +209,9 @@ class StatsService:
                 _kpi("works", "Работ выполнено", len(lines), "count", len(lines_prev)),
             ],
             charts=[
-                _chart("hours_by_assignee", "hbars", "Нормо-часы по исполнителям", "hours", *_split(hours, "Нормо-часы"),
-                       sub="работы выданных машин"),
-                _chart("revenue_by_master", "hbars", "Выручка по мастерам", "rub", *_split(revenue, "Выручка")),
+                _chart("hours_by_assignee", "hbars", "Нормо-часы по исполнителям", "hours",
+                       *_split_by(hours, names, "Нормо-часы"), sub="работы выданных машин"),
+                _chart("revenue_by_master", "hbars", "Выручка по мастерам", "rub",
+                       *_split_by(revenue, master_names, "Выручка")),
             ],
         )
