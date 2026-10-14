@@ -17,7 +17,6 @@ export const authApi = {
 
 export const visitsApi = {
   list: (params: VisitListParams) => api.get<VisitList>(`/visits${buildQuery({ ...params })}`),
-  listActive: () => api.get<VisitList>('/visits?active=true'),
   listForClient: (clientId: string) => api.get<VisitList>(`/visits?client_id=${q(clientId)}`),
   listForVehicle: (vehicleId: string) => api.get<VisitList>(`/visits?vehicle_id=${q(vehicleId)}`),
   get: (id: string) => api.get<Visit>(`/visits/${id}`),
