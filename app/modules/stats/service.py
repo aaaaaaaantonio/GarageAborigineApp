@@ -215,3 +215,55 @@ class StatsService:
                        *_split_by(revenue, master_names, "Выручка")),
             ],
         )
+
+    async def works(self, period: Period, master_id: uuid.UUID | None = None) -> StatsOut:
+        current, previous, _ = self._windows(period)
+        issued = await self.repo.closed_visits(VisitStatus.ISSUED, current, master_id)
+        lines = await self.repo.work_lines([v.id for v in issued])
+        created = await self.repo.created_visits(current, master_id)
+        created_prev = await self.repo.created_visits(previous, master_id)
+        new, repeat = await self._clients(created, current)
+        new_prev, repeat_prev = await self._clients(created_prev, previous)
+        approved = await self._extra_approved(created)
+        approved_prev = await self._extra_approved(created_prev)
+
+        counts: dict[str, float] = defaultdict(float)
+        by_category: dict[str, float] = defaultdict(float)
+        for line in lines:
+            counts[line.name] += 1
+            by_category[CATEGORY_LABELS[line.category]] += _labor(line)
+        top_labels, top_values = _ranked(counts)
+        makes: dict[str, float] = defaultdict(float)
+        for v in created:
+            makes[v.make] += 1
+        top_make = _ranked(makes)[0][0] if makes else "—"
+        return StatsOut(
+            section="works", period=period,
+            kpis=[
+                _kpi("new_clients", "Новые клиенты", new, "count", new_prev),
+                _kpi("repeat_clients", "Повторные клиенты", repeat, "count", repeat_prev),
+                _kpi("extra_approved", "Доп. работ согласовано", approved if approved is not None else 0, "pct",
+                     approved_prev),
+                _kpi("top_make", "Популярная марка", top_make, "text", compare=False),
+            ],
+            charts=[
+                _chart("top_works", "hbars", "Топ работ", "count", top_labels[:5], ("Раз", top_values[:5]),
+                       sub="сколько раз делали"),
+                _chart("clients", "share", "Клиенты за период", "count", ["Новые", "Повторные"],
+                       ("Клиенты", [new, repeat])),
+                _chart("revenue_by_category", "hbars", "Выручка по категориям работ", "rub",
+                       *_split(by_category, "Выручка")),
+            ],
+        )
+
+    async def _clients(self, created, window: Window) -> tuple[int, int]:
+        """Distinct clients with a visit created in `window`: new (first visit ever is in it) and repeat."""
+        clients = {v.client_id for v in created}
+        first = await self.repo.first_visit_at(list(clients))
+        new = sum(1 for c in clients if first[c] in window)
+        return new, len(clients) - new
+
+    async def _extra_approved(self, created) -> int | None:
+        """Share (%) of extra works the client approved, among visits created in the window; None if none."""
+        extra = [line for line in await self.repo.work_lines([v.id for v in created]) if line.is_extra_work]
+        return round(sum(1 for line in extra if line.approved_by_client) / len(extra) * 100) if extra else None
