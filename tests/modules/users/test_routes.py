@@ -25,13 +25,14 @@ def _user(role, name):
     return User(role=role, full_name=name, branch_id=uuid.uuid4())
 
 
-async def test_list_mechanics_returns_active_mechanics_sorted_by_name(api_app, session):
+async def test_list_mechanics_returns_assignees_mechanics_first_then_admins(api_app, session):
     master = _user(UserRole.MASTER, "Мастер")
     boris = _user(UserRole.MECHANIC, "Борис")
     anna = _user(UserRole.MECHANIC, "Анна")
     fired = _user(UserRole.MECHANIC, "Уволенный")
     fired.deleted_at = datetime.now(timezone.utc)
     session.add_all([master, boris, anna, fired, _user(UserRole.ADMIN, "Админ")])
+    # Admins can take work too; they follow the mechanics.
     await session.flush()
 
     transport = ASGITransport(app=api_app)
@@ -39,7 +40,7 @@ async def test_list_mechanics_returns_active_mechanics_sorted_by_name(api_app, s
         resp = await client.get("/users/mechanics", headers=staff_headers(master.id))
 
     assert resp.status_code == 200
-    assert [u["full_name"] for u in resp.json()] == ["Анна", "Борис"]
+    assert [(u["full_name"], u["role"]) for u in resp.json()] == [("Анна", "mechanic"), ("Борис", "mechanic"), ("Админ", "admin")]
 
 
 async def test_list_mechanics_forbidden_for_mechanic(api_app, session):

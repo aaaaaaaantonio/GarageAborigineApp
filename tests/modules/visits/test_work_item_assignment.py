@@ -195,10 +195,22 @@ async def test_route_forbids_mechanic(api_app, session):
     assert resp.status_code == 403
 
 
-async def test_route_rejects_non_mechanic_with_422(api_app, session):
+async def test_route_lets_admin_take_the_work(api_app, session):
     admin, mechanic_a, mechanic_b, item = await _setup_visit_with_mechanic(session)
 
     resp = await _patch_mechanic(item, admin, admin.id)
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["assigned_mechanic_id"] == str(admin.id)
+
+
+async def test_route_rejects_master_with_422(api_app, session):
+    admin, mechanic_a, mechanic_b, item = await _setup_visit_with_mechanic(session)
+    master = User(role=UserRole.MASTER, full_name="Мастер 2", branch_id=uuid.uuid4())
+    session.add(master)
+    await session.flush()
+
+    resp = await _patch_mechanic(item, admin, master.id)
 
     assert resp.status_code == 422
 

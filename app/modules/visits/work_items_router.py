@@ -32,7 +32,7 @@ async def add_work_item(
     except VisitNotFound:
         raise HTTPException(404, "Visit not found")
     except InvalidAssignedMechanic:
-        raise HTTPException(422, "assigned_mechanic_id должен ссылаться на активного пользователя с ролью MECHANIC")
+        raise HTTPException(422, "assigned_mechanic_id должен ссылаться на активного пользователя с ролью MECHANIC или ADMIN")
     await session.commit()
     return item
 
@@ -83,7 +83,7 @@ async def change_work_item_mechanic(
     except WorkItemNotFound:
         raise HTTPException(404, "Work item not found")
     except InvalidAssignedMechanic:
-        raise HTTPException(422, "assigned_mechanic_id должен ссылаться на активного пользователя с ролью MECHANIC")
+        raise HTTPException(422, "assigned_mechanic_id должен ссылаться на активного пользователя с ролью MECHANIC или ADMIN")
     await session.commit()
     return item
 

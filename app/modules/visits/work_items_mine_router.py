@@ -19,7 +19,7 @@ async def list_my_work_items(
     status: list[WorkItemStatus] = Query(default=[]),
     sort: MineSort = "urgency",
     session: AsyncSession = Depends(get_session),
-    acting_user: User = Depends(require_role(UserRole.MECHANIC)),
+    acting_user: User = Depends(require_role(UserRole.MECHANIC, UserRole.ADMIN)),
 ):
     return await WorkItemService(session).list_mine(acting_user, statuses=status, sort=sort)
 
@@ -29,7 +29,7 @@ async def list_my_done_work_items(
     since: datetime | None = None,
     outcome: Literal["issued", "cancelled"] | None = None,
     session: AsyncSession = Depends(get_session),
-    acting_user: User = Depends(require_role(UserRole.MECHANIC)),
+    acting_user: User = Depends(require_role(UserRole.MECHANIC, UserRole.ADMIN)),
 ):
     return await WorkItemService(session).list_done(
         acting_user, since=since, outcome=VisitStatus(outcome) if outcome else None

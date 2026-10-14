@@ -1,9 +1,12 @@
+import uuid
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.core.db import get_session
-from app.core.enums import VisitStatus, WorkItemStatus
+from app.core.enums import UserRole, VisitStatus, WorkItemStatus
 from app.main import app
+from app.modules.users.models import User
 from app.modules.visits.models import Visit
 from tests.modules.visits.test_work_items import _setup_visit_with_mechanic
 from tests.helpers import staff_headers
@@ -32,8 +35,29 @@ async def test_list_work_items_route_returns_resolved_name_and_visit_id(api_app,
     assert body[0]["visit_id"] == str(item.visit_id)
 
 
-async def test_add_work_item_route_rejects_non_mechanic_assignee_with_422(api_app, session):
+async def test_add_work_item_route_accepts_admin_as_assignee(api_app, session):
+    """An admin who works on cars can take a job himself."""
     admin, mechanic_a, mechanic_b, item = await _setup_visit_with_mechanic(session)
+
+    transport = ASGITransport(app=api_app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.post(
+            f"/visits/{item.visit_id}/work-items",
+            json={"free_text_name": "Диагностика", "category": "maintenance", "norm_hours": 1.0, "hourly_rate": 1500,
+                  "assigned_mechanic_id": str(admin.id)},
+            headers=staff_headers(admin.id),
+        )
+        mine = await client.get("/work-items/mine", headers=staff_headers(admin.id))
+
+    assert resp.status_code == 201, resp.text
+    assert [w["name"] for w in mine.json()] == ["Диагностика"]
+
+
+async def test_add_work_item_route_rejects_master_assignee_with_422(api_app, session):
+    admin, mechanic_a, mechanic_b, item = await _setup_visit_with_mechanic(session)
+    master = User(role=UserRole.MASTER, full_name="Мастер 2", branch_id=uuid.uuid4())
+    session.add(master)
+    await session.flush()
 
     transport = ASGITransport(app=api_app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -44,13 +68,13 @@ async def test_add_work_item_route_rejects_non_mechanic_assignee_with_422(api_ap
                 "category": "maintenance",
                 "norm_hours": 1.0,
                 "hourly_rate": 1500,
-                "assigned_mechanic_id": str(admin.id),
+                "assigned_mechanic_id": str(master.id),
             },
             headers=staff_headers(admin.id),
         )
 
     assert resp.status_code == 422
-    assert "MECHANIC" in resp.json()["detail"]
+    assert "MECHANIC или ADMIN" in resp.json()["detail"]
 
 
 async def test_list_done_route_returns_closed_work_for_mechanic(api_app, session):
@@ -63,7 +87,7 @@ async def test_list_done_route_returns_closed_work_for_mechanic(api_app, session
     transport = ASGITransport(app=api_app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.get("/work-items/mine/done", headers=staff_headers(mechanic_a.id))
-        forbidden = await client.get("/work-items/mine/done", headers=staff_headers(admin.id))
+        admins_own = await client.get("/work-items/mine/done", headers=staff_headers(admin.id))
 
     assert resp.status_code == 200
     body = resp.json()
@@ -77,7 +101,8 @@ async def test_list_done_route_returns_closed_work_for_mechanic(api_app, session
     assert items[0]["visit_date"] and items[0]["closed_at"]
     assert items[0]["norm_hours"] == 1.0
     assert "amount" not in items[0] and "hourly_rate" not in items[0]
-    assert forbidden.status_code == 403
+    # The admin has no work of his own here: an empty history, not a 403.
+    assert admins_own.status_code == 200 and admins_own.json()["count"] == 0
 
 
 async def test_mine_route_accepts_status_and_sort(api_app, session):

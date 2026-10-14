@@ -36,7 +36,11 @@ class UserService:
         return await self.repo.list_active()
 
     async def list_mechanics(self) -> list[User]:
-        return await self.repo.list_active_by_role(UserRole.MECHANIC)
+        """Everyone work can be assigned to: mechanics first, then admins."""
+        return [
+            *await self.repo.list_active_by_role(UserRole.MECHANIC),
+            *await self.repo.list_active_by_role(UserRole.ADMIN),
+        ]
 
     async def list_masters(self) -> list[User]:
         return await self.repo.list_active_by_role(UserRole.MASTER)

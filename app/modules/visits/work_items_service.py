@@ -29,6 +29,8 @@ BOARD_LIMIT = 200
 URGENCY = [WorkItemStatus.IN_PROGRESS, WorkItemStatus.NOT_READY, WorkItemStatus.WAITING_PARTS, WorkItemStatus.READY]
 MineSort = Literal["urgency", "car"]
 BoardGroup = Literal["mechanic", "status", "car"]
+# Who can be a work item's assignee: mechanics, and admins who work on cars themselves.
+ASSIGNEE_ROLES = (UserRole.MECHANIC, UserRole.ADMIN)
 
 
 def urgency_expr():
@@ -66,7 +68,7 @@ class WorkItemService:
 
     async def _check_mechanic(self, mechanic_id: uuid.UUID) -> None:
         mechanic = await self.session.get(User, mechanic_id)
-        if mechanic is None or mechanic.deleted_at is not None or mechanic.role != UserRole.MECHANIC:
+        if mechanic is None or mechanic.deleted_at is not None or mechanic.role not in ASSIGNEE_ROLES:
             raise InvalidAssignedMechanic()
 
     async def add_item(self, visit_id: uuid.UUID, data: WorkItemCreate, acting_user: User) -> VisitWorkItem:
