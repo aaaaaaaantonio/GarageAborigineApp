@@ -9,6 +9,7 @@ started from (the top of the screen stack — wizards never push screens).
 from typing import Awaitable, Callable
 
 from aiogram import F, Router
+from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
@@ -93,6 +94,18 @@ async def name(state: FSMContext) -> str | None:
 
 async def finish(state: FSMContext) -> None:
     await nav.clear_wizard(state)
+
+
+async def _off_live_message(callback: CallbackQuery, state: FSMContext) -> bool:
+    data = await state.get_data()
+    return data.get(nav.NAV_MSG) is not None and callback.message.message_id != data[nav.NAV_MSG]
+
+
+@router.callback_query(~StateFilter(None), _off_live_message)
+async def stale_wizard_button(callback: CallbackQuery, **kwargs) -> None:
+    """Inside a wizard only the live message's buttons act; this router runs before the
+    feature routers, so it catches their step buttons (picks, confirms) too."""
+    await callback.answer(STALE_BUTTON)
 
 
 @router.callback_query(F.data == WIZ_CANCEL)

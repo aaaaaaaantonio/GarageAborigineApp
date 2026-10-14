@@ -205,6 +205,31 @@ async def test_admin_chooses_master_then_visit_is_created_with_them():
     assert api.create_visit.await_args.kwargs["assigned_master_id"] == MASTER_B
 
 
+async def test_admin_stepping_back_to_mileage_picks_the_master_again():
+    """«Назад» past the master step leaves the old pick in data; a new mileage must ask again."""
+    state = fsm_context()
+    await _at(state, NewVisitStates.waiting_for_mileage, client_id=C1, vehicle_id=CAR, assigned_master_id=MASTER_B)
+    api = _api()
+    api.list_masters.return_value = [{"id": MASTER_B, "full_name": "Петров"}]
+    message = make_message("45000")
+
+    await receive_mileage(message, state, api=api, user=ADMIN)
+
+    assert await state.get_state() == NewVisitStates.choosing_master.state
+    api.create_visit.assert_not_awaited()
+
+
+async def test_admin_new_mileage_after_rollback_keeps_the_master():
+    state = fsm_context()
+    await _at(state, NewVisitStates.confirming_mileage, client_id=C1, vehicle_id=CAR, assigned_master_id=MASTER_B)
+    api = _api()
+
+    await receive_mileage(make_message("60000"), state, api=api, user=ADMIN)
+
+    assert api.create_visit.await_args.kwargs["assigned_master_id"] == MASTER_B
+    api.list_masters.assert_not_awaited()
+
+
 async def test_admin_without_masters_is_told_to_add_one():
     state = fsm_context()
     await _at(state, NewVisitStates.waiting_for_mileage, client_id=C1, vehicle_id=CAR)

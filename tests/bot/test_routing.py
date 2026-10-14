@@ -246,3 +246,18 @@ async def test_double_tap_on_final_wizard_button_creates_one_work_item(env):
     await asyncio.gather(*(dp.feed_update(bot, _callback("assign_mech:none"), api=api, user=user) for _ in range(2)))
 
     assert api.add_work_item.await_count == 1
+
+
+@pytest.mark.parametrize("data", ["client_pick:c1", "wiz_back", "wiz_cancel"])
+async def test_wizard_buttons_off_the_live_message_are_stale(env, data):
+    """Only the live message drives a wizard; buttons left on an older one must not act."""
+    bot, dp, state, api, user = env
+    await state.set_state(NewVisitStates.choosing_client)
+    await state.update_data(nav_stack=[["menu", {}]], nav_msg_id=50, wiz_name="new_visit", wiz_steps=[NewVisitStates.waiting_for_client_query.state])
+
+    await dp.feed_update(bot, _callback(data, message_id=5), api=api, user=user)
+
+    assert await state.get_state() == NewVisitStates.choosing_client.state
+    assert "client_id" not in await state.get_data()
+    answers = [m for m in bot.sent if type(m).__name__ == "AnswerCallbackQuery"]
+    assert answers and answers[0].text == "Кнопка устарела — начните действие заново."

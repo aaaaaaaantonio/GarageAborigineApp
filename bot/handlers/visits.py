@@ -285,6 +285,12 @@ async def receive_mileage(message: Message, state: FSMContext, api: ApiClient, u
     except (ValueError, TypeError):
         await wizard.reprompt(message, state, api, user, "Введите число (пробег в км).")
         return
+    if await state.get_state() == NewVisitStates.waiting_for_mileage.state:
+        # Back at the plain mileage step (e.g. «Назад» past the master pick): ask the master again.
+        # After a rollback warning (confirming_mileage) the pick is kept.
+        data = await state.get_data()
+        data.pop("assigned_master_id", None)
+        await state.set_data(data)
     await state.update_data(mileage=mileage, mileage_confirmed=False)
     await _continue_after_mileage(message, state, api, user)
 

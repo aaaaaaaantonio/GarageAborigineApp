@@ -47,7 +47,9 @@ async def test_vehicle_in_new_visit_is_linked_to_client_and_asks_mileage():
     state = fsm_context()
     await on_screens(state)
     await state.set_state(NewVehicleStates.waiting_for_make_model)
-    await state.update_data(wiz_name="new_visit", wiz_steps=[], client_id=C1, vin="X" * 17, plate_number="А1")
+    # History up to the vehicle steps: once the vehicle exists, «Назад» must not lead back into them.
+    history = [NewVisitStates.vehicle_not_found.state, NewVehicleStates.waiting_for_vin.state, NewVehicleStates.waiting_for_plate.state]
+    await state.update_data(wiz_name="new_visit", wiz_steps=history, client_id=C1, vin="X" * 17, plate_number="А1")
     api = AsyncMock()
     api.create_vehicle.return_value = {"id": CAR, "vin": "X" * 17}
     message = make_message("Toyota Camry")
