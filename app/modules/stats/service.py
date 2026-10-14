@@ -57,6 +57,18 @@ def _ranked(totals: dict[str, float]) -> tuple[list[str], list[float]]:
     return [label for label, _ in rows], [round(value, 2) for _, value in rows]
 
 
+def _split(totals: dict[str, float], name: str) -> tuple[list[str], tuple[str, list[float]]]:
+    """`_ranked` shaped as `_chart(..., labels, (name, values))` arguments."""
+    labels, values = _ranked(totals)
+    return labels, (name, values)
+
+
+def _assignee(line) -> str:
+    if line.mechanic_id is None:
+        return "Без исполнителя"
+    return f"{line.mechanic_name} (админ)" if line.mechanic_role == UserRole.ADMIN else line.mechanic_name
+
+
 def _labor(line) -> float:
     return float(line.norm_hours) * float(line.hourly_rate)
 
@@ -158,5 +170,32 @@ class StatsService:
                        ("Принято", _bucketed(steps, ((v.created_at, 1) for v in created)))),
                 _chart("time_in_status", "hbars", "Сколько стоят в каждом статусе", "days",
                        [STATUS_LABELS[s] for s in FUNNEL], ("Дней", per_status), sub=sub),
+            ],
+        )
+
+    async def staff(self, period: Period, master_id: uuid.UUID | None = None) -> StatsOut:
+        current, previous, _ = self._windows(period)
+        issued = await self.repo.closed_visits(VisitStatus.ISSUED, current, master_id)
+        issued_prev = await self.repo.closed_visits(VisitStatus.ISSUED, previous, master_id)
+        lines = await self.repo.work_lines([v.id for v in issued])
+        lines_prev = await self.repo.work_lines([v.id for v in issued_prev])
+        hours: dict[str, float] = defaultdict(float)
+        for line in lines:
+            hours[_assignee(line)] += float(line.norm_hours)
+        revenue: dict[str, float] = defaultdict(float)
+        for v in issued:
+            revenue[v.master_name] += float(v.total_amount)
+        total = sum(hours.values())
+        total_prev = sum(float(line.norm_hours) for line in lines_prev)
+        return StatsOut(
+            section="staff", period=period,
+            kpis=[
+                _kpi("hours", "Нормо-часов закрыто", round(total, 2), "hours", total_prev),
+                _kpi("works", "Работ выполнено", len(lines), "count", len(lines_prev)),
+            ],
+            charts=[
+                _chart("hours_by_assignee", "hbars", "Нормо-часы по исполнителям", "hours", *_split(hours, "Нормо-часы"),
+                       sub="работы выданных машин"),
+                _chart("revenue_by_master", "hbars", "Выручка по мастерам", "rub", *_split(revenue, "Выручка")),
             ],
         )
