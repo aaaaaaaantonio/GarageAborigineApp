@@ -1,0 +1,28 @@
+import type { StatsUnit } from '../../api/types';
+
+const oneDecimal = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 1 });
+const plain = (n: number) => oneDecimal.format(n).replace(/[  ]/g, ' ');
+
+export function formatValue(value: number | string, unit: StatsUnit): string {
+  if (typeof value === 'string') return value;
+  switch (unit) {
+    case 'rub': return `${plain(Math.round(value))} ₽`;
+    case 'hours': return `${plain(value)} н/ч`;
+    case 'days': return `${plain(value)} дн.`;
+    case 'pct': return `${plain(value)} %`;
+    default: return plain(value);
+  }
+}
+
+/** Axis tick: roubles in thousands («15 т»), the rest as plain numbers. */
+export function formatTick(value: number, unit: StatsUnit): string {
+  return unit === 'rub' && value >= 1000 ? `${plain(value / 1000)} т` : plain(value);
+}
+
+/** Round axis top just above `v`, so ticks land on readable numbers. */
+export function niceMax(v: number): number {
+  if (v <= 0) return 1;
+  const p = 10 ** Math.floor(Math.log10(v));
+  for (const m of [1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10]) if (m * p >= v) return m * p;
+  return 10 * p;
+}

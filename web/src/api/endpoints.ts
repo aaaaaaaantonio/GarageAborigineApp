@@ -3,7 +3,7 @@ import { api } from './client';
 import type {
   AuthResponse, BoardList, BoardParams, CatalogItem, Client, DoneWorkList, MineSort, MyWorkItem, PartItem, PartItemCreate, RecentView, SearchHit,
   User, UserCreate, Vehicle, VehicleCreate, Visit, VisitCreate, VisitLines, VisitList, VisitListParams, VisitStatus, WorkCategory, WorkHistory,
-  WorkItem, WorkItemCreate, WorkItemStatus,
+  WorkItem, WorkItemCreate, WorkItemStatus, Stats, StatsPeriod, StatsSection,
 } from './types';
 
 const q = encodeURIComponent;
@@ -82,4 +82,10 @@ export const catalogApi = {
 export const consentApi = {
   paper: (fullName: string, phone: string) =>
     api.post<{ client_id: string }>('/consent/paper', { full_name: fullName, phone }),
+};
+
+export const statsApi = {
+  section: (section: StatsSection, period: StatsPeriod, masterId?: string) =>
+    api.get<Stats>(`/stats/${section}${buildQuery({ period, master_id: masterId })}`),
+  mine: (period: StatsPeriod) => api.get<Stats>(`/stats/mine${buildQuery({ period })}`),
 };

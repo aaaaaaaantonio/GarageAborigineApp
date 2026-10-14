@@ -259,3 +259,33 @@ export interface UserCreate {
   full_name: string;
   telegram_id: number | null;
 }
+
+export type StatsPeriod = 'week' | 'month' | 'quarter' | 'year';
+export type StatsSection = 'money' | 'flow' | 'staff' | 'works';
+export type StatsUnit = 'rub' | 'count' | 'hours' | 'days' | 'pct' | 'text';
+
+export interface StatsKpi {
+  key: string;
+  label: string;
+  value: number | string;
+  unit: StatsUnit;
+  delta_pct: number | null;
+  compare: boolean;
+}
+
+export interface StatsChartData {
+  key: string;
+  kind: 'bars' | 'stack' | 'hbars' | 'share';
+  title: string;
+  sub: string | null;
+  unit: StatsUnit;
+  labels: string[];
+  series: { name: string; values: number[] }[];
+}
+
+export interface Stats {
+  section: string;
+  period: StatsPeriod;
+  kpis: StatsKpi[];
+  charts: StatsChartData[];
+}
