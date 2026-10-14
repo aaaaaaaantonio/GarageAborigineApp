@@ -61,6 +61,28 @@ def _labor(line) -> float:
     return float(line.norm_hours) * float(line.hourly_rate)
 
 
+def _days(seconds: float) -> float:
+    return round(seconds / DAY_SECONDS, 1)
+
+
+def _time_in_statuses(visits, logs) -> tuple[list[float], float]:
+    """Average days a closed visit spent in each funnel status, and from intake to close."""
+    if not visits:
+        return [0.0] * len(FUNNEL), 0.0
+    history = defaultdict(list)
+    for row in logs:
+        history[row.visit_id].append((row.to_status, row.changed_at))
+    spent: dict[VisitStatus, float] = defaultdict(float)
+    through = 0.0
+    for v in visits:
+        steps = [(VisitStatus.RECEIVED, v.created_at), *sorted(history[v.id], key=lambda step: step[1])]
+        for (status, start), (_, end) in zip(steps, steps[1:]):
+            if status in STATUS_LABELS:
+                spent[status] += (end - start).total_seconds()
+        through += (v.closed_at - v.created_at).total_seconds()
+    return [_days(spent[s] / len(visits)) for s in FUNNEL], _days(through / len(visits))
+
+
 class StatsService:
     def __init__(self, session: AsyncSession, now: datetime | None = None):
         self.repo = StatsRepository(session)
@@ -108,5 +130,33 @@ class StatsService:
                        ("Работы", _bucketed(steps, ((v.closed_at, labor[v.id]) for v in issued))),
                        ("Запчасти", _bucketed(steps, ((v.closed_at, parts.get(v.id, 0)) for v in issued))),
                        sub="до скидки"),
+            ],
+        )
+
+    async def flow(self, period: Period, master_id: uuid.UUID | None = None) -> StatsOut:
+        current, previous, steps = self._windows(period)
+        created = await self.repo.created_visits(current, master_id)
+        created_prev = await self.repo.created_visits(previous, master_id)
+        issued = await self.repo.closed_visits(VisitStatus.ISSUED, current, master_id)
+        issued_prev = await self.repo.closed_visits(VisitStatus.ISSUED, previous, master_id)
+        cancelled = await self.repo.closed_visits(VisitStatus.CANCELLED, current, master_id)
+        cancelled_prev = await self.repo.closed_visits(VisitStatus.CANCELLED, previous, master_id)
+        per_status, through = _time_in_statuses(issued, await self.repo.status_logs([v.id for v in issued]))
+        sub = "в среднем, дней"
+        if issued:
+            sub += f" · от приёма до выдачи {str(through).replace('.', ',')} дн."
+        return StatsOut(
+            section="flow", period=period,
+            kpis=[
+                _kpi("accepted", "Принято", len(created), "count", len(created_prev)),
+                _kpi("issued", "Выдано", len(issued), "count", len(issued_prev)),
+                _kpi("open_now", "Сейчас в работе", await self.repo.open_count(master_id), "count", compare=False),
+                _kpi("cancelled", "Отменено", len(cancelled), "count", len(cancelled_prev)),
+            ],
+            charts=[
+                _chart("accepted", "bars", "Принято машин", "count", [label for label, _ in steps],
+                       ("Принято", _bucketed(steps, ((v.created_at, 1) for v in created)))),
+                _chart("time_in_status", "hbars", "Сколько стоят в каждом статусе", "days",
+                       [STATUS_LABELS[s] for s in FUNNEL], ("Дней", per_status), sub=sub),
             ],
         )
