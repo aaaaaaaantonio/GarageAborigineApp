@@ -20,6 +20,7 @@ from app.modules.consent.router import router as consent_router
 from app.modules.search.router import router as search_router
 from app.modules.documents.router import files_router as document_files_router
 from app.modules.documents.router import router as documents_router
+from app.modules.stats.router import router as stats_router
 
 install_access_log_filter()
 
@@ -43,6 +44,7 @@ app.include_router(consent_router)
 app.include_router(search_router)
 app.include_router(documents_router)
 app.include_router(document_files_router)
+app.include_router(stats_router)
 
 
 @app.get("/health")
