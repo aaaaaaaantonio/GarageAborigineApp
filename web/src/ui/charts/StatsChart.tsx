@@ -9,7 +9,7 @@ function Body({ chart }: { chart: StatsChartData }) {
   switch (chart.kind) {
     case 'stack': return <StackedBarChart title={chart.title} labels={chart.labels} series={chart.series} unit={chart.unit} />;
     case 'hbars': return <HBarChart title={chart.title} labels={chart.labels} values={first.values} unit={chart.unit} />;
-    case 'share': return <ShareMeter labels={chart.labels} values={first.values} />;
+    case 'share': return <ShareMeter title={chart.title} labels={chart.labels} values={first.values} />;
     default: return <BarChart title={chart.title} labels={chart.labels} values={first.values} unit={chart.unit} />;
   }
 }

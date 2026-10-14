@@ -1,5 +1,5 @@
 import type { StatsUnit } from '../../api/types';
-import { formatValue } from './format';
+import { describe, formatValue } from './format';
 
 const W = 400, ROW = 34, VALUE_ROOM = 96;
 
@@ -7,7 +7,7 @@ const W = 400, ROW = 34, VALUE_ROOM = 96;
 export function HBarChart({ title, labels, values, unit }: { title: string; labels: string[]; values: number[]; unit: StatsUnit }) {
   const max = Math.max(...values);
   return (
-    <svg viewBox={`0 0 ${W} ${labels.length * ROW}`} role="img" aria-label={title}>
+    <svg viewBox={`0 0 ${W} ${labels.length * ROW}`} role="img" aria-label={describe(title, labels, (i) => formatValue(values[i], unit))}>
       {labels.map((label, i) => {
         const y0 = i * ROW;
         const w = Math.max(4, (values[i] / max) * (W - VALUE_ROOM));

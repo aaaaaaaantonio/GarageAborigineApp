@@ -19,6 +19,17 @@ export function formatTick(value: number, unit: StatsUnit): string {
   return unit === 'rub' && value >= 1000 ? `${plain(value / 1000)} т` : plain(value);
 }
 
+/** Axis top for a chart: counts get a multiple of 3 so the three tick steps are whole numbers. */
+export function axisMax(v: number, unit: StatsUnit): number {
+  const n = niceMax(v);
+  return unit === 'count' ? Math.max(3, Math.ceil(n / 3) * 3) : n;
+}
+
+/** Accessible description of a chart's data: «title: label — value; …». */
+export function describe(title: string, labels: string[], values: (i: number) => string): string {
+  return `${title}: ${labels.map((l, i) => `${l} — ${values(i)}`).join('; ')}`;
+}
+
 /** Round axis top just above `v`, so ticks land on readable numbers. */
 export function niceMax(v: number): number {
   if (v <= 0) return 1;

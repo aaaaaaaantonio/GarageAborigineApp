@@ -1,3 +1,4 @@
+import { BarChart } from './BarChart';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { StatsChartData, StatsKpi } from '../../api/types';
@@ -23,7 +24,7 @@ test('formats values by unit', () => {
 
 test('bar chart: axis top is the nice max, readout follows the tapped bar', async () => {
   render(<StatsChart chart={chart({})} />);
-  expect(screen.getByRole('img', { name: 'Выручка' })).toBeInTheDocument();
+  expect(screen.getByRole('img', { name: /^Выручка/ })).toBeInTheDocument();
   expect(screen.getByText('15 т')).toBeInTheDocument();
   expect(screen.getByTestId('readout')).toHaveTextContent('08.10–14.10 · 14 000 ₽');
   await userEvent.click(screen.getByTestId('bar-1'));
@@ -66,4 +67,29 @@ test('kpi tile shows delta or a dash', () => {
   expect(screen.getByText('— к прошлому периоду')).toBeInTheDocument();
   rerender(<KpiTile kpi={{ ...kpi, compare: false }} />);
   expect(screen.queryByText(/к прошлому периоду/)).not.toBeInTheDocument();
+});
+
+test('readout clamps when the same chart gets fewer labels', () => {
+  const { rerender } = render(<BarChart title="Т" labels={LABELS} values={[1, 2, 3, 4, 5]} unit="count" />);
+  rerender(<BarChart title="Т" labels={['a', 'b']} values={[1, 2]} unit="count" />);
+  expect(screen.getByTestId('readout')).toHaveTextContent('b · 2');
+  expect(screen.getByTestId('readout')).not.toHaveTextContent('undefined');
+});
+
+test('count charts have whole-number ticks', () => {
+  render(<StatsChart chart={chart({ unit: 'count', series: [{ name: 'Заезды', values: [0, 5, 0, 0, 2] }] })} />);
+  expect(screen.getByText('4')).toBeInTheDocument();
+  expect(screen.getByText('6')).toBeInTheDocument();
+  expect(screen.queryByText(/,/)).not.toBeInTheDocument();
+});
+
+test('share meter is an image named with its title', () => {
+  render(<StatsChart chart={chart({ kind: 'share', unit: 'count', title: 'Клиенты', labels: ['Новые', 'Повторные'],
+    series: [{ name: 'Клиенты', values: [1, 3] }] })} />);
+  expect(screen.getByRole('img', { name: /^Клиенты/ })).toBeInTheDocument();
+});
+
+test('chart aria-label carries the data', () => {
+  render(<StatsChart chart={chart({})} />);
+  expect(screen.getByRole('img').getAttribute('aria-label')).toContain('17.09–23.09 — 6 000 ₽');
 });

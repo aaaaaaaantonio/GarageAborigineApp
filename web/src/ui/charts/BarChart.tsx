@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { StatsUnit } from '../../api/types';
-import { formatTick, formatValue, niceMax } from './format';
+import { axisMax, describe, formatTick, formatValue } from './format';
 
 export const W = 400;
 export const H = 170;
@@ -14,8 +14,10 @@ export function roundedTop(x: number, top: number, w: number, h: number): string
 
 export interface Frame { y: (v: number) => number; ticks: number[]; step: number; barW: number; x: (i: number) => number; every: number; base: number }
 
+const CHAR_W = 6.2;
+
 /** Shared geometry for vertical bar charts over `n` steps with axis top `max`. */
-export function frame(n: number, max: number): Frame {
+export function frame(n: number, max: number, labels: string[] = []): Frame {
   const step = (W - L - R) / n;
   const barW = Math.min(46, step * 0.6);
   return {
@@ -23,7 +25,7 @@ export function frame(n: number, max: number): Frame {
     ticks: [0, 1, 2, 3].map((i) => (max * i) / 3),
     step, barW,
     x: (i) => L + step * i + (step - barW) / 2,
-    every: Math.ceil(n / 6),
+    every: Math.max(1, Math.ceil((Math.max(0, ...labels.map((l) => l.length)) * CHAR_W + 4) / step)),
     base: H - B,
   };
 }
@@ -37,8 +39,8 @@ export function Axis({ f, unit, labels }: { f: Frame; unit: StatsUnit; labels: s
           <text x={L - 6} y={f.y(t) + 4} textAnchor="end">{formatTick(t, unit)}</text>
         </g>
       ))}
-      {labels.map((label, i) => i % f.every === 0 && (
-        <text key={label} x={f.x(i) + f.barW / 2} y={H - 6} textAnchor="middle">{label}</text>
+      {labels.map((label, i) => (labels.length - 1 - i) % f.every === 0 && (
+        <text key={i} x={f.x(i) + f.barW / 2} y={H - 6} textAnchor="middle">{label}</text>
       ))}
     </>
   );
@@ -57,15 +59,16 @@ export function HitAreas({ f, n, onPick }: { f: Frame; n: number; onPick: (i: nu
 
 export function BarChart({ title, labels, values, unit }: { title: string; labels: string[]; values: number[]; unit: StatsUnit }) {
   const [active, setActive] = useState(labels.length - 1);
-  const f = frame(labels.length, niceMax(Math.max(...values)));
+  const shown = Math.min(active, labels.length - 1);
+  const f = frame(labels.length, axisMax(Math.max(...values), unit), labels);
   return (
     <>
-      <div className="chart-readout" data-testid="readout">{labels[active]} · <b>{formatValue(values[active], unit)}</b></div>
-      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={title}>
+      <div className="chart-readout" data-testid="readout">{labels[shown]} · <b>{formatValue(values[shown], unit)}</b></div>
+      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={describe(title, labels, (i) => formatValue(values[i], unit))}>
         <Axis f={f} unit={unit} labels={labels} />
         {values.map((v, i) => v > 0 && (
           <path key={i} d={roundedTop(f.x(i), f.y(v), f.barW, f.base - f.y(v))} fill="var(--series-1)"
-            opacity={i === active ? 1 : 0.75} />
+            opacity={i === shown ? 1 : 0.75} />
         ))}
         <HitAreas f={f} n={labels.length} onPick={setActive} />
       </svg>
