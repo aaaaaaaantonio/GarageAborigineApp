@@ -18,6 +18,15 @@ router = APIRouter(prefix="/stats", tags=["stats"])
 Section = Literal["money", "flow", "staff", "works"]
 
 
+@router.get("/mine", response_model=StatsOut)
+async def my_stats(
+    period: Period = "month",
+    session: AsyncSession = Depends(get_session),
+    acting_user: User = Depends(require_role(UserRole.MASTER, UserRole.MECHANIC)),
+):
+    return await StatsService(session).mine(acting_user, period)
+
+
 @router.get("/{section}", response_model=StatsOut)
 async def section_stats(
     section: Section,

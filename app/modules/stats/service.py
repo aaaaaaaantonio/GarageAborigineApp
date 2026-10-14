@@ -11,6 +11,7 @@ from app.core.enums import UserRole, VisitStatus, WorkCategory
 from app.modules.stats.periods import Period, Window, buckets, delta_pct, windows
 from app.modules.stats.repository import StatsRepository
 from app.modules.stats.schemas import Chart, ChartKind, Kpi, Series, StatsOut, Unit
+from app.modules.users.models import User
 
 FUNNEL = [
     VisitStatus.RECEIVED, VisitStatus.DIAGNOSTICS, VisitStatus.APPROVAL,
@@ -253,6 +254,55 @@ class StatsService:
                        ("Клиенты", [new, repeat])),
                 _chart("revenue_by_category", "hbars", "Выручка по категориям работ", "rub",
                        *_split(by_category, "Выручка")),
+            ],
+        )
+
+    async def mine(self, user: User, period: Period) -> StatsOut:
+        if user.role == UserRole.MASTER:
+            return await self._mine_master(user, period)
+        return await self._mine_mechanic(user, period)
+
+    async def _mine_master(self, user: User, period: Period) -> StatsOut:
+        money = await self.money(period, user.id)
+        current, _, _ = self._windows(period)
+        issued = await self.repo.closed_visits(VisitStatus.ISSUED, current, user.id)
+        per_status, _ = _time_in_statuses(issued, await self.repo.status_logs([v.id for v in issued]))
+        kpis = [k for k in money.kpis if k.key != "work_share"]
+        kpis.append(_kpi("open_now", "Сейчас в работе", await self.repo.open_count(user.id), "count", compare=False))
+        return StatsOut(
+            section="mine", period=period, kpis=kpis,
+            charts=[
+                money.charts[0],
+                _chart("time_in_status", "hbars", "Где стоят мои машины", "days",
+                       [STATUS_LABELS[s] for s in FUNNEL], ("Дней", per_status), sub="в среднем, дней"),
+            ],
+        )
+
+    async def _mine_mechanic(self, user: User, period: Period) -> StatsOut:
+        """Norm-hours only: mechanics never see money."""
+        current, previous, steps = self._windows(period)
+        issued = await self.repo.closed_visits(VisitStatus.ISSUED, current)
+        issued_prev = await self.repo.closed_visits(VisitStatus.ISSUED, previous)
+        closed_at = {v.id: v.closed_at for v in issued}
+        lines = [x for x in await self.repo.work_lines(list(closed_at)) if x.mechanic_id == user.id]
+        lines_prev = [x for x in await self.repo.work_lines([v.id for v in issued_prev]) if x.mechanic_id == user.id]
+        hours = sum(float(x.norm_hours) for x in lines)
+        by_category: dict[str, float] = defaultdict(float)
+        for x in lines:
+            by_category[CATEGORY_LABELS[x.category]] += float(x.norm_hours)
+        return StatsOut(
+            section="mine", period=period,
+            kpis=[
+                _kpi("hours", "Нормо-часов", round(hours, 2), "hours", sum(float(x.norm_hours) for x in lines_prev)),
+                _kpi("works", "Работ выполнено", len(lines), "count", len(lines_prev)),
+                _kpi("in_progress", "Сейчас в работе", await self.repo.open_work_count(user.id), "count", compare=False),
+                _kpi("avg_hours", "Среднее на работу", round(hours / len(lines), 1) if lines else 0, "hours",
+                     compare=False),
+            ],
+            charts=[
+                _chart("hours", "bars", "Нормо-часы", "hours", [label for label, _ in steps],
+                       ("Нормо-часы", _bucketed(steps, ((closed_at[x.visit_id], x.norm_hours) for x in lines)))),
+                _chart("hours_by_category", "hbars", "По категориям", "hours", *_split(by_category, "Нормо-часы")),
             ],
         )
 
