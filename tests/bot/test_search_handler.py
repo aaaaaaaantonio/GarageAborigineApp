@@ -42,6 +42,18 @@ async def test_typed_text_pushes_results_screen():
     ]
 
 
+async def test_refining_a_search_replaces_the_results_screen():
+    state = fsm_context()
+    await on_screens(state, ("search", {}), ("search_results", {"query": "Иванов", "page": 2}))
+    message = make_message("Иванов Пётр")
+
+    await receive_search_query(message, state, api=_api([]), user=MASTER)
+
+    assert (await state.get_data())["nav_stack"] == [
+        ["menu", {}], ["search", {}], ["search_results", {"query": "Иванов Пётр", "page": 0}],
+    ]
+
+
 async def test_results_over_limit_show_first_page_with_next():
     text, markup = await render_search_results(_api(_vehicles(12)), MASTER, {"query": "Toyota", "page": 0})
 

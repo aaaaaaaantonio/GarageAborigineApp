@@ -67,6 +67,10 @@ async def _get_stack(state: FSMContext) -> list:
     return (await state.get_data()).get(NAV_STACK) or _base_stack()
 
 
+async def top_name(state: FSMContext) -> str:
+    return (await _get_stack(state))[-1][0]
+
+
 async def clear_wizard(state: FSMContext) -> None:
     """Drop wizard state and data; keep the screen stack and the live message."""
     data = await state.get_data()

@@ -67,7 +67,12 @@ async def text_at_button_step(message: Message, state: FSMContext, api: ApiClien
 
 @router.message(F.text)
 async def receive_search_query(message: Message, state: FSMContext, api: ApiClient, user: dict, **kwargs) -> None:
-    await nav.push(message, state, api, user, "search_results", {"query": message.text, "page": 0})
+    args = {"query": message.text, "page": 0}
+    if await nav.top_name(state) == "search_results":
+        # A refined query replaces the results, so «Назад» doesn't walk through every attempt.
+        await nav.replace_top(message, state, api, user, args)
+    else:
+        await nav.push(message, state, api, user, "search_results", args)
 
 
 @router.callback_query(F.data.startswith(f"{actions.SEARCH_PAGE}:"))

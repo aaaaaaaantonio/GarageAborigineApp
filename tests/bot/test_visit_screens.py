@@ -5,7 +5,7 @@ import pytest
 
 from bot.api_client import ApiForbidden, ApiNotFound
 from bot.callback_ids import encode_id
-from bot.handlers.documents import pdf_callback
+from bot.handlers.documents import PDF_PREPARING, pdf_callback
 from bot.handlers.mechanic import DONE_WORKS_LIMIT, render_done_works, render_my_works
 from bot.handlers.visits import receive_cancel_reason, render_visit, render_visit_status, visit_header, visit_status_callback
 from bot.handlers.work_items import (
@@ -323,7 +323,39 @@ async def test_pdf_action_sends_document_without_redrawing():
     document = callback.message.answer_document.await_args.args[0]
     assert document.filename == f"zakaz-naryad-{VISIT}.pdf"
     callback.message.edit_text.assert_not_awaited()
-    callback.answer.assert_awaited_once_with()
+    callback.answer.assert_awaited_once_with(PDF_PREPARING)
+
+
+async def test_pdf_action_answers_the_press_before_generating():
+    """Generation can outlast Telegram's callback timeout, so the spinner stops first."""
+    state = fsm_context()
+    await on_screens(state, ("visit", {"visit_id": VISIT}))
+    callback = make_callback("act:pdf")
+    api = AsyncMock()
+
+    async def generate(visit_id):
+        callback.answer.assert_awaited_once_with(PDF_PREPARING)
+        return {"document_id": "d1"}
+
+    api.generate_document.side_effect = generate
+    api.get_document_file.return_value = b"%PDF"
+
+    await pdf_callback(callback, state, api=api, user=MASTER)
+
+    api.generate_document.assert_awaited_once()
+
+
+async def test_pdf_error_after_answer_goes_to_the_chat():
+    state = fsm_context()
+    await on_screens(state, ("visit", {"visit_id": VISIT}))
+    callback = make_callback("act:pdf")
+    api = AsyncMock()
+    api.generate_document.side_effect = ApiNotFound("Заезд не найден")
+
+    await pdf_callback(callback, state, api=api, user=MASTER)
+
+    callback.answer.assert_awaited_once_with(PDF_PREPARING)
+    callback.message.answer.assert_awaited_once_with("Заезд не найден")
 
 
 async def test_my_works_caps_the_list():
