@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.base import StorageKey
 from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 MASTER = {"id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "role": "master"}
 ADMIN = {"id": "cccccccc-cccc-cccc-cccc-cccccccccccc", "role": "admin"}
@@ -37,6 +37,8 @@ def make_callback(data: str, message_id: int = 5) -> MagicMock:
     callback = MagicMock(spec=CallbackQuery)
     callback.data = data
     callback.message = make_message(message_id=message_id)
+    # The pressed button is on the message, as with a real Telegram client.
+    callback.message.reply_markup = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="·", callback_data=data)]])
     callback.bot = callback.message.bot
     callback.answer = AsyncMock()
     return callback

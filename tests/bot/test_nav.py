@@ -328,3 +328,18 @@ async def test_option_callback_on_old_message_is_stale():
 
     callback.answer.assert_awaited_once_with("Кнопка устарела — начните действие заново.")
     assert await _stack(state) == [["menu", {}], ["t_item", {"item_id": A}]]
+
+
+async def test_option_callback_not_offered_on_the_message_is_refused():
+    """Callback data comes from the client; only options the live message shows are honoured."""
+    state = fsm_context()
+    await on_screens(state, ("t_item", {"item_id": A}), msg_id=5)
+    callback = make_callback(f"opt:item_id:{B}", message_id=5)
+    callback.message.reply_markup = InlineKeyboardMarkup(
+        inline_keyboard=[[InlineKeyboardButton(text="Мои", callback_data="opt:f:mine")]]
+    )
+
+    await nav.option_callback(callback, state, api=AsyncMock(), user=MASTER)
+
+    callback.answer.assert_awaited_once_with("Кнопка устарела — начните действие заново.")
+    assert await _stack(state) == [["menu", {}], ["t_item", {"item_id": A}]]

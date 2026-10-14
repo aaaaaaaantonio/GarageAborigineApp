@@ -225,12 +225,21 @@ def dropdown(
     ]
 
 
+def _offered(message) -> set[str]:
+    markup = getattr(message, "reply_markup", None)
+    if not isinstance(markup, InlineKeyboardMarkup):
+        return set()
+    return {b.callback_data for row in markup.inline_keyboard for b in row if b.callback_data}
+
+
 @router.callback_query(F.data.startswith(f"{OPT}:"))
 async def option_callback(callback: CallbackQuery, state: FSMContext, api: ApiClient, user: dict, **kwargs) -> None:
     _, key, value = callback.data.split(":", 2)
     data = await state.get_data()
     stack = data.get(NAV_STACK) or _base_stack()
-    if data.get(NAV_MSG) != callback.message.message_id:
+    # Callback data is client-supplied: honour only a button the live message really shows,
+    # so a forged opt: can't overwrite screen ids or feed renders values they never offered.
+    if data.get(NAV_MSG) != callback.message.message_id or callback.data not in _offered(callback.message):
         await callback.answer(STALE_BUTTON)
         return
     args = {**stack[-1][1], key: value}
