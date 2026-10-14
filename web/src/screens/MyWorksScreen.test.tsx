@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse, type JsonBodyType } from 'msw';
 import { doneList, makeDoneWork, makeMyWork } from '../test/fixtures';
 import { renderApp } from '../test/render';
@@ -93,4 +93,23 @@ test('done: month by default with a norm-hours total, period and outcome go to t
   await waitFor(() => expect(lastOf(queries).has('since')).toBe(false));
   await user.selectOptions(screen.getByLabelText('Итог'), 'cancelled');
   await waitFor(() => expect(lastOf(queries).get('outcome')).toBe('cancelled'));
+});
+
+test('mechanic can sign out from the header', async () => {
+  server.use(
+    http.get('/api/work-items/mine', () => HttpResponse.json([])),
+    http.get('/api/auth/dev-users', () => HttpResponse.json([])),
+  );
+  const { user } = renderApp('/my', { as: 'mechanic' });
+  const header = (await screen.findByRole('heading', { name: 'Мои работы' })).closest('header')!;
+  expect(header).toHaveTextContent('Сидоров Иван');
+  await user.click(within(header).getByRole('button', { name: 'Выйти' }));
+  await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/login'));
+});
+
+test('done tab has the header sign-out too', async () => {
+  server.use(http.get('/api/work-items/mine/done', () => HttpResponse.json(doneList([]))));
+  renderApp('/my/done', { as: 'mechanic' });
+  await screen.findByRole('heading', { name: 'Выполненные работы' });
+  expect(screen.getByRole('button', { name: 'Выйти' })).toBeInTheDocument();
 });

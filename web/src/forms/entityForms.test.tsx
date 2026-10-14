@@ -105,11 +105,12 @@ test('admin adds staff', async () => {
   await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/more'));
 });
 
-test('more: staff link only for admin; sign out returns to login', async () => {
+test('more: staff link only for admin; sign out (in the header) returns to login', async () => {
   server.use(http.get('/api/auth/dev-users', () => HttpResponse.json([])));
   const { user } = renderApp('/more', { as: 'master' });
   expect(await screen.findByRole('link', { name: 'Бумажное согласие' })).toBeInTheDocument();
   expect(screen.queryByRole('link', { name: 'Добавить сотрудника' })).not.toBeInTheDocument();
+  // One sign-out only: the header's.
   await user.click(screen.getByRole('button', { name: 'Выйти' }));
   await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/login'));
 });

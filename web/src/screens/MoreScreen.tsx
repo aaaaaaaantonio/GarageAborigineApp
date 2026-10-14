@@ -1,12 +1,10 @@
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../auth/AuthProvider';
 import { ROLE_LABELS } from '../lib/labels';
-import { Button } from '../ui/Button';
 import { ScreenHeader } from '../ui/ScreenHeader';
 
 export function MoreScreen() {
-  const { user, signOut } = useAuth();
-  const navigate = useNavigate();
+  const { user } = useAuth();
   return (
     <>
       <ScreenHeader title="Ещё" />
@@ -20,16 +18,6 @@ export function MoreScreen() {
         <Link className="btn btn-block" to="/clients/new">Новый клиент</Link>
         <Link className="btn btn-block" to="/consent/paper">Бумажное согласие</Link>
         {user!.role === 'admin' && <Link className="btn btn-block" to="/staff/new">Добавить сотрудника</Link>}
-        <Button
-          variant="ghost"
-          block
-          onClick={() => {
-            signOut();
-            navigate('/login', { replace: true });
-          }}
-        >
-          Выйти
-        </Button>
       </div>
     </>
   );

@@ -94,7 +94,7 @@ export function VisitsScreen() {
   const unfiltered = filter === 'all' && !masterId;
   return (
     <>
-      <ScreenHeader title="В работе" right={<Link className="btn btn-primary" to="/visits/new">+ Заезд</Link>} />
+      <ScreenHeader title="В работе" />
       <div className="row links-row">
         <Link className="btn" to="/works">Доска работ</Link>
         <Link className="btn" to="/visits/archive">Архив</Link>
