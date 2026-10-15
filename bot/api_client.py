@@ -155,6 +155,18 @@ class ApiClient:
     async def get_my_stats(self, period: str) -> dict:
         return await self.get(f"/stats/mine{_query({'period': period})}")
 
+    async def get_settings(self) -> dict:
+        return await self.get("/settings")
+
+    async def update_settings(self, **changes) -> dict:
+        return await self.patch("/settings", json=changes)
+
+    async def list_mechanic_pay(self) -> list[dict]:
+        return await self.get("/settings/pay")
+
+    async def set_mechanic_pay(self, user_id: str, scheme: str | None, value: float | None) -> dict:
+        return await self.patch(f"/settings/pay/{user_id}", json={"pay_scheme": scheme, "pay_value": value})
+
     async def list_work_board(self, **filters) -> dict:
         """Filters as in GET /work-items/board: mechanic_id, unassigned, status, category, unapproved, group."""
         return await self.get(f"/work-items/board{_query(filters)}")

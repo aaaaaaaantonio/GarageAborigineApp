@@ -50,3 +50,8 @@ class PaperConsentStates(StatesGroup):
 
 class VisitCancelStates(StatesGroup):
     waiting_for_reason = State()
+
+
+class PayStates(StatesGroup):
+    choosing_scheme = State()
+    waiting_for_value = State()
