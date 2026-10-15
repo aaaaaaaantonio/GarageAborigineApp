@@ -56,3 +56,9 @@ class ConsentMethod(str, enum.Enum):
 class ApprovedVia(str, enum.Enum):
     CRM_STATUS = "crm_status"
     BOT = "bot"
+
+
+class PayScheme(str, enum.Enum):
+    PERCENT = "percent"
+    PER_HOUR = "per_hour"
+    FULL = "full"

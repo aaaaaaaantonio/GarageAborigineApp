@@ -56,6 +56,8 @@ class VisitWorkItem(Base, UUIDPkMixin, TimestampMixin):
     # Last status change; NULL until the first one (created_at stands in).
     status_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     progress_photos: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    # The mechanic's pay for this work, fixed when the visit is issued.
+    mechanic_pay: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
 
 
 class VisitStatusLog(Base, UUIDPkMixin):

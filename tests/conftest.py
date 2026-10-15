@@ -14,6 +14,7 @@ import app.modules.catalog.models  # noqa
 import app.modules.visits.models  # noqa
 import app.modules.consent.models  # noqa
 import app.modules.search.models  # noqa
+import app.modules.settings.models  # noqa
 
 
 @pytest_asyncio.fixture(scope="session")
