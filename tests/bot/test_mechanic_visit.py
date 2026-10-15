@@ -71,7 +71,7 @@ async def test_card_shows_kopecks_like_the_web():
 
     text, _ = await render_mech_visit(api, MECHANIC, {"visit_id": VISIT})
 
-    assert "Итого по заезду: 1 000.50 ₽" in text and "Ваш заработок: 1 543.13 ₽" in text
+    assert "Итого по заезду: 1 000,50 ₽" in text and "Ваш заработок: 1 543,13 ₽" in text
 
 
 async def test_long_card_stays_under_the_telegram_limit():

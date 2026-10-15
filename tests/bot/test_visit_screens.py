@@ -83,7 +83,7 @@ async def test_closed_visit_has_no_status_button():
 
 
 def test_visit_header_formats_total_and_falls_back_to_generic_title():
-    assert visit_header({"status": "received", "total_amount": 12400.5}) == ["Заезд", "Статус: Принят", "Сумма: 12 400.50"]
+    assert visit_header({"status": "received", "total_amount": 12400.5}) == ["Заезд", "Статус: Принят", "Сумма: 12 400,50"]
 
 
 # --- visit status ---
