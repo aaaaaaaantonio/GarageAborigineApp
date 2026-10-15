@@ -182,6 +182,15 @@ async def test_vehicle_card_for_mechanic_has_only_history_and_never_asks_owner()
     api.get_vehicle_owner.assert_not_awaited()
 
 
+async def test_vehicle_card_skips_the_vin_the_server_hid():
+    api = AsyncMock()
+    api.get_vehicle.return_value = _car() | {"vin": None}
+
+    text, _ = await render_vehicle(api, MECHANIC, {"vehicle_id": CAR})
+
+    assert text == "🚗 Toyota Camry · А123ВС77\nПробег: 120 500 км"
+
+
 async def test_client_and_vehicle_visits_are_dated_lists():
     api = AsyncMock()
     api.list_visits.return_value = {"items": [_visit(V1, ME, status="issued")], "has_more": False}

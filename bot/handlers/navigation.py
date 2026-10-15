@@ -117,9 +117,11 @@ async def render_vehicle(api: ApiClient, user: dict, args: dict) -> nav.Rendered
             builder.button(text="➕ Новый заезд", callback_data=actions.NEW_VISIT_FOR)
     builder.button(text="🔧 История работ", callback_data=nav.go_data("work_history", vehicle_id))
     builder.adjust(1)
+    # The API sends no VIN to a mechanic while the admin hides VINs from mechanics.
+    vin = f"VIN: {vehicle['vin']} · " if vehicle.get("vin") else ""
     text = (
         f"🚗 {vehicle['make']} {vehicle['model']} · {vehicle['plate_number']}\n"
-        f"VIN: {vehicle['vin']} · Пробег: {format_number(vehicle['mileage_current'])} км"
+        f"{vin}Пробег: {format_number(vehicle['mileage_current'])} км"
     )
     return text, builder.as_markup()
 

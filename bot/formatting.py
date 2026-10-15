@@ -20,11 +20,11 @@ def format_day(value: str) -> str:
 
 
 def format_number(value: float) -> str:
-    """Space-grouped thousands; two decimals only when the value is fractional."""
+    """Space-grouped thousands; two decimals after a comma only when the value is fractional."""
     number = float(value)
     if number.is_integer():
         return f"{int(number):,}".replace(",", " ")
-    return f"{number:,.2f}".replace(",", " ")
+    return f"{number:,.2f}".replace(",", " ").replace(".", ",")
 
 
 def format_hours(value: float) -> str:

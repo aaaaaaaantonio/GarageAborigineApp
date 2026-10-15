@@ -208,7 +208,8 @@ export interface Client {
 
 export interface Vehicle {
   id: string;
-  vin: string;
+  /** null for a mechanic while the admin hides VINs from mechanics */
+  vin: string | null;
   plate_number: string;
   make: string;
   model: string;

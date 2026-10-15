@@ -27,7 +27,7 @@ class VehicleOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
-    vin: str
+    vin: str | None  # None: a mechanic while the admin hides VINs from mechanics
     plate_number: str
     make: str
     model: str

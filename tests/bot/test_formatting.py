@@ -20,7 +20,7 @@ def test_status_labels_are_russian_and_fall_back_to_code():
 def test_format_number_groups_thousands_and_trims_whole_decimals():
     assert format_number(12400.0) == "12 400"
     assert format_number(12400) == "12 400"
-    assert format_number(12400.5) == "12 400.50"
+    assert format_number(12400.5) == "12 400,50"
     assert format_number(0) == "0"
     assert format_number(950) == "950"
 

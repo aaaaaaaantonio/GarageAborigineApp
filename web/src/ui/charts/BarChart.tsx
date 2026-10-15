@@ -4,7 +4,7 @@ import { axisMax, describe, formatTick, formatValue } from './format';
 
 export const W = 400;
 export const H = 170;
-const L = 38, R = 6, T = 14, B = 22;
+const L = 50, R = 6, T = 14, B = 22;
 
 /** Bar path with the data end (top) rounded and the baseline end square. */
 export function roundedTop(x: number, top: number, w: number, h: number): string {
@@ -36,7 +36,7 @@ export function Axis({ f, unit, labels }: { f: Frame; unit: StatsUnit; labels: s
       {f.ticks.map((t) => (
         <g key={t}>
           <line x1={L} x2={W - R} y1={f.y(t)} y2={f.y(t)} className="chart-grid" />
-          <text x={L - 6} y={f.y(t) + 4} textAnchor="end">{formatTick(t, unit)}</text>
+          <text x={L - 6} y={f.y(t) + 4} textAnchor="end">{formatTick(t, unit, f.ticks[3])}</text>
         </g>
       ))}
       {labels.map((label, i) => (labels.length - 1 - i) % f.every === 0 && (

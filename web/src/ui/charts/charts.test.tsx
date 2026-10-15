@@ -2,7 +2,7 @@ import { BarChart } from './BarChart';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { StatsChartData, StatsKpi } from '../../api/types';
-import { formatValue, niceMax } from './format';
+import { axisMax, formatTick, formatValue, niceMax } from './format';
 import { KpiTile } from './KpiTile';
 import { StatsChart } from './StatsChart';
 
@@ -22,10 +22,22 @@ test('formats values by unit', () => {
   expect(niceMax(0)).toBe(1);
 });
 
+test('axis ticks are round numbers in one style', () => {
+  // A mechanic's earnings of about 2 400 ₽ used to give ticks «833,3», «1,7 т», «2,5 т».
+  expect(axisMax(2400, 'rub')).toBe(3000);
+  expect([1000, 2000, 3000].map((t) => formatTick(t, 'rub', 3000))).toEqual(['1 000', '2 000', '3 000']);
+  expect(axisMax(14000, 'rub')).toBe(15000);
+  expect([5000, 10000, 15000].map((t) => formatTick(t, 'rub', 15000))).toEqual(['5 тыс', '10 тыс', '15 тыс']);
+  expect(axisMax(250000, 'rub')).toBe(300000);
+  expect(formatTick(100000, 'rub', 300000)).toBe('100 тыс');
+  expect(axisMax(7, 'hours')).toBe(7.5);
+  expect(axisMax(5, 'count')).toBe(6);
+});
+
 test('bar chart: axis top is the nice max, readout follows the tapped bar', async () => {
   render(<StatsChart chart={chart({})} />);
   expect(screen.getByRole('img', { name: /^Выручка/ })).toBeInTheDocument();
-  expect(screen.getByText('15 т')).toBeInTheDocument();
+  expect(screen.getByText('15 тыс')).toBeInTheDocument();
   expect(screen.getByTestId('readout')).toHaveTextContent('08.10–14.10 · 14 000 ₽');
   await userEvent.click(screen.getByTestId('bar-1'));
   expect(screen.getByTestId('readout')).toHaveTextContent('17.09–23.09 · 6 000 ₽');

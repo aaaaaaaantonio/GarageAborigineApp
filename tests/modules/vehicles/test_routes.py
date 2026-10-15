@@ -9,6 +9,8 @@ from app.core.enums import UserRole
 from app.main import app
 from app.modules.clients.schemas import ClientCreate
 from app.modules.clients.service import ClientService
+from app.modules.settings.schemas import VisibilityPatch
+from app.modules.settings.service import SettingsService
 from app.modules.users.models import User
 from app.modules.vehicles.schemas import OwnershipCreate, VehicleCreate
 from app.modules.vehicles.service import VehicleService
@@ -173,3 +175,19 @@ async def test_create_vehicle_duplicate_vin_returns_409(api_app, session):
 
     assert second.status_code == 409
     assert "VIN" in second.json()["detail"]
+
+
+async def test_vin_follows_the_mechanic_vin_switch(api_app, session):
+    admin, mechanic, _ = await _world(session)
+    vehicle = await _vehicle(session, admin, "A", "А111АА77")
+
+    hidden = await _get(api_app, f"/vehicles/{vehicle.id}", mechanic)
+    as_admin = await _get(api_app, f"/vehicles/{vehicle.id}", admin)
+    await SettingsService(session).update_visibility(VisibilityPatch(mechanic_sees_vin=True), admin)
+    shown = await _get(api_app, f"/vehicles/{vehicle.id}", mechanic)
+
+    assert hidden.status_code == 200
+    assert hidden.json()["vin"] is None
+    assert hidden.json()["plate_number"] == "А111АА77"
+    assert as_admin.json()["vin"] == "A" * 17
+    assert shown.json()["vin"] == "A" * 17

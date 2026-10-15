@@ -8,6 +8,8 @@ from app.core.enums import UserRole
 from app.main import app
 from app.modules.clients.schemas import ClientCreate
 from app.modules.clients.service import ClientService
+from app.modules.settings.schemas import VisibilityPatch
+from app.modules.settings.service import SettingsService
 from app.modules.users.models import User
 from app.modules.vehicles.schemas import VehicleCreate
 from app.modules.vehicles.service import VehicleService
@@ -67,3 +69,19 @@ async def test_master_search_by_phone_still_finds_client(api_app, session):
     resp = await _search(api_app, "79990000021", master)
 
     assert [r["entity"] for r in resp.json()] == ["client"]
+
+
+async def test_mechanic_search_by_vin_follows_the_vin_switch(api_app, session):
+    master, mechanic, vehicle = await _world(session)
+    admin = User(role=UserRole.ADMIN, full_name="Админ", branch_id=uuid.uuid4())
+    session.add(admin)
+    await session.flush()
+
+    hidden = await _search(api_app, "M" * 17, mechanic)
+    by_master = await _search(api_app, "M" * 17, master)
+    await SettingsService(session).update_visibility(VisibilityPatch(mechanic_sees_vin=True), admin)
+    shown = await _search(api_app, "M" * 17, mechanic)
+
+    assert hidden.json() == []
+    assert [h["id"] for h in by_master.json()] == [str(vehicle.id)]
+    assert [h["id"] for h in shown.json()] == [str(vehicle.id)]
