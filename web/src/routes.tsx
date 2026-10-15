@@ -16,6 +16,7 @@ import { ArchiveScreen } from './screens/ArchiveScreen';
 import { BoardScreen } from './screens/BoardScreen';
 import { DoneWorksScreen } from './screens/DoneWorksScreen';
 import { MyWorksScreen } from './screens/MyWorksScreen';
+import { StatsScreen } from './screens/StatsScreen';
 import { SearchScreen } from './screens/SearchScreen';
 import { VehicleScreen } from './screens/VehicleScreen';
 import { VisitsScreen } from './screens/VisitsScreen';
@@ -42,6 +43,7 @@ export function AppRoutes() {
         <Route path="/visits/:visitId/works/:itemId/parts/new" element={<RoleGate roles={STAFF}><AddPartForm /></RoleGate>} />
         <Route path="/my" element={<RoleGate roles={WORKERS}><MyWorksScreen /></RoleGate>} />
         <Route path="/my/done" element={<RoleGate roles={WORKERS}><DoneWorksScreen /></RoleGate>} />
+        <Route path="/stats" element={<RoleGate roles={ALL_ROLES}><StatsScreen /></RoleGate>} />
         <Route path="/search" element={<RoleGate roles={ALL_ROLES}><SearchScreen /></RoleGate>} />
         <Route path="/clients/new" element={<RoleGate roles={STAFF}><NewClientRoute /></RoleGate>} />
         <Route path="/clients/:clientId" element={<RoleGate roles={STAFF}><ClientScreen /></RoleGate>} />

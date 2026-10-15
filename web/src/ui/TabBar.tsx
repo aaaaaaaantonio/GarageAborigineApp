@@ -10,6 +10,7 @@ const STAFF_TABS = [
 const MECHANIC_TABS = [
   { to: '/my', icon: '🧰', label: 'Мои работы', end: true },
   { to: '/my/done', icon: '✅', label: 'Выполненные', end: false },
+  { to: '/stats', icon: '📊', label: 'Статистика', end: false },
   { to: '/search', icon: '🔍', label: 'Поиск', end: false },
 ];
 

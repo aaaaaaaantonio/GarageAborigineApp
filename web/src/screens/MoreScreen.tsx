@@ -15,6 +15,7 @@ export function MoreScreen() {
         </div>
         <Link className="btn btn-block" to="/works">Доска работ</Link>
         <Link className="btn btn-block" to="/visits/archive">Архив заездов</Link>
+        <Link className="btn btn-block" to="/stats">Статистика</Link>
         <Link className="btn btn-block" to="/clients/new">Новый клиент</Link>
         <Link className="btn btn-block" to="/consent/paper">Бумажное согласие</Link>
         {user!.role === 'admin' && (
