@@ -1,8 +1,11 @@
 import uuid
+from decimal import ROUND_HALF_UP, Decimal
 
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.core.enums import PayScheme
+
+MAX_PAY_VALUE = Decimal("99999999.99")  # Numeric(10, 2)
 
 
 class VisibilityOut(BaseModel):
@@ -30,14 +33,22 @@ class MechanicPayOut(BaseModel):
 
 class PayPatch(BaseModel):
     pay_scheme: PayScheme | None
-    pay_value: float | None = None
+    pay_value: float | None = Field(default=None, allow_inf_nan=False)
 
     @model_validator(mode="after")
     def _check_value(self) -> "PayPatch":
         if self.pay_scheme in (None, PayScheme.FULL):
             self.pay_value = None
-        elif self.pay_scheme == PayScheme.PERCENT and (self.pay_value is None or not 0 < self.pay_value <= 100):
+            return self
+        if self.pay_value is None:
+            raise ValueError("Укажите значение схемы оплаты")
+        # Check what the DB column (Numeric(10, 2)) will actually store.
+        kopecks = Decimal(str(self.pay_value)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        if kopecks > MAX_PAY_VALUE:
+            raise ValueError("Значение слишком большое")
+        if self.pay_scheme == PayScheme.PERCENT and not Decimal("0.01") <= kopecks <= Decimal(100):
             raise ValueError("Процент должен быть больше 0 и не больше 100")
-        elif self.pay_scheme == PayScheme.PER_HOUR and (self.pay_value is None or self.pay_value <= 0):
+        if self.pay_scheme == PayScheme.PER_HOUR and kopecks <= 0:
             raise ValueError("Ставка за нормо-час должна быть больше нуля")
+        self.pay_value = float(kopecks)
         return self

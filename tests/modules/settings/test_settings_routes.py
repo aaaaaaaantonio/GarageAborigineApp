@@ -1,9 +1,13 @@
 import uuid
 
+import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
 
+from pydantic import ValidationError
+
 from app.core.enums import UserRole
+from app.modules.settings.schemas import PayPatch
 from app.modules.users.audit import AuditLog
 from app.modules.users.models import User
 from tests.helpers import staff_headers
@@ -98,3 +102,18 @@ async def test_masters_do_not_see_pay_in_the_mechanics_list(api_app, session):
     listed = (await _req(api_app, "GET", "/users/mechanics", master)).json()
 
     assert all("pay_scheme" not in u and "pay_value" not in u for u in listed)
+
+
+async def test_pay_value_must_fit_the_column_and_be_positive_to_the_kopeck(api_app, session):
+    admin, _, mech, _ = await _staff(session)
+    path = f"/settings/pay/{mech.id}"
+
+    assert (await _req(api_app, "PATCH", path, admin, {"pay_scheme": "per_hour", "pay_value": 1e9})).status_code == 422
+    assert (await _req(api_app, "PATCH", path, admin, {"pay_scheme": "per_hour", "pay_value": 0.001})).status_code == 422
+    assert (await _req(api_app, "PATCH", path, admin, {"pay_scheme": "percent", "pay_value": 0.001})).status_code == 422
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+def test_non_finite_pay_value_is_rejected(value):
+    with pytest.raises(ValidationError):
+        PayPatch(pay_scheme="per_hour", pay_value=value)
