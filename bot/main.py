@@ -18,13 +18,14 @@ from bot.handlers import (
     consent,
     documents,
     fallback,
-    mechanic,  # mechanic, navigation, staff_lists: imported to register their screens
+    mechanic,  # mechanic, navigation, staff_lists, stats: imported to register their screens
     menu,
     navigation,
     part_items,
     search,
     staff_lists,
     start,
+    stats,
     vehicles,
     visits,
     work_items,

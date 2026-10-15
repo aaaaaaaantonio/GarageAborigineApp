@@ -15,6 +15,7 @@ _MASTER_ITEMS = [
     ("🔧 Заезды в работе", nav.go_data("active_visits")),
     ("📋 Доска работ", nav.go_data("board")),
     ("🗄 Архив заездов", nav.go_data("archive")),
+    ("📊 Статистика", nav.go_data("stats")),
     ("🔍 Поиск", nav.go_data("search")),
     ("📝 Регистрация клиента (бумага)", actions.PAPER_CONSENT),
 ]
@@ -27,6 +28,7 @@ _ADMIN_ITEMS = _MASTER_ITEMS + [
 _MECHANIC_ITEMS = [
     ("🧰 Мои работы", nav.go_data("my_works")),
     ("✅ Выполненные", nav.go_data("done_works")),
+    ("📊 Статистика", nav.go_data("stats")),
     ("🔍 Поиск", nav.go_data("search")),
 ]
 

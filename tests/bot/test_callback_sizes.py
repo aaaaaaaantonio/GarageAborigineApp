@@ -28,12 +28,13 @@ def _api():
     api.list_client_vehicles.return_value = [{"id": CAR, "make": "A", "model": "B", "plate_number": "А1"}]
     api.get_vehicle.return_value = {"id": CAR, "make": "A", "model": "B", "plate_number": "А1", "vin": "X" * 17, "mileage_current": 1}
     api.get_vehicle_owner.return_value = {"id": C, "full_name": "К"}
+    api.get_stats.return_value = api.get_my_stats.return_value = {"section": "money", "period": "month", "kpis": [], "charts": []}
     api.search.return_value = [{"entity": "vehicle", "id": CAR}] * 25
     return api
 
 
 SCREEN_ARGS = {
-    "menu": {}, "active_visits": {}, "my_works": {}, "done_works": {}, "search": {}, "archive": {}, "board": {},
+    "menu": {}, "active_visits": {}, "my_works": {}, "done_works": {}, "search": {}, "archive": {}, "board": {}, "stats": {},
     "visit": {"visit_id": V}, "visit_status": {"visit_id": V},
     "work": {"visit_id": V, "item_id": I}, "reassign": {"visit_id": V, "item_id": I},
     "client": {"client_id": C}, "vehicle": {"vehicle_id": CAR},

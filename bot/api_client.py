@@ -149,6 +149,12 @@ class ApiClient:
     async def list_my_done_work_items(self, since: str | None = None, outcome: str | None = None) -> dict:
         return await self.get(f"/work-items/mine/done{_query({'since': since, 'outcome': outcome})}")
 
+    async def get_stats(self, section: str, period: str, master_id: str | None = None) -> dict:
+        return await self.get(f"/stats/{section}{_query({'period': period, 'master_id': master_id})}")
+
+    async def get_my_stats(self, period: str) -> dict:
+        return await self.get(f"/stats/mine{_query({'period': period})}")
+
     async def list_work_board(self, **filters) -> dict:
         """Filters as in GET /work-items/board: mechanic_id, unassigned, status, category, unapproved, group."""
         return await self.get(f"/work-items/board{_query(filters)}")
