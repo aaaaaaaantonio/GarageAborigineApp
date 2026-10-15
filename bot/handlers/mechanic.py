@@ -91,6 +91,8 @@ async def render_mech_visit(api: ApiClient, user: dict, args: dict) -> nav.Rende
     for label, key in (("Клиент", "client_name"), ("Телефон", "client_phone"), ("VIN", "vin")):
         if v.get(key):
             lines.append(f"{label}: {v[key]}")
+        if key == "client_phone" and v.get("client_telegram_username"):
+            lines.append(f"Telegram: @{v['client_telegram_username'].lstrip('@')}")
     footer: list[str] = []
     if prices:
         footer.append("")

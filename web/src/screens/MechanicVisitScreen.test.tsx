@@ -21,13 +21,14 @@ test('without prices: works and assignees, no money, no client', async () => {
 });
 
 test('with prices and client data', async () => {
-  serve(pricedMechanicVisit({ client_name: 'Петров Иван', client_phone: '+7 900 123-45-67', vin: 'XW8ZZZ61ZJG000001' }));
+  serve(pricedMechanicVisit({ client_name: 'Петров Иван', client_phone: '+7 900 123-45-67', client_telegram_username: '@petrov_ivan', vin: 'XW8ZZZ61ZJG000001' }));
   renderApp('/my/visit/v1', { as: 'mechanic' });
   expect(await screen.findByText('Итого по заезду')).toBeInTheDocument();
   expect(screen.getByText('3 450 ₽')).toBeInTheDocument();
   expect(screen.getByText('Клиент: Петров Иван')).toBeInTheDocument();
   expect(screen.getByText('Телефон: +7 900 123-45-67')).toBeInTheDocument();
   expect(screen.getByText('VIN: XW8ZZZ61ZJG000001')).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: '@petrov_ivan' })).toHaveAttribute('href', 'https://t.me/petrov_ivan');
   expect(screen.getByText('Ваш заработок по заезду').nextSibling).toHaveTextContent('1 000 ₽');
 });
 

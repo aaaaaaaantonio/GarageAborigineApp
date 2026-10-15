@@ -37,7 +37,7 @@ async def test_card_without_prices():
 
 async def test_card_with_prices_client_and_no_scheme():
     api = AsyncMock()
-    view = _view(client_name="Петров", client_phone="+7 900 123-45-67", vin="X" * 17,
+    view = _view(client_name="Петров", client_phone="+7 900 123-45-67", client_telegram_username="petrov_ivan", vin="X" * 17,
                  discount=0, total_amount=3450, my_pay_total=None)
     view["works"][0] |= {"hourly_rate": 1000, "amount": 2000, "my_pay": None,
                          "parts": [PART | {"unit_price": 450, "amount": 450}]}
@@ -46,6 +46,7 @@ async def test_card_with_prices_client_and_no_scheme():
     text, _ = await render_mech_visit(api, MECHANIC, {"visit_id": VISIT})
 
     assert "Клиент: Петров" in text and "Телефон: +7 900 123-45-67" in text and f"VIN: {'X' * 17}" in text
+    assert "Telegram: @petrov_ivan" in text
     assert "2 000 ₽" in text and "🔩 Фильтр × 1 · 450 ₽" in text
     assert "Итого по заезду: 3 450 ₽" in text
     assert "Ваш заработок по заезду: схема оплаты не задана" in text

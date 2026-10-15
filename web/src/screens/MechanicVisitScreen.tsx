@@ -34,6 +34,7 @@ export function MechanicVisitScreen() {
                 <span className="hint">Пробег: {formatKm(v.mileage_at_intake)} · Мастер: {v.master_name}</span>
                 {v.client_name && <span className="hint">Клиент: {v.client_name}</span>}
                 {v.client_phone && <span className="hint">Телефон: {v.client_phone}</span>}
+                {v.client_telegram_username && <TelegramLine username={v.client_telegram_username} />}
                 {v.vin && <span className="hint mono">VIN: {v.vin}</span>}
               </div>
               <h2 className="section-title">Работы</h2>
@@ -53,6 +54,11 @@ export function MechanicVisitScreen() {
       </Loadable>
     </>
   );
+}
+
+function TelegramLine({ username }: { username: string }) {
+  const name = username.replace(/^@/, '');
+  return <span className="hint">Telegram: <a href={`https://t.me/${name}`}>@{name}</a></span>;
 }
 
 function WorkCard({ w, prices }: { w: MechanicWork; prices: boolean }) {
