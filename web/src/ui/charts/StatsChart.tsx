@@ -20,7 +20,7 @@ export function StatsChart({ chart }: { chart: StatsChartData }) {
     <section className="card chart">
       <h2>{chart.title}</h2>
       {chart.sub && <span className="hint">{chart.sub}</span>}
-      {empty ? <p className="hint chart-empty">Нет данных за период</p> : <Body chart={chart} />}
+      {empty ? <p className="hint chart-empty">Нет данных за период</p> : <Body key={chart.labels.join('|')} chart={chart} />}
     </section>
   );
 }

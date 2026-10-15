@@ -16,6 +16,7 @@ class Kpi(BaseModel):
     value: float | str
     unit: Unit
     delta_pct: int | None = None
+    higher_is_better: bool = True  # False: a rise is bad news (cancelled), the web inverts the delta colour
     compare: bool = True  # False: a current-state figure with no previous period to compare to
 
 

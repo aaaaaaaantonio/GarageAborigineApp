@@ -18,7 +18,9 @@ def _number(value: float) -> str:
 
 
 def format_value(value, unit: str) -> str:
-    return str(value) if unit == "text" else _number(float(value)) + UNIT_SUFFIX[unit]
+    if unit == "text":
+        return str(value)
+    return (format_number(round(float(value))) if unit == "rub" else _number(float(value))) + UNIT_SUFFIX[unit]
 
 
 def _delta(kpi: dict) -> str:
@@ -60,5 +62,6 @@ async def render_stats(api: ApiClient, user: dict, args: dict) -> nav.Rendered:
     lines = [header, ""]
     lines += [f"{k['label']}: {format_value(k['value'], k['unit'])}{_delta(k)}" for k in data["kpis"]]
     for chart in data["charts"]:
-        lines += ["", f"{chart['title']}:", *bar_lines(chart["labels"], _chart_values(chart), chart["unit"])]
+        title = f"{chart['title']} ({chart['sub']})" if chart.get("sub") else chart["title"]
+        lines += ["", f"{title}:", *bar_lines(chart["labels"], _chart_values(chart), chart["unit"])]
     return "\n".join(lines), InlineKeyboardMarkup(inline_keyboard=rows)

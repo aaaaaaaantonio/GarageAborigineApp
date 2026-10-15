@@ -27,6 +27,7 @@ async def test_flow_kpis_and_charts(session):
     assert (k["issued"].value, k["issued"].delta_pct) == (2, 100)
     assert (k["open_now"].value, k["open_now"].compare) == (1, False)
     assert (k["cancelled"].value, k["cancelled"].delta_pct) == (1, None)
+    assert [k[key].higher_is_better for key in ("accepted", "cancelled")] == [True, False]
     accepted, statuses = out.charts
     assert accepted.series[0].values == [0, 0, 0, 2, 2]
     assert statuses.kind == "hbars" and statuses.unit == "days"

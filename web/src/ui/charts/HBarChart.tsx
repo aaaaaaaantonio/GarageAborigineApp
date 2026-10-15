@@ -13,7 +13,7 @@ export function HBarChart({ title, labels, values, unit }: { title: string; labe
         const w = Math.max(4, (values[i] / max) * (W - VALUE_ROOM));
         const r = Math.min(4, w);
         return (
-          <g key={label}>
+          <g key={i}>
             <text x={0} y={y0 + 11} className="chart-label">{label}</text>
             <path d={`M0,${y0 + 16} H${w - r} Q${w},${y0 + 16} ${w},${y0 + 16 + r} V${y0 + 30 - r} Q${w},${y0 + 30} ${w - r},${y0 + 30} H0 Z`}
               fill="var(--series-1)" />

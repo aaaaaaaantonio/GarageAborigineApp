@@ -41,9 +41,11 @@ def _bucketed(steps: Steps, points) -> list[float]:
     return [round(v, 2) for v in values]
 
 
-def _kpi(key: str, label: str, value: float | str, unit: Unit, previous: float | None = None, compare: bool = True) -> Kpi:
+def _kpi(key: str, label: str, value: float | str, unit: Unit, previous: float | None = None, compare: bool = True,
+         higher_is_better: bool = True) -> Kpi:
     delta = delta_pct(value, previous) if compare and previous is not None else None
-    return Kpi(key=key, label=label, value=value, unit=unit, delta_pct=delta, compare=compare)
+    return Kpi(key=key, label=label, value=value, unit=unit, delta_pct=delta, compare=compare,
+               higher_is_better=higher_is_better)
 
 
 def _chart(key: str, kind: ChartKind, title: str, unit: Unit, labels: list[str], *series: tuple[str, list[float]],
@@ -175,7 +177,7 @@ class StatsService:
                 _kpi("accepted", "Принято", len(created), "count", len(created_prev)),
                 _kpi("issued", "Выдано", len(issued), "count", len(issued_prev)),
                 _kpi("open_now", "Сейчас в работе", await self.repo.open_count(master_id), "count", compare=False),
-                _kpi("cancelled", "Отменено", len(cancelled), "count", len(cancelled_prev)),
+                _kpi("cancelled", "Отменено", len(cancelled), "count", len(cancelled_prev), higher_is_better=False),
             ],
             charts=[
                 _chart("accepted", "bars", "Принято машин", "count", [label for label, _ in steps],

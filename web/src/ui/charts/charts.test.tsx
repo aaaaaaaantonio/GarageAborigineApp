@@ -93,3 +93,28 @@ test('chart aria-label carries the data', () => {
   render(<StatsChart chart={chart({})} />);
   expect(screen.getByRole('img').getAttribute('aria-label')).toContain('17.09–23.09 — 6 000 ₽');
 });
+
+test('readout shows the last bucket when the chart gets more labels', () => {
+  const few = chart({ labels: ['янв', 'фев'], series: [{ name: 'Выручка', values: [1, 2] }] });
+  const many = chart({ labels: Array.from({ length: 13 }, (_, i) => `м${i}`), series: [{ name: 'Выручка', values: Array.from({ length: 13 }, (_, i) => i + 1) }] });
+  const { rerender } = render(<StatsChart chart={few} />);
+  rerender(<StatsChart chart={many} />);
+  expect(screen.getByTestId('readout')).toHaveTextContent('м12 · 13 ₽');
+});
+
+test('kpi delta colour is inverted when higher is not better', () => {
+  const kpi: StatsKpi = { key: 'c', label: 'Отменено', value: 3, unit: 'count', delta_pct: 50, compare: true, higher_is_better: false };
+  const { rerender } = render(<KpiTile kpi={kpi} />);
+  expect(screen.getByText('▲ 50% к прошлому периоду')).toHaveClass('down');
+  rerender(<KpiTile kpi={{ ...kpi, delta_pct: -50 }} />);
+  expect(screen.getByText('▼ 50% к прошлому периоду')).toHaveClass('up');
+  rerender(<KpiTile kpi={{ ...kpi, delta_pct: -50, higher_is_better: true }} />);
+  expect(screen.getByText('▼ 50% к прошлому периоду')).toHaveClass('down');
+});
+
+test('ranked rows with equal labels render without duplicate key warnings', () => {
+  const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+  render(<StatsChart chart={chart({ kind: 'hbars', unit: 'hours', labels: ['Иванов', 'Иванов'], series: [{ name: 'x', values: [6, 3] }] })} />);
+  expect(err).not.toHaveBeenCalled();
+  err.mockRestore();
+});

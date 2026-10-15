@@ -30,7 +30,7 @@ export function StatsScreen() {
   const [masterId, setMasterId] = useState('');
   const masters = useQuery({ queryKey: ['masters'], queryFn: usersApi.masters, enabled: isAdmin });
   const query = useQuery({
-    queryKey: ['stats', isAdmin ? section : 'mine', period, masterId],
+    queryKey: ['stats', user?.id, isAdmin ? section : 'mine', period, masterId],
     queryFn: () => (isAdmin ? statsApi.section(section, period, masterId || undefined) : statsApi.mine(period)),
     placeholderData: keepPreviousData,
   });
@@ -58,7 +58,7 @@ export function StatsScreen() {
         {(stats) => (
           <div className="stack">
             <div className="kpis">{stats.kpis.map((k) => <KpiTile key={k.key} kpi={k} />)}</div>
-            {stats.charts.map((c) => <StatsChart key={c.key} chart={c} />)}
+            {stats.charts.map((c) => <StatsChart key={`${stats.period}-${c.key}`} chart={c} />)}
           </div>
         )}
       </Loadable>

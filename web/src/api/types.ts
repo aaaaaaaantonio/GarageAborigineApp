@@ -271,6 +271,7 @@ export interface StatsKpi {
   unit: StatsUnit;
   delta_pct: number | null;
   compare: boolean;
+  higher_is_better?: boolean;
 }
 
 export interface StatsChartData {

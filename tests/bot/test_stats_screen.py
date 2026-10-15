@@ -70,3 +70,20 @@ async def test_mechanic_sees_own_stats_with_period_only():
     api.get_stats.assert_not_awaited()
     assert text.startswith("📊 Моя статистика · Неделя")
     assert [b[0] for b in buttons(markup)] == ["Период: Неделя ▾"]
+
+
+async def test_chart_sub_and_rounded_roubles():
+    api = _api()
+    api.get_stats.return_value = STATS | {"charts": [
+        {"key": "s", "kind": "hbars", "title": "Время в статусах", "sub": "от приёма до выдачи 3,5 дн.", "unit": "days",
+         "labels": ["Принят"], "series": [{"name": "x", "values": [0.5]}]},
+        {"key": "r", "kind": "bars", "title": "Выручка", "sub": None, "unit": "rub",
+         "labels": ["a"], "series": [{"name": "x", "values": [412300.5]}]},
+    ]}
+
+    text, _ = await render_stats(api, ADMIN, {})
+
+    assert "Время в статусах (от приёма до выдачи 3,5 дн.):" in text
+    assert "Выручка:" in text
+    assert "a  ████████  412 301 ₽" in text or "a  ████████  412 300 ₽" in text
+    assert format_value(412300.5, "rub") in ("412 301 ₽", "412 300 ₽")
