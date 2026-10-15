@@ -21,6 +21,7 @@ from app.modules.search.router import router as search_router
 from app.modules.documents.router import files_router as document_files_router
 from app.modules.documents.router import router as documents_router
 from app.modules.stats.router import router as stats_router
+from app.modules.settings.router import router as settings_router
 
 install_access_log_filter()
 
@@ -45,6 +46,7 @@ app.include_router(search_router)
 app.include_router(documents_router)
 app.include_router(document_files_router)
 app.include_router(stats_router)
+app.include_router(settings_router)
 
 
 @app.get("/health")
