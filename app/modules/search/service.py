@@ -16,12 +16,16 @@ class SearchService:
     def __init__(self, session: AsyncSession):
         self.session = session
 
-    async def search(self, query: str, entities: set[str] | None = None) -> list[dict]:
+    async def search(
+        self, query: str, entities: set[str] | None = None, skip_fields: set[str] = frozenset()
+    ) -> list[dict]:
         results: list[dict] = []
         seen: set[tuple[str, uuid.UUID]] = set()
 
         for field in SEARCH_FIELDS:
             if entities is not None and field.entity not in entities:
+                continue
+            if field.field in skip_fields:
                 continue
             model = ENTITY_MODELS[field.entity]
             column = getattr(model, field.field)

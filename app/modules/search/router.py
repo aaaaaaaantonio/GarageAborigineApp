@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.db import get_session
 from app.core.enums import UserRole
 from app.modules.search.service import SearchService
+from app.modules.settings.service import SettingsService
 from app.modules.users.auth import require_role
 from app.modules.users.models import User
 
@@ -17,9 +18,14 @@ async def search(
     acting_user: User = Depends(require_role(UserRole.ADMIN, UserRole.MASTER, UserRole.MECHANIC)),
 ):
     service = SearchService(session)
-    # Mechanics see vehicle data only: client results would expose personal data.
-    entities = {"vehicle"} if acting_user.role == UserRole.MECHANIC else None
-    return await service.search(q, entities=entities)
+    entities, skip_fields = None, set()
+    if acting_user.role == UserRole.MECHANIC:
+        # Mechanics see vehicle data only: client results would expose personal data.
+        entities = {"vehicle"}
+        # A VIN hit would reveal a VIN the admin hides from mechanics.
+        if not (await SettingsService(session).visibility()).mechanic_sees_vin:
+            skip_fields = {"vin"}
+    return await service.search(q, entities=entities, skip_fields=skip_fields)
 
 
 @router.get("/recent")

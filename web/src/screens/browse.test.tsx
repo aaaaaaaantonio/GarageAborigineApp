@@ -117,3 +117,14 @@ test('vehicle history filters by category on the server', async () => {
   await waitFor(() => expect(queries[queries.length - 1].getAll('category')).toEqual(['chassis']));
   expect(await screen.findByText('Работ этой категории не было')).toBeInTheDocument();
 });
+
+test('vehicle card skips the VIN when the server hides it', async () => {
+  server.use(
+    http.get('/api/vehicles/veh1', () => HttpResponse.json({ ...VEHICLE, vin: null })),
+    http.get('/api/vehicles/veh1/work-history', () => HttpResponse.json({ items: [], has_more: false })),
+  );
+  renderApp('/vehicles/veh1', { as: 'mechanic' });
+  expect(await screen.findByText('Toyota Camry')).toBeInTheDocument();
+  expect(screen.queryByText(/VIN/)).not.toBeInTheDocument();
+  expect(screen.queryByText(/null/)).not.toBeInTheDocument();
+});

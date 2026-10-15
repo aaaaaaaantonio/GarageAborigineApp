@@ -34,7 +34,7 @@ export function VehicleHit({ id, onPick }: { id: string; onPick?: (v: Vehicle) =
         <Plate value={vehicle.plate_number} />
         <span>{vehicle.make} {vehicle.model}</span>
       </div>
-      <span className="hint mono">{vehicle.vin}</span>
+      {vehicle.vin && <span className="hint mono">{vehicle.vin}</span>}
     </Hit>
   );
 }

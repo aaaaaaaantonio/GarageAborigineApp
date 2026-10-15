@@ -41,7 +41,7 @@ export function VehicleScreen() {
             <div className="card">
               <Plate value={v.plate_number} />
               <b className="title">{v.make} {v.model}</b>
-              <span className="hint mono">VIN {v.vin}</span>
+              {v.vin && <span className="hint mono">VIN {v.vin}</span>}
               <span className="hint">Пробег {formatKm(v.mileage_current)}</span>
             </div>
             {isStaff && (

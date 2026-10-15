@@ -7,6 +7,7 @@ from app.core.db import get_session
 from app.core.enums import UserRole
 from app.core.exceptions import VehicleNotFound, VehicleVinTaken
 from app.modules.clients.schemas import ClientOut
+from app.modules.settings.service import SettingsService
 from app.modules.users.auth import require_role
 from app.modules.users.models import User
 from app.modules.vehicles.schemas import OwnershipCreate, VehicleCreate, VehicleOut
@@ -40,7 +41,10 @@ async def get_vehicle(
     vehicle = await service.get(vehicle_id)
     if vehicle is None:
         raise HTTPException(404, "Vehicle not found")
-    return vehicle
+    out = VehicleOut.model_validate(vehicle)
+    if acting_user.role == UserRole.MECHANIC and not (await SettingsService(session).visibility()).mechanic_sees_vin:
+        out.vin = None
+    return out
 
 
 @router.get("/{vehicle_id}/owner", response_model=ClientOut | None)
