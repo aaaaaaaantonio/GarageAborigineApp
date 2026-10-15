@@ -3,7 +3,6 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from bot import nav
 from bot.api_client import ApiClient
 from bot.formatting import format_date, format_hours, format_number
-from bot.handlers.stats import format_value
 from bot.periods import PERIOD_LABELS, since_for
 from bot.work_item_status import work_item_icon
 
@@ -67,11 +66,13 @@ async def render_done_works(api: ApiClient, user: dict, args: dict) -> nav.Rende
     return text, markup
 
 
+MECH_VISIT_TEXT_LIMIT = 3800  # keeps the card under Telegram's 4096 chars
+TRUNCATED_NOTE = "…показаны не все работы — откройте карточку в веб-приложении"
 NO_SCHEME = "схема оплаты не задана"
 
 
 def _rub(value) -> str:
-    return format_value(value, "rub")
+    return f"{format_number(value)} ₽"
 
 
 def _pay(value) -> str:
@@ -90,17 +91,29 @@ async def render_mech_visit(api: ApiClient, user: dict, args: dict) -> nav.Rende
     for label, key in (("Клиент", "client_name"), ("Телефон", "client_phone"), ("VIN", "vin")):
         if v.get(key):
             lines.append(f"{label}: {v[key]}")
-    for w in v["works"]:
-        lines += ["", f"{work_item_icon(w['status'])} {w['name']}{' · моя' if w['is_mine'] else ''}"]
-        detail = f"   {w['mechanic_name'] or 'без исполнителя'} · {format_hours(w['norm_hours'])}"
-        lines.append(detail + (f" · {_rub(w['amount'])}" if prices and w["amount"] is not None else ""))
-        if prices and w["is_mine"]:
-            lines.append(f"   Ваш заработок: {_pay(w['my_pay'])}")
-        for p in w["parts"]:
-            lines.append(f"   🔩 {p['name']} × {p['quantity']}" + (f" · {_rub(p['amount'])}" if p["amount"] is not None else ""))
+    footer: list[str] = []
     if prices:
-        lines.append("")
+        footer.append("")
         if v["discount"]:
-            lines.append(f"Скидка: {_rub(v['discount'])}")
-        lines += [f"Итого по заезду: {_rub(v['total_amount'])}", f"Ваш заработок по заезду: {_pay(v['my_pay_total'])}"]
+            footer.append(f"Скидка: {_rub(v['discount'])}")
+        footer += [f"Итого по заезду: {_rub(v['total_amount'])}", f"Ваш заработок по заезду: {_pay(v['my_pay_total'])}"]
+    used = len("\n".join(lines + footer)) + len(TRUNCATED_NOTE) + 2
+    truncated = False
+    for w in v["works"]:
+        block = ["", f"{work_item_icon(w['status'])} {w['name']}{' · моя' if w['is_mine'] else ''}"]
+        detail = f"   {w['mechanic_name'] or 'без исполнителя'} · {format_hours(w['norm_hours'])}"
+        block.append(detail + (f" · {_rub(w['amount'])}" if prices and w["amount"] is not None else ""))
+        if prices and w["is_mine"]:
+            block.append(f"   Ваш заработок: {_pay(w['my_pay'])}")
+        for p in w["parts"]:
+            block.append(f"   🔩 {p['name']} × {p['quantity']}" + (f" · {_rub(p['amount'])}" if p["amount"] is not None else ""))
+        size = len("\n".join(block)) + 1
+        if used + size > MECH_VISIT_TEXT_LIMIT:
+            truncated = True
+            break
+        used += size
+        lines += block
+    if truncated:
+        lines += ["", TRUNCATED_NOTE]
+    lines += footer
     return "\n".join(lines), InlineKeyboardMarkup(inline_keyboard=[])

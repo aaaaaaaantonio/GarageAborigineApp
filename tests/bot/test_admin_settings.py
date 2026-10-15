@@ -116,3 +116,15 @@ async def test_pay_refused_for_master():
     await start_pay(callback, state, api=_api(), user=MASTER)
 
     callback.answer.assert_awaited_once_with("Недостаточно прав")
+
+
+async def test_infinite_rate_reprompts():
+    state, api = fsm_context(), _api()
+    await _pay_wizard(state, api)
+    await choose_scheme(make_callback("pay_scheme:per_hour"), state, api=api, user=ADMIN)
+
+    for text in ("inf", "nan", "-inf"):
+        message = make_message(text)
+        await receive_value(message, state, api=api, user=ADMIN)
+        assert shown(message)[0].startswith("Ставка — число больше нуля")
+    api.set_mechanic_pay.assert_not_awaited()

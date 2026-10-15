@@ -1,13 +1,13 @@
 import uuid
 from collections import defaultdict
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import VisitNotFound
 from app.modules.clients.models import Client
-from app.modules.pay.calc import line_pay
+from app.modules.pay.calc import CENT, line_pay
 from app.modules.settings.service import SettingsService
 from app.modules.users.models import User
 from app.modules.vehicles.models import Vehicle
@@ -21,7 +21,7 @@ class NotYourVisit(Exception):
 
 
 def _money(value) -> float:
-    return float(Decimal(str(value)).quantize(Decimal("0.01")))
+    return float(Decimal(str(value)).quantize(CENT, rounding=ROUND_HALF_UP))
 
 
 class MechanicViewService:

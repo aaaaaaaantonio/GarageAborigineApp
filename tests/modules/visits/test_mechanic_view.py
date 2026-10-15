@@ -107,3 +107,16 @@ async def test_snapshot_is_shown_for_issued_visits(api_app, session):
     body = (await _view(api_app, w)).json()
 
     assert body["my_pay_total"] == 777
+
+
+async def test_money_rounds_half_up(api_app, session):
+    w = await world(session)
+    v = await visit(session, w, master=w.master_a, created=msk(10, 9), status=VisitStatus.IN_PROGRESS, total=0)
+    await work(session, v, name="Полкопейки", hours=1.25, rate=1234.50, mechanic=w.mech_a)
+    w.mech_a.pay_scheme, w.mech_a.pay_value = PayScheme.FULL, None
+    await SettingsService(session).update_visibility(VisibilityPatch(mechanic_sees_prices=True), w.admin)
+    w.v = v
+
+    body = (await _view(api_app, w)).json()
+
+    assert (body["works"][0]["amount"], body["works"][0]["my_pay"]) == (1543.13, 1543.13)

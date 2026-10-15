@@ -1,4 +1,6 @@
 """Admin settings: what mechanics see (switches) and each mechanic's pay scheme (a short wizard)."""
+import math
+
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
@@ -134,6 +136,8 @@ async def receive_value(message: Message, state: FSMContext, api: ApiClient, use
     try:
         value = float((message.text or "").strip().replace(",", "."))
     except ValueError:
+        value = None
+    if value is not None and not math.isfinite(value):
         value = None
     if scheme == "percent" and (value is None or not 0 < value <= 100):
         await wizard.reprompt(message, state, api, user, "Процент — число больше 0 и не больше 100, например 40.")

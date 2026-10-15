@@ -93,6 +93,10 @@ class WorkItemService:
         )
         self.session.add(item)
         await self.session.flush()
+        if visit.status == VisitStatus.ISSUED:
+            # Work added after issue is paid out right away: fix its pay now.
+            await snapshot_mechanic_pay(self.session, [item])
+            await self.session.flush()
 
         from app.modules.visits.service import VisitService
 

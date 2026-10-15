@@ -1,17 +1,18 @@
 import uuid
 from collections import defaultdict
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.modules.pay.calc import CENT
 from app.modules.visits.lines_schemas import PartLineOut, VisitLinesOut, WorkLineOut
 from app.modules.visits.models import Visit, VisitPartItem
 from app.modules.visits.work_items_service import WorkItemService
 
 
 def _money(value: Decimal) -> float:
-    return float(value.quantize(Decimal("0.01")))
+    return float(value.quantize(CENT, rounding=ROUND_HALF_UP))
 
 
 def _dec(value) -> Decimal:

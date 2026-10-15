@@ -62,3 +62,44 @@ async def test_reassigning_an_open_work_does_not_snapshot(session):
     await WorkItemService(session).assign_mechanic(v.id, item.id, w.mech_a.id, w.admin)
 
     assert item.mechanic_pay is None
+
+
+async def test_work_added_to_an_issued_visit_gets_a_snapshot(session):
+    from app.core.enums import WorkCategory
+    from app.modules.visits.work_items_schemas import WorkItemCreate
+
+    w = await world(session)
+    w.mech_a.pay_scheme, w.mech_a.pay_value = PayScheme.PERCENT, 50
+    v = await visit(session, w, master=w.master_a, created=msk(10, 9), status=VisitStatus.READY)
+    await work(session, v, name="Масло", hours=1, rate=1000, mechanic=w.mech_a)
+    await _issue(session, w, v)
+
+    item = await WorkItemService(session).add_item(
+        v.id,
+        WorkItemCreate(free_text_name="Доп", category=WorkCategory.MAINTENANCE, norm_hours=2, hourly_rate=1000,
+                       assigned_mechanic_id=w.mech_a.id),
+        w.admin,
+    )
+    assert item.mechanic_pay == Decimal("1000.00")
+
+    w.mech_a.pay_value = 10
+    await session.flush()
+    await session.refresh(item)
+    assert item.mechanic_pay == Decimal("1000.00")
+
+
+async def test_reassigning_an_issued_work_to_admin_or_schemeless_clears_pay(session):
+    w = await world(session)
+    w.mech_a.pay_scheme, w.mech_a.pay_value = PayScheme.FULL, None
+    v = await visit(session, w, master=w.master_a, created=msk(10, 9), status=VisitStatus.READY)
+    item = await work(session, v, name="Масло", hours=2, rate=1000, mechanic=w.mech_a)
+    await _issue(session, w, v)
+    assert item.mechanic_pay == Decimal("2000.00")
+
+    await WorkItemService(session).assign_mechanic(v.id, item.id, w.admin.id, w.admin)
+    assert item.mechanic_pay is None
+
+    await WorkItemService(session).assign_mechanic(v.id, item.id, w.mech_a.id, w.admin)
+    assert item.mechanic_pay == Decimal("2000.00")
+    await WorkItemService(session).assign_mechanic(v.id, item.id, w.mech_b.id, w.admin)
+    assert item.mechanic_pay is None

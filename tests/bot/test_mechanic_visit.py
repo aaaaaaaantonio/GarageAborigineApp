@@ -60,3 +60,31 @@ async def test_card_with_own_pay():
     text, _ = await render_mech_visit(api, MECHANIC, {"visit_id": VISIT})
 
     assert "Ваш заработок: 1 000 ₽" in text and "Ваш заработок по заезду: 1 000 ₽" in text
+
+
+async def test_card_shows_kopecks_like_the_web():
+    api = AsyncMock()
+    view = _view(discount=0, total_amount=1000.5, my_pay_total=1543.13)
+    view["works"][0] |= {"hourly_rate": 1000, "amount": 1000.5, "my_pay": 1543.13}
+    api.get_mechanic_view.return_value = view
+
+    text, _ = await render_mech_visit(api, MECHANIC, {"visit_id": VISIT})
+
+    assert "Итого по заезду: 1 000.50 ₽" in text and "Ваш заработок: 1 543.13 ₽" in text
+
+
+async def test_long_card_stays_under_the_telegram_limit():
+    api = AsyncMock()
+    works = [
+        {"id": f"w{i}", "name": f"Работа номер {i} " + "х" * 40, "category": "other", "status": "not_ready",
+         "mechanic_name": "Сидоров", "is_mine": True, "norm_hours": 1, "hourly_rate": None, "amount": None,
+         "my_pay": None, "parts": [PART | {"name": "Деталь " + "д" * 30} for _ in range(5)]}
+        for i in range(60)
+    ]
+    api.get_mechanic_view.return_value = _view(works=works)
+
+    text, _ = await render_mech_visit(api, MECHANIC, {"visit_id": VISIT})
+
+    assert len(text) <= 4096
+    assert "показаны не все работы — откройте карточку в веб-приложении" in text
+    assert "Работа номер 0" in text and "Работа номер 59" not in text
