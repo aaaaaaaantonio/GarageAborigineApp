@@ -19,6 +19,8 @@ from app.modules.users.auth import require_role
 from app.modules.users.models import User
 from app.modules.visits.lines_schemas import VisitLinesOut
 from app.modules.visits.lines_service import VisitLinesService
+from app.modules.visits.mechanic_view_schemas import MechanicVisitOut
+from app.modules.visits.mechanic_view_service import MechanicViewService, NotYourVisit
 from app.modules.visits.schemas import VisitCreate, VisitListOut, VisitOut, VisitStatusChange
 from app.modules.visits.repository import VisitFilters, VisitSort
 from app.modules.visits.service import VisitService
@@ -93,6 +95,20 @@ async def get_visit_lines(
         return await VisitLinesService(session).get_lines(visit_id)
     except VisitNotFound:
         raise HTTPException(404, "Visit not found")
+
+
+@router.get("/{visit_id}/mechanic-view", response_model=MechanicVisitOut)
+async def get_mechanic_view(
+    visit_id: uuid.UUID,
+    session: AsyncSession = Depends(get_session),
+    acting_user: User = Depends(require_role(UserRole.MECHANIC)),
+):
+    try:
+        return await MechanicViewService(session).get(visit_id, acting_user)
+    except VisitNotFound:
+        raise HTTPException(404, "Visit not found")
+    except NotYourVisit:
+        raise HTTPException(403, "В этом заезде нет ваших работ")
 
 
 @router.patch("/{visit_id}/status", response_model=VisitOut)
