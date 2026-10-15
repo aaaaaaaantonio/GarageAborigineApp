@@ -290,3 +290,19 @@ export interface Stats {
   kpis: StatsKpi[];
   charts: StatsChartData[];
 }
+
+export type PayScheme = 'percent' | 'per_hour' | 'full';
+
+export interface VisibilitySettings {
+  mechanic_sees_prices: boolean;
+  mechanic_sees_client_name: boolean;
+  mechanic_sees_client_phone: boolean;
+  mechanic_sees_vin: boolean;
+}
+
+export interface MechanicPay {
+  user_id: string;
+  full_name: string;
+  pay_scheme: PayScheme | null;
+  pay_value: number | null;
+}

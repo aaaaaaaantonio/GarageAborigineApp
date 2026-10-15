@@ -150,6 +150,8 @@ button { font: inherit; color: inherit; }
 .chart-readout { font-size: 13px; color: var(--hint); font-variant-numeric: tabular-nums; }
 .chart-readout b { color: var(--text); }
 .chart-empty { padding: 16px 0; text-align: center; }
+.toggle-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; min-height: 44px; cursor: pointer; }
+.toggle-row input { width: 22px; height: 22px; accent-color: var(--amber); }
 .legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12px; color: var(--hint); }
 .legend i, .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
 .meter { display: grid; gap: 6px; }

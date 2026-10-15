@@ -16,6 +16,7 @@ import { ArchiveScreen } from './screens/ArchiveScreen';
 import { BoardScreen } from './screens/BoardScreen';
 import { DoneWorksScreen } from './screens/DoneWorksScreen';
 import { MyWorksScreen } from './screens/MyWorksScreen';
+import { SettingsScreen } from './screens/SettingsScreen';
 import { StatsScreen } from './screens/StatsScreen';
 import { SearchScreen } from './screens/SearchScreen';
 import { VehicleScreen } from './screens/VehicleScreen';
@@ -52,6 +53,7 @@ export function AppRoutes() {
         <Route path="/more" element={<RoleGate roles={STAFF}><MoreScreen /></RoleGate>} />
         <Route path="/consent/paper" element={<RoleGate roles={STAFF}><PaperConsentForm /></RoleGate>} />
         <Route path="/staff/new" element={<RoleGate roles={['admin']}><StaffForm /></RoleGate>} />
+        <Route path="/settings" element={<RoleGate roles={['admin']}><SettingsScreen /></RoleGate>} />
         <Route path="*" element={<HomeRedirect />} />
       </Route>
     </Routes>

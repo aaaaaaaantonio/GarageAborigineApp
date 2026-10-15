@@ -4,6 +4,7 @@ import type {
   AuthResponse, BoardList, BoardParams, CatalogItem, Client, DoneWorkList, MineSort, MyWorkItem, PartItem, PartItemCreate, RecentView, SearchHit,
   User, UserCreate, Vehicle, VehicleCreate, Visit, VisitCreate, VisitLines, VisitList, VisitListParams, VisitStatus, WorkCategory, WorkHistory,
   WorkItem, WorkItemCreate, WorkItemStatus, Stats, StatsPeriod, StatsSection,
+  MechanicPay, PayScheme, VisibilitySettings,
 } from './types';
 
 const q = encodeURIComponent;
@@ -88,4 +89,12 @@ export const statsApi = {
   section: (section: StatsSection, period: StatsPeriod, masterId?: string) =>
     api.get<Stats>(`/stats/${section}${buildQuery({ period, master_id: masterId })}`),
   mine: (period: StatsPeriod) => api.get<Stats>(`/stats/mine${buildQuery({ period })}`),
+};
+
+export const settingsApi = {
+  get: () => api.get<VisibilitySettings>('/settings'),
+  update: (body: Partial<VisibilitySettings>) => api.patch<VisibilitySettings>('/settings', body),
+  pay: () => api.get<MechanicPay[]>('/settings/pay'),
+  setPay: (userId: string, scheme: PayScheme | null, value: number | null) =>
+    api.patch<MechanicPay>(`/settings/pay/${userId}`, { pay_scheme: scheme, pay_value: value }),
 };
