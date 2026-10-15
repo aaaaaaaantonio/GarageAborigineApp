@@ -14,6 +14,7 @@ from bot import nav, wizard
 from bot.config import settings
 from bot.handlers import (
     admin,
+    admin_settings,
     clients,
     consent,
     documents,
@@ -52,6 +53,7 @@ def setup_routers(dp: Dispatcher) -> None:
     dp.include_router(documents.router)
     dp.include_router(consent.router)
     dp.include_router(admin.router)
+    dp.include_router(admin_settings.router)
     dp.include_router(search.router)
     dp.include_router(fallback.router)
 

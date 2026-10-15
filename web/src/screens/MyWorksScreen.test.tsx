@@ -19,7 +19,7 @@ test('empty state', async () => {
   expect(await screen.findByText('Нет назначенных работ')).toBeInTheDocument();
 });
 
-test('done tab lists finished works with visit date and outcome, read-only', async () => {
+test('done tab lists finished works with visit date and outcome', async () => {
   server.use(http.get('/api/work-items/mine/done', () => HttpResponse.json(doneList([
     makeDoneWork(),
     makeDoneWork({ id: 'd2', name: 'Развал-схождение', visit_status: 'cancelled', plate_number: null, make_model: null }),
@@ -30,7 +30,7 @@ test('done tab lists finished works with visit date and outcome, read-only', asy
   expect(screen.getAllByText('05.09.2026')).toHaveLength(2);
   expect(screen.getByText('✓ Выдан')).toBeInTheDocument();
   expect(screen.getByText('Отменён')).toBeInTheDocument();
-  expect(screen.queryByRole('link', { name: /Замена масла ДВС/ })).not.toBeInTheDocument();
+  expect(screen.getByRole('link', { name: /Замена масла ДВС/ })).toHaveAttribute('href', '/my/visit/v9');
 });
 
 test('done tab empty state', async () => {

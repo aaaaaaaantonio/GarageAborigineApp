@@ -8,6 +8,8 @@ from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.enums import UserRole, VisitStatus, WorkCategory
+from app.modules.pay.calc import line_pay, work_pay
+from app.modules.settings.service import SettingsService
 from app.modules.stats.periods import Period, Window, buckets, delta_pct, windows
 from app.modules.stats.repository import StatsRepository
 from app.modules.stats.schemas import Chart, ChartKind, Kpi, Series, StatsOut, Unit
@@ -111,6 +113,7 @@ def _time_in_statuses(visits, logs) -> tuple[list[float], float]:
 
 class StatsService:
     def __init__(self, session: AsyncSession, now: datetime | None = None):
+        self.session = session
         self.repo = StatsRepository(session)
         self.now = now
 
@@ -281,7 +284,7 @@ class StatsService:
         )
 
     async def _mine_mechanic(self, user: User, period: Period) -> StatsOut:
-        """Norm-hours only: mechanics never see money."""
+        """Norm-hours; money only when the admin lets mechanics see prices."""
         current, previous, steps = self._windows(period)
         issued = await self.repo.closed_visits(VisitStatus.ISSUED, current)
         issued_prev = await self.repo.closed_visits(VisitStatus.ISSUED, previous)
@@ -292,21 +295,46 @@ class StatsService:
         by_category: dict[str, float] = defaultdict(float)
         for x in lines:
             by_category[CATEGORY_LABELS[x.category]] += float(x.norm_hours)
-        return StatsOut(
-            section="mine", period=period,
-            kpis=[
-                _kpi("hours", "Нормо-часов", round(hours, 2), "hours", sum(float(x.norm_hours) for x in lines_prev)),
-                _kpi("works", "Работ выполнено", len(lines), "count", len(lines_prev)),
-                _kpi("in_progress", "Сейчас в работе", await self.repo.open_work_count(user.id), "count", compare=False),
-                _kpi("avg_hours", "Среднее на работу", round(hours / len(lines), 1) if lines else 0, "hours",
-                     compare=False),
-            ],
-            charts=[
-                _chart("hours", "bars", "Нормо-часы", "hours", [label for label, _ in steps],
-                       ("Нормо-часы", _bucketed(steps, ((closed_at[x.visit_id], x.norm_hours) for x in lines)))),
-                _chart("hours_by_category", "hbars", "По категориям", "hours", *_split(by_category, "Нормо-часы")),
-            ],
-        )
+        kpis = [
+            _kpi("hours", "Нормо-часов", round(hours, 2), "hours", sum(float(x.norm_hours) for x in lines_prev)),
+            _kpi("works", "Работ выполнено", len(lines), "count", len(lines_prev)),
+            _kpi("in_progress", "Сейчас в работе", await self.repo.open_work_count(user.id), "count", compare=False),
+            _kpi("avg_hours", "Среднее на работу", round(hours / len(lines), 1) if lines else 0, "hours",
+                 compare=False),
+        ]
+        charts = [
+            _chart("hours", "bars", "Нормо-часы", "hours", [label for label, _ in steps],
+                   ("Нормо-часы", _bucketed(steps, ((closed_at[x.visit_id], x.norm_hours) for x in lines)))),
+            _chart("hours_by_category", "hbars", "По категориям", "hours", *_split(by_category, "Нормо-часы")),
+        ]
+        if (await SettingsService(self.session).visibility()).mechanic_sees_prices:
+            money_kpis, money_chart = await self._mechanic_money(user, lines, lines_prev, closed_at, steps)
+            kpis, charts = money_kpis + kpis, [money_chart, *charts]
+        return StatsOut(section="mine", period=period, kpis=kpis, charts=charts)
+
+    async def _mechanic_money(self, user: User, lines, lines_prev, closed_at, steps: Steps):
+        """Earned (issued visits: snapshot, else the current scheme) and expected (open visits, current scheme)."""
+        def pays(rows):
+            return [line_pay(x.mechanic_pay, x.norm_hours, x.hourly_rate, user.pay_scheme, user.pay_value) for x in rows]
+
+        current, previous = pays(lines), pays(lines_prev)
+        known = [p for p in current if p is not None]
+        if user.pay_scheme is None and not known:
+            earned = _kpi("earned", "Заработано", "—", "text", compare=False)
+        else:
+            earned = _kpi("earned", "Заработано", round(float(sum(known)), 2), "rub",
+                          float(sum(p for p in previous if p is not None)))
+        if user.pay_scheme is None:
+            expected = _kpi("expected", "Ожидается", "—", "text", compare=False)
+        else:
+            open_lines = [x for x in await self.repo.open_work_lines(user.id)
+                          if not (x.is_extra_work and not x.approved_by_client)]
+            total = sum(work_pay(x.norm_hours, x.hourly_rate, user.pay_scheme, user.pay_value) or 0 for x in open_lines)
+            expected = _kpi("expected", "Ожидается", round(float(total), 2), "rub", compare=False)
+        chart = _chart("earned", "bars", "Заработок", "rub", [label for label, _ in steps],
+                       ("Заработок", _bucketed(steps, ((closed_at[x.visit_id], p)
+                                                       for x, p in zip(lines, current) if p is not None))))
+        return [earned, expected], chart
 
     async def _clients(self, created, window: Window) -> tuple[int, int]:
         """Distinct clients with a visit created in `window`: new (first visit ever is in it) and repeat."""

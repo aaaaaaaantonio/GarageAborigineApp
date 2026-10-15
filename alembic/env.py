@@ -19,6 +19,7 @@ import app.modules.catalog.models  # noqa
 import app.modules.visits.models  # noqa
 import app.modules.consent.models  # noqa
 import app.modules.search.models  # noqa
+import app.modules.settings.models  # noqa
 import app.modules.notifications.logging_sender  # noqa
 
 # this is the Alembic Config object, which provides

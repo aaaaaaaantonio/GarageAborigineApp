@@ -15,7 +15,9 @@ import { MoreScreen } from './screens/MoreScreen';
 import { ArchiveScreen } from './screens/ArchiveScreen';
 import { BoardScreen } from './screens/BoardScreen';
 import { DoneWorksScreen } from './screens/DoneWorksScreen';
+import { MechanicVisitScreen } from './screens/MechanicVisitScreen';
 import { MyWorksScreen } from './screens/MyWorksScreen';
+import { SettingsScreen } from './screens/SettingsScreen';
 import { StatsScreen } from './screens/StatsScreen';
 import { SearchScreen } from './screens/SearchScreen';
 import { VehicleScreen } from './screens/VehicleScreen';
@@ -43,6 +45,7 @@ export function AppRoutes() {
         <Route path="/visits/:visitId/works/:itemId/parts/new" element={<RoleGate roles={STAFF}><AddPartForm /></RoleGate>} />
         <Route path="/my" element={<RoleGate roles={WORKERS}><MyWorksScreen /></RoleGate>} />
         <Route path="/my/done" element={<RoleGate roles={WORKERS}><DoneWorksScreen /></RoleGate>} />
+        <Route path="/my/visit/:visitId" element={<RoleGate roles={['mechanic']}><MechanicVisitScreen /></RoleGate>} />
         <Route path="/stats" element={<RoleGate roles={ALL_ROLES}><StatsScreen /></RoleGate>} />
         <Route path="/search" element={<RoleGate roles={ALL_ROLES}><SearchScreen /></RoleGate>} />
         <Route path="/clients/new" element={<RoleGate roles={STAFF}><NewClientRoute /></RoleGate>} />
@@ -52,6 +55,7 @@ export function AppRoutes() {
         <Route path="/more" element={<RoleGate roles={STAFF}><MoreScreen /></RoleGate>} />
         <Route path="/consent/paper" element={<RoleGate roles={STAFF}><PaperConsentForm /></RoleGate>} />
         <Route path="/staff/new" element={<RoleGate roles={['admin']}><StaffForm /></RoleGate>} />
+        <Route path="/settings" element={<RoleGate roles={['admin']}><SettingsScreen /></RoleGate>} />
         <Route path="*" element={<HomeRedirect />} />
       </Route>
     </Routes>

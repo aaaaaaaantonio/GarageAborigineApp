@@ -24,6 +24,7 @@ _ADMIN_ITEMS = _MASTER_ITEMS + [
     ("🧰 Мои работы", nav.go_data("my_works")),
     ("✅ Мои выполненные", nav.go_data("done_works")),
     ("👥 Добавить сотрудника", actions.NEW_STAFF),
+    ("⚙️ Настройки", nav.go_data("settings")),
 ]
 _MECHANIC_ITEMS = [
     ("🧰 Мои работы", nav.go_data("my_works")),

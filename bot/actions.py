@@ -17,3 +17,5 @@ VISIT_STATUS = "act:vstatus"  # + ":<visit status>"
 WORK_STATUS = "act:wstatus"  # + ":<work item status>"
 REASSIGN = "act:reassign"  # + ":<encoded mechanic id>" or ":none"
 SEARCH_PAGE = "act:spage"  # + ":<page>"
+SETTING = "act:set"  # + ":<prices|name|phone|vin>" flips that mechanic visibility switch
+PAY = "act:pay"  # + ":<encoded mechanic id>" starts the pay scheme wizard

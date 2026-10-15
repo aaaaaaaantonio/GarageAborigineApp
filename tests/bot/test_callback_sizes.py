@@ -11,6 +11,14 @@ V, I, M, C, CAR = (f"{n}" * 8 + "-" + f"{n}" * 4 + "-" + f"{n}" * 4 + "-" + f"{n
 
 def _api():
     api = AsyncMock()
+    api.get_mechanic_view.return_value = {
+        "plate_number": "А1", "make_model": "X Y", "mileage_at_intake": 1, "master_name": "М", "client_name": None,
+        "client_phone": None, "vin": None, "discount": None, "total_amount": None, "my_pay_total": None, "works": [],
+    }
+    api.get_settings.return_value = {"mechanic_sees_prices": True, "mechanic_sees_client_name": True,
+                                     "mechanic_sees_client_phone": True, "mechanic_sees_vin": True}
+    api.list_mechanic_pay.return_value = [{"user_id": M, "full_name": "Механик с очень длинным именем",
+                                           "pay_scheme": "per_hour", "pay_value": 12345.5}]
     item = {"id": I, "visit_id": V, "name": "Очень длинное название работы", "status": "waiting_parts",
             "approved_by_client": False, "assigned_mechanic_name": "Механик", "plate_number": "А123ВС77", "make_model": "X Y"}
     api.get_visit.return_value = {"id": V, "status": "in_progress", "total_amount": 1, "plate_number": "А1"}
@@ -34,8 +42,8 @@ def _api():
 
 
 SCREEN_ARGS = {
-    "menu": {}, "active_visits": {}, "my_works": {}, "done_works": {}, "search": {}, "archive": {}, "board": {}, "stats": {},
-    "visit": {"visit_id": V}, "visit_status": {"visit_id": V},
+    "menu": {}, "active_visits": {}, "my_works": {}, "done_works": {}, "search": {}, "archive": {}, "board": {}, "stats": {}, "settings": {}, "pay": {},
+    "mech_visit": {"visit_id": V}, "visit": {"visit_id": V}, "visit_status": {"visit_id": V},
     "work": {"visit_id": V, "item_id": I}, "reassign": {"visit_id": V, "item_id": I},
     "client": {"client_id": C}, "vehicle": {"vehicle_id": CAR},
     "client_visits": {"client_id": C}, "vehicle_visits": {"vehicle_id": CAR}, "work_history": {"vehicle_id": CAR},

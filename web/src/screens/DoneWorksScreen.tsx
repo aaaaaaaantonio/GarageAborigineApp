@@ -23,7 +23,8 @@ const OUTCOMES: { value: Outcome; label: string }[] = [
 
 /** The mechanic's finished work in closed visits. Read-only: the car has left the shop. */
 export function DoneWorksScreen() {
-  const isMechanic = useAuth().user?.role === 'mechanic';
+  const { user } = useAuth();
+  const isMechanic = user?.role === 'mechanic';
   const [period, setPeriod] = useState<Period>('month');
   const [outcome, setOutcome] = useState<Outcome>('all');
   const query = useQuery({
@@ -49,7 +50,7 @@ export function DoneWorksScreen() {
                 <b>Работ: {count} · {formatHours(total_norm_hours)}</b>
               </div>
               {items.map((w) => (
-                <Card key={w.id}>
+                <Card key={w.id} to={isMechanic ? `/my/visit/${w.visit_id}` : undefined}>
                   <div className="row">
                     <span>{w.name}</span>
                     <StatusTag kind="visit" status={w.visit_status} />

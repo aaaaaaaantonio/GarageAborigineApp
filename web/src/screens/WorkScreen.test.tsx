@@ -1,13 +1,14 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import { delay, http, HttpResponse } from 'msw';
 import { USERS, renderApp } from '../test/render';
-import { makeMyWork, makeWorkItem, makeWorkLine } from '../test/fixtures';
+import { makeMechanicVisit, makeMyWork, makeWorkItem, pricedMechanicVisit, makeWorkLine } from '../test/fixtures';
 import { server } from '../test/server';
 
 beforeEach(() => {
   server.use(http.get('/api/visits/v1/lines', () => HttpResponse.json({
     works: [], works_total: 0, parts_total: 0, discount: 0, total: 0,
   })));
+  server.use(http.get('/api/visits/v1/mechanic-view', () => HttpResponse.json(makeMechanicVisit())));
 });
 
 function staffItem(over = {}) {
@@ -122,4 +123,22 @@ test('changing a work refreshes the work board and visit lists', async () => {
   await user.click(await within(screen.getByRole('dialog')).findByRole('button', { name: 'Ахмедов Руслан' }));
   await waitFor(() => expect(spy).toHaveBeenCalledWith(expect.objectContaining({ queryKey: ['board'] })));
   expect(spy).toHaveBeenCalledWith(expect.objectContaining({ queryKey: ['visits'] }));
+});
+
+test('mechanic opens the visit card from the work', async () => {
+  server.use(http.get('/api/work-items/mine', () => HttpResponse.json([makeMyWork()])));
+  renderApp('/visits/v1/works/w1', { as: 'mechanic' });
+  expect(await screen.findByRole('link', { name: 'Карточка заезда' })).toHaveAttribute('href', '/my/visit/v1');
+  expect(screen.queryByText('Стоимость работы')).not.toBeInTheDocument();
+});
+
+test('mechanic sees the work price and own pay when prices are on', async () => {
+  server.use(
+    http.get('/api/work-items/mine', () => HttpResponse.json([makeMyWork()])),
+    http.get('/api/visits/v1/mechanic-view', () => HttpResponse.json(pricedMechanicVisit())),
+  );
+  renderApp('/visits/v1/works/w1', { as: 'mechanic' });
+  expect(await screen.findByText('Стоимость работы')).toBeInTheDocument();
+  expect(screen.getByText('2 000 ₽')).toBeInTheDocument();
+  expect(screen.getByText('Ваш заработок').nextSibling).toHaveTextContent('1 000 ₽');
 });

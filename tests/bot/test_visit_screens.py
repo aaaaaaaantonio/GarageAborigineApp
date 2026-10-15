@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from bot import nav
 from bot.api_client import ApiForbidden, ApiNotFound
 from bot.callback_ids import encode_id
 from bot.handlers.documents import PDF_PREPARING, pdf_callback
@@ -194,7 +195,7 @@ async def test_work_screen_for_mechanic_has_only_status_buttons_and_no_visit_cal
 
     api.get_visit.assert_not_awaited()
     assert text == "А123ВС77 · Toyota Camry\n⏳ Замена масла\nСтатус: Не начата"
-    assert buttons(markup) == [("→ В работе", "act:wstatus:in_progress")]
+    assert buttons(markup) == [("→ В работе", "act:wstatus:in_progress"), ("🚗 Карточка заезда", nav.go_data("mech_visit", VISIT))]
 
 
 async def test_work_screen_reassigned_away_from_mechanic_raises_not_found():

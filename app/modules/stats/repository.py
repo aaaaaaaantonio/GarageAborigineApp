@@ -77,12 +77,13 @@ class StatsRepository:
         mechanic = aliased(User)
         stmt = (
             select(
+                VisitWorkItem.id,
                 VisitWorkItem.visit_id,
                 func.coalesce(WorkCatalog.name, VisitWorkItem.free_text_name).label("name"),
                 VisitWorkItem.category, VisitWorkItem.norm_hours, VisitWorkItem.hourly_rate, VisitWorkItem.status,
                 VisitWorkItem.assigned_mechanic_id.label("mechanic_id"),
                 mechanic.full_name.label("mechanic_name"), mechanic.role.label("mechanic_role"),
-                VisitWorkItem.is_extra_work, VisitWorkItem.approved_by_client,
+                VisitWorkItem.is_extra_work, VisitWorkItem.approved_by_client, VisitWorkItem.mechanic_pay,
             )
             .outerjoin(WorkCatalog, WorkCatalog.id == VisitWorkItem.catalog_item_id)
             .outerjoin(mechanic, mechanic.id == VisitWorkItem.assigned_mechanic_id)
@@ -131,3 +132,16 @@ class StatsRepository:
             Visit.status.not_in(CLOSED_STATUSES),
         )
         return (await self.session.execute(stmt)).scalar_one()
+
+    async def open_work_lines(self, mechanic_id: uuid.UUID) -> list[Row]:
+        """Works assigned to `mechanic_id` in open (not issued, not cancelled) visits."""
+        stmt = _alive(
+            select(
+                VisitWorkItem.norm_hours, VisitWorkItem.hourly_rate,
+                VisitWorkItem.is_extra_work, VisitWorkItem.approved_by_client,
+            ).select_from(VisitWorkItem).join(Visit, Visit.id == VisitWorkItem.visit_id)
+        ).where(
+            VisitWorkItem.assigned_mechanic_id == mechanic_id,
+            Visit.status.not_in(CLOSED_STATUSES),
+        )
+        return await self._rows(stmt)
