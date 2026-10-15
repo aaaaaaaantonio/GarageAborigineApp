@@ -7,6 +7,7 @@ import { useAuth } from '../auth/AuthProvider';
 import { formatRub } from '../lib/format';
 import { WORK_STATUS_ICONS, WORK_STATUS_LABELS, assigneeLabel } from '../lib/labels';
 import { useAction } from '../lib/useAction';
+import { payText } from './MechanicVisitScreen';
 import { Button } from '../ui/Button';
 import { EmptyState } from '../ui/EmptyState';
 import { Loadable } from '../ui/Loadable';
@@ -32,9 +33,11 @@ export function WorkScreen() {
   });
   // Parts only exist inside /lines (staff only; mechanics never see prices).
   const lines = useQuery({ queryKey: ['visitLines', visitId], queryFn: () => visitsApi.lines(visitId), enabled: !isMechanic });
+  const view = useQuery({ queryKey: ['mechanicVisit', visitId], queryFn: () => visitsApi.mechanicView(visitId), enabled: isMechanic });
+  const mine = view.data?.works.find((x) => x.id === itemId);
   const mechanics = useQuery({ queryKey: ['mechanics'], queryFn: usersApi.mechanics, enabled: assignOpen });
   // Board and visit lists show work status, mechanic and approval ("Без механика" filter) too.
-  const invalidate = [['workItems', visitId], ['myWorks'], ['visit', visitId], ['visitLines', visitId], ['board'], ['visits']];
+  const invalidate = [['workItems', visitId], ['myWorks'], ['visit', visitId], ['visitLines', visitId], ['mechanicVisit', visitId], ['board'], ['visits']];
   const status = useAction((s: WorkItemStatus) => workItemsApi.changeStatus(visitId, itemId, s), { invalidate });
   const approve = useAction(() => workItemsApi.approve(visitId, itemId), { invalidate });
   const assign = useAction((mechanicId: string | null) => workItemsApi.assign(visitId, itemId, mechanicId), {
@@ -70,6 +73,19 @@ export function WorkScreen() {
                   </>
                 )}
               </div>
+              {isMechanic && mine && mine.amount !== null && (
+                <div className="card">
+                  <div className="row"><span>Стоимость работы</span><span className="mono">{formatRub(mine.amount)}</span></div>
+                  {mine.parts.map((p, i) => (
+                    <div key={i} className="part-row hint">
+                      <span>🔩 {p.name} × {p.quantity}</span>
+                      {p.amount !== null && <span className="mono">{formatRub(p.amount)}</span>}
+                    </div>
+                  ))}
+                  <div className="row"><span>Ваш заработок</span><span className="mono">{payText(mine.my_pay)}</span></div>
+                </div>
+              )}
+              {isMechanic && <Link className="btn btn-block" to={`/my/visit/${visitId}`}>Карточка заезда</Link>}
               {!isMechanic && lines.data && (
                 <>
                   <h2 className="section-title">Запчасти</h2>

@@ -1,5 +1,5 @@
 import { http, HttpResponse } from 'msw';
-import type { Client, DoneWorkItem, DoneWorkList, MyWorkItem, Vehicle, Visit, WorkItem, WorkLine } from '../api/types';
+import type { Client, DoneWorkItem, DoneWorkList, MechanicVisit, MechanicWork, MyWorkItem, Vehicle, Visit, WorkItem, WorkLine } from '../api/types';
 import { server } from './server';
 
 export function makeVisit(over: Partial<Visit> = {}): Visit {
@@ -65,4 +65,39 @@ export function mockVisitPage(visit: Visit = makeVisit(), works: WorkLine[] = [m
     http.get(`/api/visits/${visit.id}/lines`, () =>
       HttpResponse.json({ works, works_total: worksTotal, parts_total: partsTotal, discount: 0, total: worksTotal + partsTotal })),
   );
+}
+
+export function makeMechanicWork(over: Partial<MechanicWork> = {}): MechanicWork {
+  return {
+    id: 'w1', name: 'Замена масла ДВС', category: 'maintenance', status: 'in_progress', mechanic_name: 'Сидоров Иван',
+    is_mine: true, norm_hours: 2, hourly_rate: null, amount: null, my_pay: null,
+    parts: [{ name: 'Фильтр', article_number: null, quantity: 1, availability_status: 'in_stock', unit_price: null, amount: null }],
+    ...over,
+  };
+}
+
+export function makeMechanicVisit(over: Partial<MechanicVisit> = {}): MechanicVisit {
+  return {
+    id: 'v1', status: 'in_progress', created_at: '2026-10-10T09:00:00+00:00', mileage_at_intake: 120000,
+    plate_number: 'А123ВС77', make_model: 'Toyota Camry', master_name: 'Орлов Пётр',
+    client_name: null, client_phone: null, client_telegram_username: null, vin: null,
+    discount: null, total_amount: null, my_pay_total: null,
+    works: [makeMechanicWork(), makeMechanicWork({ id: 'w2', name: 'Рычаг', is_mine: false, mechanic_name: 'Морозов', parts: [] }),
+      makeMechanicWork({ id: 'w3', name: 'Мойка', is_mine: false, mechanic_name: null, parts: [] })],
+    ...over,
+  };
+}
+
+/** The same visit with prices on: own work 2 × 1 000, part 450, own pay 1 000. */
+export function pricedMechanicVisit(over: Partial<MechanicVisit> = {}): MechanicVisit {
+  const base = makeMechanicVisit();
+  return {
+    ...base, discount: 0, total_amount: 3450, my_pay_total: 1000,
+    works: [
+      makeMechanicWork({ hourly_rate: 1000, amount: 2000, my_pay: 1000,
+        parts: [{ name: 'Фильтр', article_number: null, quantity: 1, availability_status: 'in_stock', unit_price: 450, amount: 450 }] }),
+      makeMechanicWork({ id: 'w2', name: 'Рычаг', is_mine: false, mechanic_name: 'Морозов', hourly_rate: 1000, amount: 1000, parts: [] }),
+    ],
+    ...over,
+  };
 }

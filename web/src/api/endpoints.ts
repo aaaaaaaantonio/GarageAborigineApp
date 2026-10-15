@@ -2,7 +2,7 @@ import { buildQuery } from '../lib/query';
 import { api } from './client';
 import type {
   AuthResponse, BoardList, BoardParams, CatalogItem, Client, DoneWorkList, MineSort, MyWorkItem, PartItem, PartItemCreate, RecentView, SearchHit,
-  User, UserCreate, Vehicle, VehicleCreate, Visit, VisitCreate, VisitLines, VisitList, VisitListParams, VisitStatus, WorkCategory, WorkHistory,
+  User, UserCreate, Vehicle, VehicleCreate, Visit, VisitCreate, MechanicVisit, VisitLines, VisitList, VisitListParams, VisitStatus, WorkCategory, WorkHistory,
   WorkItem, WorkItemCreate, WorkItemStatus, Stats, StatsPeriod, StatsSection,
   MechanicPay, PayScheme, VisibilitySettings,
 } from './types';
@@ -22,6 +22,7 @@ export const visitsApi = {
   listForVehicle: (vehicleId: string) => api.get<VisitList>(`/visits?vehicle_id=${q(vehicleId)}`),
   get: (id: string) => api.get<Visit>(`/visits/${id}`),
   lines: (id: string) => api.get<VisitLines>(`/visits/${id}/lines`),
+  mechanicView: (id: string) => api.get<MechanicVisit>(`/visits/${id}/mechanic-view`),
   create: (body: VisitCreate) => api.post<Visit>('/visits', body),
   changeStatus: (id: string, newStatus: VisitStatus, reason: string | null = null) =>
     api.patch<Visit>(`/visits/${id}/status`, { new_status: newStatus, reason }),

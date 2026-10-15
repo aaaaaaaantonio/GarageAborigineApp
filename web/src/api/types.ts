@@ -306,3 +306,45 @@ export interface MechanicPay {
   pay_scheme: PayScheme | null;
   pay_value: number | null;
 }
+
+export interface MechanicPart {
+  name: string;
+  article_number: string | null;
+  quantity: number;
+  availability_status: string;
+  unit_price: number | null;
+  amount: number | null;
+}
+
+export interface MechanicWork {
+  id: string;
+  name: string;
+  category: WorkCategory;
+  status: WorkItemStatus;
+  mechanic_name: string | null;
+  is_mine: boolean;
+  norm_hours: number;
+  hourly_rate: number | null;
+  amount: number | null;
+  my_pay: number | null;
+  parts: MechanicPart[];
+}
+
+/** The visit card for a mechanic: fields the admin's settings hide are null. */
+export interface MechanicVisit {
+  id: string;
+  status: VisitStatus;
+  created_at: string;
+  mileage_at_intake: number;
+  plate_number: string;
+  make_model: string;
+  master_name: string;
+  client_name: string | null;
+  client_phone: string | null;
+  client_telegram_username: string | null;
+  vin: string | null;
+  discount: number | null;
+  total_amount: number | null;
+  my_pay_total: number | null;
+  works: MechanicWork[];
+}
