@@ -20,6 +20,7 @@ from app.modules.users.audit import record_audit
 from app.modules.users.models import User
 from app.modules.users.repository import UserRepository
 from app.modules.vehicles.service import VehicleService
+from app.modules.pay.service import snapshot_mechanic_pay
 from app.modules.visits.fsm import ALLOWED_TRANSITIONS
 from app.modules.visits.models import Visit, VisitPartItem, VisitStatusLog, VisitWorkItem
 from app.modules.visits.repository import VisitFilters, VisitRepository
@@ -133,6 +134,10 @@ class VisitService:
         visit.status = new_status
         if new_status == VisitStatus.CANCELLED:
             visit.cancelled_reason = reason
+
+        if new_status == VisitStatus.ISSUED:
+            result = await self.session.execute(select(VisitWorkItem).where(VisitWorkItem.visit_id == visit_id))
+            await snapshot_mechanic_pay(self.session, list(result.scalars()))
 
         self.session.add(
             VisitStatusLog(

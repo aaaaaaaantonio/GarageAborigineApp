@@ -10,6 +10,7 @@ from app.core.enums import ApprovedVia, UserRole, VisitStatus, WorkCategory, Wor
 from app.core.exceptions import InvalidAssignedMechanic, NotAssignedMechanic, VisitNotFound, WorkItemNotFound
 from app.modules.catalog.models import WorkCatalog
 from app.modules.catalog.repository import CatalogRepository
+from app.modules.pay.service import snapshot_mechanic_pay
 from app.modules.users.audit import record_audit
 from app.modules.users.models import User
 from app.modules.vehicles.models import Vehicle
@@ -154,6 +155,10 @@ class WorkItemService:
             await self._check_mechanic(mechanic_id)
 
         item.assigned_mechanic_id = mechanic_id
+        visit = await self.session.get(Visit, visit_id)
+        if visit.status == VisitStatus.ISSUED:
+            # The visit is already paid: the work's pay moves to the new assignee's scheme.
+            await snapshot_mechanic_pay(self.session, [item])
         await self.session.flush()
 
         from app.modules.notifications.factory import get_notification_sender
