@@ -57,6 +57,8 @@ async def render_work(api: ApiClient, user: dict, args: dict) -> nav.Rendered:
             builder.button(text="✅ Согласовано клиентом", callback_data=actions.APPROVE)
     for status in NEXT_WORK_ITEM_STATUSES.get(item["status"], []):
         builder.button(text=f"→ {work_item_status_label(status)}", callback_data=f"{actions.WORK_STATUS}:{status}")
+    if not staff:
+        builder.button(text="🚗 Карточка заезда", callback_data=nav.go_data("mech_visit", args["visit_id"]))
     if staff:
         builder.button(text="🔩 Добавить запчасть", callback_data=actions.ADD_PART)
         builder.button(text="👤 Сменить исполнителя", callback_data=nav.go_data("reassign", args["visit_id"], args["item_id"]))

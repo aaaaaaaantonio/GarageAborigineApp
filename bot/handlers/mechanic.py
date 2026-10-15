@@ -2,7 +2,8 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from bot import nav
 from bot.api_client import ApiClient
-from bot.formatting import format_date, format_hours
+from bot.formatting import format_date, format_hours, format_number
+from bot.handlers.stats import format_value
 from bot.periods import PERIOD_LABELS, since_for
 from bot.work_item_status import work_item_icon
 
@@ -64,3 +65,42 @@ async def render_done_works(api: ApiClient, user: dict, args: dict) -> nav.Rende
     if result["count"] > len(entries):
         text += f"\n\nПоказаны последние {len(entries)}."
     return text, markup
+
+
+NO_SCHEME = "схема оплаты не задана"
+
+
+def _rub(value) -> str:
+    return format_value(value, "rub")
+
+
+def _pay(value) -> str:
+    return NO_SCHEME if value is None else _rub(value)
+
+
+@nav.screen("mech_visit", params=("visit_id",))
+async def render_mech_visit(api: ApiClient, user: dict, args: dict) -> nav.Rendered:
+    """The visit card for a mechanic: the server already left out what the admin hides."""
+    v = await api.get_mechanic_view(args["visit_id"])
+    prices = v["total_amount"] is not None
+    lines = [
+        f"🚗 {v['plate_number']} · {v['make_model']}",
+        f"Пробег: {format_number(v['mileage_at_intake'])} км · Мастер: {v['master_name']}",
+    ]
+    for label, key in (("Клиент", "client_name"), ("Телефон", "client_phone"), ("VIN", "vin")):
+        if v.get(key):
+            lines.append(f"{label}: {v[key]}")
+    for w in v["works"]:
+        lines += ["", f"{work_item_icon(w['status'])} {w['name']}{' · моя' if w['is_mine'] else ''}"]
+        detail = f"   {w['mechanic_name'] or 'без исполнителя'} · {format_hours(w['norm_hours'])}"
+        lines.append(detail + (f" · {_rub(w['amount'])}" if prices and w["amount"] is not None else ""))
+        if prices and w["is_mine"]:
+            lines.append(f"   Ваш заработок: {_pay(w['my_pay'])}")
+        for p in w["parts"]:
+            lines.append(f"   🔩 {p['name']} × {p['quantity']}" + (f" · {_rub(p['amount'])}" if p["amount"] is not None else ""))
+    if prices:
+        lines.append("")
+        if v["discount"]:
+            lines.append(f"Скидка: {_rub(v['discount'])}")
+        lines += [f"Итого по заезду: {_rub(v['total_amount'])}", f"Ваш заработок по заезду: {_pay(v['my_pay_total'])}"]
+    return "\n".join(lines), InlineKeyboardMarkup(inline_keyboard=[])

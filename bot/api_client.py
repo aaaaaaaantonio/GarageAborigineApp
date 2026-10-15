@@ -149,6 +149,9 @@ class ApiClient:
     async def list_my_done_work_items(self, since: str | None = None, outcome: str | None = None) -> dict:
         return await self.get(f"/work-items/mine/done{_query({'since': since, 'outcome': outcome})}")
 
+    async def get_mechanic_view(self, visit_id: str) -> dict:
+        return await self.get(f"/visits/{visit_id}/mechanic-view")
+
     async def get_stats(self, section: str, period: str, master_id: str | None = None) -> dict:
         return await self.get(f"/stats/{section}{_query({'period': period, 'master_id': master_id})}")
 
