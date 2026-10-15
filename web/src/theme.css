@@ -125,7 +125,7 @@ button { font: inherit; color: inherit; }
 .search-field { margin-bottom: 12px; }
 
 .app-full { padding-bottom: env(safe-area-inset-bottom, 0px); }
-.links-row { justify-content: flex-start; padding: 0 0 12px; }
+.links-row { justify-content: center; padding: 0 0 12px; }
 .filters-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; padding: 0 0 12px; }
 .filters-row .field { min-width: 0; }
 .filters-row select { width: 100%; min-width: 0; }
@@ -146,6 +146,7 @@ button { font: inherit; color: inherit; }
 .chart svg .chart-value { fill: var(--text); font-weight: 600; }
 .chart-grid { stroke: var(--line); stroke-width: 1; }
 .chart-hit { fill: transparent; }
+.chart-outline { fill: none; stroke: var(--amber); stroke-width: 2; pointer-events: none; }
 .chart-readout { font-size: 13px; color: var(--hint); font-variant-numeric: tabular-nums; }
 .chart-readout b { color: var(--text); }
 .chart-empty { padding: 16px 0; text-align: center; }

@@ -98,6 +98,7 @@ export function VisitsScreen() {
       <div className="row links-row">
         <Link className="btn" to="/works">Доска работ</Link>
         <Link className="btn" to="/visits/archive">Архив</Link>
+        <Link className="btn" to="/stats">Статистика</Link>
       </div>
       <div className="filters-row">
         <Picker label="Фильтр" value={filter} options={filters} onChange={setFilter} />

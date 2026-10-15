@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { StatsUnit } from '../../api/types';
-import { Axis, H, HitAreas, W, frame, roundedTop } from './BarChart';
+import { ActiveOutline, Axis, DIMMED, H, HitAreas, W, frame, roundedTop } from './BarChart';
 import { axisMax, describe, formatValue } from './format';
 
 const COLORS = ['var(--series-1)', 'var(--series-2)'];
@@ -27,7 +27,7 @@ export function StackedBarChart({ title, labels, series, unit }: {
           const a = bottom.values[i], b = top.values[i];
           const ya = f.y(a), yb = f.y(a + b);
           return (
-            <g key={i} opacity={i === shown ? 1 : 0.75}>
+            <g key={i} opacity={i === shown ? 1 : DIMMED}>
               {a > 0 && (b > 0
                 ? <rect x={f.x(i)} y={ya} width={f.barW} height={f.base - ya} fill={COLORS[0]} />
                 : <path d={roundedTop(f.x(i), ya, f.barW, f.base - ya)} fill={COLORS[0]} />)}
@@ -35,6 +35,7 @@ export function StackedBarChart({ title, labels, series, unit }: {
             </g>
           );
         })}
+        {totals[shown] > 0 && <ActiveOutline f={f} i={shown} top={f.y(totals[shown])} />}
         <HitAreas f={f} n={labels.length} onPick={setActive} />
       </svg>
     </>

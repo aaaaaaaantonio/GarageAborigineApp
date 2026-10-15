@@ -31,6 +31,26 @@ test('bar chart: axis top is the nice max, readout follows the tapped bar', asyn
   expect(screen.getByTestId('readout')).toHaveTextContent('17.09–23.09 · 6 000 ₽');
 });
 
+test('bar chart outlines the tapped bar, and only that one', async () => {
+  render(<StatsChart chart={chart({})} />);
+  expect(screen.getAllByTestId('bar-outline')).toHaveLength(1);
+  expect(screen.getByTestId('bar-outline')).toHaveAttribute('data-bar', '4');
+  await userEvent.click(screen.getByTestId('bar-1'));
+  expect(screen.getAllByTestId('bar-outline')).toHaveLength(1);
+  expect(screen.getByTestId('bar-outline')).toHaveAttribute('data-bar', '1');
+  await userEvent.click(screen.getByTestId('bar-0'));
+  expect(screen.queryByTestId('bar-outline')).toBeNull(); // empty bucket: nothing to outline
+});
+
+test('stacked chart outlines the whole tapped stack', async () => {
+  render(<StatsChart chart={chart({ kind: 'stack', series: [
+    { name: 'Работы', values: [0, 6000, 0, 0, 7000] }, { name: 'Запчасти', values: [0, 0, 0, 0, 7000] },
+  ] })} />);
+  expect(screen.getByTestId('bar-outline')).toHaveAttribute('data-bar', '4');
+  await userEvent.click(screen.getByTestId('bar-1'));
+  expect(screen.getByTestId('bar-outline')).toHaveAttribute('data-bar', '1');
+});
+
 test('stacked chart has a legend and per-series readout', () => {
   render(<StatsChart chart={chart({ kind: 'stack', series: [
     { name: 'Работы', values: [0, 6000, 0, 0, 7000] }, { name: 'Запчасти', values: [0, 0, 0, 0, 7000] },

@@ -92,11 +92,12 @@ test('card shows how long the visit has had no movement', async () => {
   expect(screen.getAllByText(/дн\. без движения/)).toHaveLength(1);
 });
 
-test('links to the work board and the archive', async () => {
+test('links to the work board, the archive and stats', async () => {
   serveVisits();
   renderApp('/visits', { as: 'master' });
   expect(await screen.findByRole('link', { name: 'Доска работ' })).toHaveAttribute('href', '/works');
   expect(screen.getByRole('link', { name: 'Архив' })).toHaveAttribute('href', '/visits/archive');
+  expect(screen.getByRole('link', { name: 'Статистика' })).toHaveAttribute('href', '/stats');
 });
 
 test('empty list offers a new visit', async () => {

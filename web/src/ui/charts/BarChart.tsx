@@ -46,6 +46,17 @@ export function Axis({ f, unit, labels }: { f: Frame; unit: StatsUnit; labels: s
   );
 }
 
+/** Amber frame around the tapped bar, with a small gap so the bar's own colours stay visible. */
+export function ActiveOutline({ f, i, top }: { f: Frame; i: number; top: number }) {
+  const gap = 2.5;
+  return (
+    <rect data-testid="bar-outline" data-bar={i} className="chart-outline" x={f.x(i) - gap} y={top - gap}
+      width={f.barW + 2 * gap} height={f.base - top + gap} rx={5} />
+  );
+}
+
+export const DIMMED = 0.6;
+
 export function HitAreas({ f, n, onPick }: { f: Frame; n: number; onPick: (i: number) => void }) {
   return (
     <>
@@ -68,8 +79,9 @@ export function BarChart({ title, labels, values, unit }: { title: string; label
         <Axis f={f} unit={unit} labels={labels} />
         {values.map((v, i) => v > 0 && (
           <path key={i} d={roundedTop(f.x(i), f.y(v), f.barW, f.base - f.y(v))} fill="var(--series-1)"
-            opacity={i === shown ? 1 : 0.75} />
+            opacity={i === shown ? 1 : DIMMED} />
         ))}
+        {values[shown] > 0 && <ActiveOutline f={f} i={shown} top={f.y(values[shown])} />}
         <HitAreas f={f} n={labels.length} onPick={setActive} />
       </svg>
     </>
