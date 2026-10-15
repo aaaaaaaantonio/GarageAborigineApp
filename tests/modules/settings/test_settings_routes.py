@@ -2,9 +2,8 @@ import uuid
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import select
-
 from pydantic import ValidationError
+from sqlalchemy import select
 
 from app.core.enums import UserRole
 from app.modules.settings.schemas import PayPatch
@@ -109,6 +108,7 @@ async def test_pay_value_must_fit_the_column_and_be_positive_to_the_kopeck(api_a
     path = f"/settings/pay/{mech.id}"
 
     assert (await _req(api_app, "PATCH", path, admin, {"pay_scheme": "per_hour", "pay_value": 1e9})).status_code == 422
+    assert (await _req(api_app, "PATCH", path, admin, {"pay_scheme": "per_hour", "pay_value": 1e30})).status_code == 422
     assert (await _req(api_app, "PATCH", path, admin, {"pay_scheme": "per_hour", "pay_value": 0.001})).status_code == 422
     assert (await _req(api_app, "PATCH", path, admin, {"pay_scheme": "percent", "pay_value": 0.001})).status_code == 422
 

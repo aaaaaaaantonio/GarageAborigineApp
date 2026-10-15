@@ -42,10 +42,11 @@ class PayPatch(BaseModel):
             return self
         if self.pay_value is None:
             raise ValueError("Укажите значение схемы оплаты")
+        # Raw check first: quantizing huge floats overflows Decimal's context.
+        if abs(self.pay_value) > float(MAX_PAY_VALUE):
+            raise ValueError("Значение слишком большое")
         # Check what the DB column (Numeric(10, 2)) will actually store.
         kopecks = Decimal(str(self.pay_value)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-        if kopecks > MAX_PAY_VALUE:
-            raise ValueError("Значение слишком большое")
         if self.pay_scheme == PayScheme.PERCENT and not Decimal("0.01") <= kopecks <= Decimal(100):
             raise ValueError("Процент должен быть больше 0 и не больше 100")
         if self.pay_scheme == PayScheme.PER_HOUR and kopecks <= 0:
