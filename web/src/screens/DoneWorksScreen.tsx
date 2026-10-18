@@ -11,6 +11,7 @@ import { Loadable } from '../ui/Loadable';
 import { Plate } from '../ui/Plate';
 import { ScreenHeader } from '../ui/ScreenHeader';
 import { StatusTag } from '../ui/StatusTag';
+import { WorksToggle } from '../ui/WorksToggle';
 
 type Outcome = 'all' | 'issued' | 'cancelled';
 
@@ -35,7 +36,8 @@ export function DoneWorksScreen() {
   });
   return (
     <>
-      <ScreenHeader title="Выполненные работы" back={!isMechanic} />
+      <ScreenHeader title="Мои работы" back={!isMechanic} />
+      <WorksToggle />
       <div className="filters-row">
         <Picker label="Период" value={period} options={PERIODS} onChange={setPeriod} />
         <Picker label="Итог" value={outcome} options={OUTCOMES} onChange={setOutcome} />

@@ -286,7 +286,11 @@ async def test_my_works_lists_items_with_car():
     api.list_my_work_items.assert_awaited_once_with(status=None, sort="urgency")
     assert text == "Мои работы (1)"
     assert _work_buttons(markup) == [("🔧 Замена масла · А123ВС77", f"go:work:{encode_id(VISIT)}:{encode_id(ITEM)}")]
-    assert _opt_buttons(markup) == [("Статус: Все ▾", "opt:open:st"), ("Порядок: По срочности ▾", "opt:open:s")]
+    assert _opt_buttons(markup) == [
+        ("✓ 🧰 Текущие", "opt:v:cur"), ("✅ Выполненные", "opt:v:done"),
+        ("Статус: Все ▾", "opt:open:st"), ("Порядок: По срочности ▾", "opt:open:s"),
+    ]
+    assert len(markup.inline_keyboard[0]) == 2  # the toggle is one row
 
 
 async def test_my_works_empty_and_filtered_empty():
@@ -418,7 +422,7 @@ async def test_done_works_lists_finished_work_as_text_with_outcome():
     api = AsyncMock()
     api.list_my_done_work_items.return_value = _done_list([_done(1), _done(2, status="cancelled", plate=None, make_model=None)])
 
-    text, markup = await render_done_works(api, MECHANIC, {})
+    text, markup = await render_my_works(api, MECHANIC, {"v": "done"})
 
     since = datetime.fromisoformat(api.list_my_done_work_items.await_args.kwargs["since"])
     assert abs(datetime.now(timezone.utc) - timedelta(days=30) - since) < timedelta(minutes=1)
@@ -428,14 +432,18 @@ async def test_done_works_lists_finished_work_as_text_with_outcome():
         "✅ 05.09.2026 · Т318ХА750 Lada Largus\nРабота 1\n\n"
         "❌ 05.09.2026 · заезд отменён\nРабота 2"
     )
-    assert buttons(markup) == [("Период: Месяц ▾", "opt:open:p"), ("Итог: Все ▾", "opt:open:o")]
+    assert buttons(markup) == [
+        ("🧰 Текущие", "opt:v:cur"), ("✓ ✅ Выполненные", "opt:v:done"),
+        ("Период: Месяц ▾", "opt:open:p"), ("Итог: Все ▾", "opt:open:o"),
+    ]
+    api.list_my_work_items.assert_not_awaited()
 
 
 async def test_done_works_empty_and_filters():
     api = AsyncMock()
     api.list_my_done_work_items.return_value = _done_list([])
 
-    text, _ = await render_done_works(api, MECHANIC, {"p": "all", "o": "cancelled"})
+    text, _ = await render_my_works(api, MECHANIC, {"v": "done", "p": "all", "o": "cancelled"})
 
     assert text == "Выполненные работы · Всё\nВыполненных работ пока нет."
     api.list_my_done_work_items.assert_awaited_once_with(since=None, outcome="cancelled")
@@ -445,9 +453,20 @@ async def test_done_works_caps_the_list():
     api = AsyncMock()
     api.list_my_done_work_items.return_value = _done_list([_done(n) for n in range(DONE_WORKS_LIMIT + 5)], count=99)
 
-    text, _ = await render_done_works(api, MECHANIC, {})
+    text, _ = await render_my_works(api, MECHANIC, {"v": "done"})
 
     assert text.startswith("Выполненные работы · Месяц\nРабот: 99 · ")
     assert text.count("✅") == DONE_WORKS_LIMIT
     assert text.endswith(f"Показаны последние {DONE_WORKS_LIMIT}.")
     assert len(text) < 4096
+
+
+async def test_old_done_works_screen_still_renders_the_done_view():
+    # Navigation stacks saved before the toggle may still hold "done_works".
+    api = AsyncMock()
+    api.list_my_done_work_items.return_value = _done_list([])
+
+    text, markup = await render_done_works(api, MECHANIC, {})
+
+    assert text.startswith("Выполненные работы")
+    assert buttons(markup)[1] == ("✓ ✅ Выполненные", "opt:v:done")

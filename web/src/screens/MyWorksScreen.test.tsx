@@ -39,14 +39,6 @@ test('done tab empty state', async () => {
   expect(await screen.findByText('Выполненных работ пока нет')).toBeInTheDocument();
 });
 
-test('on the done tab only that tab is current', async () => {
-  server.use(http.get('/api/work-items/mine/done', () => HttpResponse.json(doneList([]))));
-  renderApp('/my/done', { as: 'mechanic' });
-  const done = await screen.findByRole('link', { name: /Выполненные/ });
-  expect(done).toHaveAttribute('aria-current', 'page');
-  expect(screen.getByRole('link', { name: /Мои работы/ })).not.toHaveAttribute('aria-current');
-});
-
 function record(path: string, body: JsonBodyType) {
   const queries: URLSearchParams[] = [];
   server.use(http.get(path, ({ request }) => {
@@ -110,7 +102,7 @@ test('mechanic can sign out from the header', async () => {
 test('done tab has the header sign-out too', async () => {
   server.use(http.get('/api/work-items/mine/done', () => HttpResponse.json(doneList([]))));
   renderApp('/my/done', { as: 'mechanic' });
-  await screen.findByRole('heading', { name: 'Выполненные работы' });
+  await screen.findByRole('heading', { name: 'Мои работы' });
   expect(screen.getByRole('button', { name: 'Выйти' })).toBeInTheDocument();
 });
 
@@ -120,4 +112,20 @@ test('admin opens his own works, with a way back', async () => {
   renderApp('/my', { as: 'admin' });
   expect(await screen.findByRole('link', { name: /Замена масла ДВС/ })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Назад' })).toBeInTheDocument();
+});
+
+test('toggle switches between current and done works, keeping the tab lit', async () => {
+  server.use(
+    http.get('/api/work-items/mine', () => HttpResponse.json([makeMyWork()])),
+    http.get('/api/work-items/mine/done', () => HttpResponse.json(doneList([makeDoneWork({ name: 'Развал-схождение' })]))),
+  );
+  const { user } = renderApp('/my', { as: 'mechanic' });
+  const toggle = within(await screen.findByRole('navigation', { name: 'Вид' }));
+  expect(toggle.getByRole('link', { name: 'Текущие' })).toHaveAttribute('aria-current', 'page');
+  await user.click(toggle.getByRole('link', { name: 'Выполненные' }));
+  expect(await screen.findByText('Развал-схождение')).toBeInTheDocument();
+  expect(screen.getByTestId('location')).toHaveTextContent('/my/done');
+  expect(within(screen.getByRole('navigation', { name: 'Вид' })).getByRole('link', { name: 'Выполненные' })).toHaveAttribute('aria-current', 'page');
+  expect(within(screen.getByRole('navigation', { name: 'Разделы' })).getByRole('link', { name: /Мои работы/ })).toHaveAttribute('aria-current', 'page');
+  expect(screen.queryByRole('button', { name: /Назад/ })).not.toBeInTheDocument();
 });

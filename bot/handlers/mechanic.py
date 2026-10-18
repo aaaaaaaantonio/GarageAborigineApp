@@ -17,15 +17,32 @@ DONE_PERIODS = [(p, PERIOD_LABELS[p]) for p in ("week", "month", "all")]
 DONE_OUTCOMES = [("all", "Все"), ("issued", "Выданы"), ("cancelled", "Отменены")]
 
 
+VIEWS = [("cur", "🧰 Текущие"), ("done", "✅ Выполненные")]
+
+
 @nav.screen("my_works")
 async def render_my_works(api: ApiClient, user: dict, args: dict) -> nav.Rendered:
+    """Current work, or with the toggle on «Выполненные» the finished work in closed visits."""
+    view = args.get("v", "cur")
+    toggle = [[nav.option_button(label, "v", value, view) for value, label in VIEWS]]
+    render = _done_works if view == "done" else _current_works
+    text, rows = await render(api, args)
+    return text, InlineKeyboardMarkup(inline_keyboard=toggle + rows)
+
+
+@nav.screen("done_works")
+async def render_done_works(api: ApiClient, user: dict, args: dict) -> nav.Rendered:
+    # Navigation stacks saved before the toggle may still hold this screen.
+    return await render_my_works(api, user, {"v": "done", **args})
+
+
+async def _current_works(api: ApiClient, args: dict) -> tuple[str, list]:
     status, sort = args.get("st", "all"), args.get("s", "urgency")
     items = await api.list_my_work_items(status=None if status == "all" else [status], sort=sort)
     opened = args.get(nav.OPEN, "-")
     rows = nav.dropdown("Статус", "st", MY_STATUSES, status, opened) + nav.dropdown("Порядок", "s", MY_SORTS, sort, opened)
     if not items:
-        empty = "У вас нет назначенных работ." if status == "all" else "Нет работ с этим фильтром."
-        return empty, InlineKeyboardMarkup(inline_keyboard=rows)
+        return ("У вас нет назначенных работ." if status == "all" else "Нет работ с этим фильтром."), rows
     for item in items[:MY_WORKS_LIMIT]:
         work = f"{work_item_icon(item['status'])} {item['name']}"
         plate = item.get("plate_number")
@@ -35,22 +52,19 @@ async def render_my_works(api: ApiClient, user: dict, args: dict) -> nav.Rendere
     text = f"Мои работы ({len(items)})"
     if len(items) > MY_WORKS_LIMIT:
         text += f"\nПоказаны первые {MY_WORKS_LIMIT}."
-    return text, InlineKeyboardMarkup(inline_keyboard=rows)
+    return text, rows
 
 
-@nav.screen("done_works")
-async def render_done_works(api: ApiClient, user: dict, args: dict) -> nav.Rendered:
+async def _done_works(api: ApiClient, args: dict) -> tuple[str, list]:
     """Finished work in closed visits, newest first. Text only: closed work can't change."""
     period, outcome = args.get("p", "month"), args.get("o", "all")
     result = await api.list_my_done_work_items(since=since_for(period), outcome=None if outcome == "all" else outcome)
     opened = args.get(nav.OPEN, "-")
-    markup = InlineKeyboardMarkup(
-        inline_keyboard=nav.dropdown("Период", "p", DONE_PERIODS, period, opened) + nav.dropdown("Итог", "o", DONE_OUTCOMES, outcome, opened)
-    )
+    rows = nav.dropdown("Период", "p", DONE_PERIODS, period, opened) + nav.dropdown("Итог", "o", DONE_OUTCOMES, outcome, opened)
     header = f"Выполненные работы · {PERIOD_LABELS.get(period, period)}"
     items = result["items"]
     if not items:
-        return f"{header}\nВыполненных работ пока нет.", markup
+        return f"{header}\nВыполненных работ пока нет.", rows
     entries = []
     for item in items[:DONE_WORKS_LIMIT]:
         cancelled = item["visit_status"] == "cancelled"
@@ -63,7 +77,7 @@ async def render_done_works(api: ApiClient, user: dict, args: dict) -> nav.Rende
     text = f"{header}\nРабот: {result['count']} · {format_hours(result['total_norm_hours'])}\n\n" + "\n\n".join(entries)
     if result["count"] > len(entries):
         text += f"\n\nПоказаны последние {len(entries)}."
-    return text, markup
+    return text, rows
 
 
 MECH_VISIT_TEXT_LIMIT = 3800  # keeps the card under Telegram's 4096 chars

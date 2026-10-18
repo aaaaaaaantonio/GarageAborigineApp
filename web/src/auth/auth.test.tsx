@@ -1,4 +1,4 @@
-import { act, screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { api } from '../api/client';
 import { getToken, setToken } from './token';
@@ -59,12 +59,10 @@ test('stored token is checked with /auth/me and lands on the role home', async (
   expect(screen.getByRole('link', { name: /Заезды/ })).toBeInTheDocument();
 });
 
-test('mechanic tab bar has my works, done works and search', async () => {
+test('mechanic tab bar has my works, stats and search; done works live behind the toggle', async () => {
   renderApp('/my', { as: 'mechanic' });
-  expect(await screen.findByRole('link', { name: /Мои работы/ })).toBeInTheDocument();
-  expect(screen.getByRole('link', { name: /Выполненные/ })).toHaveAttribute('href', '/my/done');
-  expect(screen.getByRole('link', { name: /Поиск/ })).toBeInTheDocument();
-  expect(screen.queryByRole('link', { name: /Заезды/ })).not.toBeInTheDocument();
+  const tabs = within(await screen.findByRole('navigation', { name: 'Разделы' }));
+  expect(tabs.getAllByRole('link').map((l) => l.getAttribute('href'))).toEqual(['/my', '/stats', '/search']);
 });
 
 test('RoleGate shows no access for mechanic on a master route', async () => {

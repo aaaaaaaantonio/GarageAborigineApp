@@ -29,16 +29,15 @@ async def test_master_menu():
 
 async def test_admin_menu_adds_own_works_and_staff():
     _, markup = await render_menu(AsyncMock(), ADMIN, {})
-    assert buttons(markup)[-4:] == [
-        ("🧰 Мои работы", "go:my_works"), ("✅ Мои выполненные", "go:done_works"), ("👥 Добавить сотрудника", "wiz:new_staff"),
-        ("⚙️ Настройки", "go:settings"),
+    assert buttons(markup)[-3:] == [
+        ("🧰 Мои работы", "go:my_works"), ("👥 Добавить сотрудника", "wiz:new_staff"), ("⚙️ Настройки", "go:settings"),
     ]
-    assert len(buttons(markup)) == 11
+    assert len(buttons(markup)) == 10
 
 
 async def test_mechanic_menu():
     _, markup = await render_menu(AsyncMock(), MECHANIC, {})
-    assert buttons(markup) == [("🧰 Мои работы", "go:my_works"), ("✅ Выполненные", "go:done_works"), ("📊 Статистика", "go:stats"), ("🔍 Поиск", "go:search")]
+    assert buttons(markup) == [("🧰 Мои работы", "go:my_works"), ("📊 Статистика", "go:stats"), ("🔍 Поиск", "go:search")]
 
 
 async def test_start_removes_reply_keyboard_clears_wizard_and_shows_menu():

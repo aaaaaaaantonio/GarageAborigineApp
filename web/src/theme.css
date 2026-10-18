@@ -131,8 +131,9 @@ button { font: inherit; color: inherit; }
 .filters-row select { width: 100%; min-width: 0; }
 
 .seg { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding: 0 0 10px; }
-.seg button { flex: none; min-height: 36px; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: var(--hint); font-weight: 600; font-size: 13px; cursor: pointer; }
-.seg button[aria-selected="true"] { background: var(--amber); border-color: var(--amber); color: var(--amber-ink); }
+.seg button, .seg a { flex: none; min-height: 36px; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: var(--hint); font-weight: 600; font-size: 13px; cursor: pointer; }
+.seg a { display: inline-flex; align-items: center; text-decoration: none; }
+.seg button[aria-selected="true"], .seg a[aria-current="page"] { background: var(--amber); border-color: var(--amber); color: var(--amber-ink); }
 .kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .kpi { display: grid; gap: 2px; background: var(--card); border-radius: 14px; padding: 10px 12px; min-width: 0; }
 .kpi-value { font-size: 20px; font-weight: 600; letter-spacing: -0.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

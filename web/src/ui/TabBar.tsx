@@ -8,8 +8,8 @@ const STAFF_TABS = [
   { to: '/more', icon: '☰', label: 'Ещё', end: false },
 ];
 const MECHANIC_TABS = [
-  { to: '/my', icon: '🧰', label: 'Мои работы', end: true },
-  { to: '/my/done', icon: '✅', label: 'Выполненные', end: false },
+  // Not `end`: the tab stays lit on the «Выполненные» view and the visit card under /my.
+  { to: '/my', icon: '🧰', label: 'Мои работы', end: false },
   { to: '/stats', icon: '📊', label: 'Статистика', end: false },
   { to: '/search', icon: '🔍', label: 'Поиск', end: false },
 ];

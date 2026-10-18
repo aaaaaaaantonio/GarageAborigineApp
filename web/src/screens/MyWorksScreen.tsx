@@ -11,6 +11,7 @@ import { Loadable } from '../ui/Loadable';
 import { Plate } from '../ui/Plate';
 import { ScreenHeader } from '../ui/ScreenHeader';
 import { StatusTag } from '../ui/StatusTag';
+import { WorksToggle } from '../ui/WorksToggle';
 
 const STATUSES: { value: WorkItemStatus | 'all'; label: string }[] = [
   { value: 'all', label: 'Все' },
@@ -65,6 +66,7 @@ export function MyWorksScreen() {
   return (
     <>
       <ScreenHeader title="Мои работы" back={!isMechanic} />
+      <WorksToggle />
       <div className="filters-row">
         <Picker label="Статус" value={status} options={STATUSES} onChange={setStatus} />
         <Picker label="Порядок" value={sort} options={SORTS} onChange={setSort} />

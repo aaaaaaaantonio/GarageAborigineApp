@@ -21,7 +21,6 @@ export function MoreScreen() {
         {user!.role === 'admin' && (
           <>
             <Link className="btn btn-block" to="/my">Мои работы</Link>
-            <Link className="btn btn-block" to="/my/done">Мои выполненные</Link>
             <Link className="btn btn-block" to="/staff/new">Добавить сотрудника</Link>
             <Link className="btn btn-block" to="/settings">Настройки</Link>
           </>
