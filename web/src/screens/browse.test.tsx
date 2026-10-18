@@ -43,10 +43,30 @@ test('search with no results says so', async () => {
   expect(await screen.findByText('Ничего не найдено')).toBeInTheDocument();
 });
 
+const VISIBILITY = {
+  mechanic_sees_prices: false,
+  mechanic_sees_client_name: true,
+  mechanic_sees_client_phone: true,
+  mechanic_sees_vin: true,
+};
+
 test('mechanic gets the vehicle-only hint', async () => {
-  server.use(http.get('/api/search/recent', () => HttpResponse.json([{ entity_type: 'client', entity_id: 'c1' }])));
+  server.use(
+    http.get('/api/search/recent', () => HttpResponse.json([{ entity_type: 'client', entity_id: 'c1' }])),
+    http.get('/api/settings', () => HttpResponse.json(VISIBILITY)),
+  );
   renderApp('/search', { as: 'mechanic' });
   expect(await screen.findByText('Введите госномер или VIN')).toBeInTheDocument();
+});
+
+test('mechanic hint drops VIN when the admin hides it', async () => {
+  server.use(
+    http.get('/api/search/recent', () => HttpResponse.json([])),
+    http.get('/api/settings', () => HttpResponse.json({ ...VISIBILITY, mechanic_sees_vin: false })),
+  );
+  renderApp('/search', { as: 'mechanic' });
+  expect(await screen.findByText('Введите госномер')).toBeInTheDocument();
+  expect(screen.getByRole('searchbox', { name: 'Поиск' })).toHaveAttribute('placeholder', 'Госномер');
 });
 
 test('client card shows vehicles and visits', async () => {

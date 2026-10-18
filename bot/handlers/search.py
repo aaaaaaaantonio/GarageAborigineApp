@@ -20,9 +20,19 @@ def _is_mechanic(user: dict) -> bool:
     return user["role"] == "mechanic"
 
 
+async def _mechanic_sees_vin(api: ApiClient) -> bool:
+    # While the admin hides VINs, the API won't match a mechanic's query against them.
+    return (await api.get_settings())["mechanic_sees_vin"]
+
+
 @nav.screen("search")
 async def render_search(api: ApiClient, user: dict, args: dict) -> nav.Rendered:
-    text = "Введите VIN или гос.номер:" if _is_mechanic(user) else "Введите телефон, VIN, гос.номер или имя клиента:"
+    if not _is_mechanic(user):
+        text = "Введите телефон, VIN, гос.номер или имя клиента:"
+    elif await _mechanic_sees_vin(api):
+        text = "Введите VIN или гос.номер:"
+    else:
+        text = "Введите гос.номер:"
     return text, InlineKeyboardBuilder().as_markup()
 
 
@@ -33,7 +43,8 @@ async def render_search_results(api: ApiClient, user: dict, args: dict) -> nav.R
     builder = InlineKeyboardBuilder()
     if not results:
         if _is_mechanic(user):
-            return "Ничего не найдено. Механик может искать машину по VIN или госномеру.", builder.as_markup()
+            by = "VIN или госномеру" if await _mechanic_sees_vin(api) else "госномеру"
+            return f"Ничего не найдено. Механик может искать машину по {by}.", builder.as_markup()
         return "Ничего не найдено.", builder.as_markup()
     pages = -(-len(results) // SEARCH_RESULTS_LIMIT)
     page = min(max(args["page"], 0), pages - 1)  # results may have shrunk since the button was drawn

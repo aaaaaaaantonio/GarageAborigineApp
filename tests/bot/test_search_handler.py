@@ -20,9 +20,19 @@ def _api(results):
     return api
 
 
+def _settings_api(sees_vin):
+    api = AsyncMock()
+    api.get_settings.return_value = {"mechanic_sees_vin": sees_vin}
+    return api
+
+
 async def test_search_prompt_depends_on_role():
     assert (await render_search(AsyncMock(), MASTER, {}))[0] == "Введите телефон, VIN, гос.номер или имя клиента:"
-    assert (await render_search(AsyncMock(), MECHANIC, {}))[0] == "Введите VIN или гос.номер:"
+    assert (await render_search(_settings_api(True), MECHANIC, {}))[0] == "Введите VIN или гос.номер:"
+
+
+async def test_mechanic_prompt_drops_vin_when_admin_hides_it():
+    assert (await render_search(_settings_api(False), MECHANIC, {}))[0] == "Введите гос.номер:"
 
 
 async def test_typed_text_pushes_results_screen():
@@ -87,7 +97,13 @@ async def test_page_button_replaces_results_in_place():
 
 
 async def test_no_matches_texts_by_role():
+    mechanic_api = _api([])
+    mechanic_api.get_settings.return_value = {"mechanic_sees_vin": True}
     assert (await render_search_results(_api([]), MASTER, {"query": "x", "page": 0}))[0] == "Ничего не найдено."
-    assert (await render_search_results(_api([]), MECHANIC, {"query": "x", "page": 0}))[0] == (
+    assert (await render_search_results(mechanic_api, MECHANIC, {"query": "x", "page": 0}))[0] == (
         "Ничего не найдено. Механик может искать машину по VIN или госномеру."
+    )
+    mechanic_api.get_settings.return_value = {"mechanic_sees_vin": False}
+    assert (await render_search_results(mechanic_api, MECHANIC, {"query": "x", "page": 0}))[0] == (
+        "Ничего не найдено. Механик может искать машину по госномеру."
     )

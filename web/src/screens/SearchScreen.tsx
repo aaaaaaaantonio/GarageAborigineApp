@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { searchApi } from '../api/endpoints';
+import { searchApi, settingsApi } from '../api/endpoints';
 import { useAuth } from '../auth/AuthProvider';
 import { useDebounced } from '../lib/useDebounced';
 import { EmptyState } from '../ui/EmptyState';
@@ -21,7 +21,13 @@ export function SearchScreen() {
   const active = query.length >= 2;
   const results = useQuery({ queryKey: ['search', query], queryFn: () => searchApi.search(query), enabled: active });
   const recent = useQuery({ queryKey: ['recent'], queryFn: searchApi.recent, enabled: !active });
-  const prompt = isMechanic ? 'Госномер или VIN' : 'Госномер, VIN, телефон или ФИО';
+  // Mechanics can't find a car by VIN while the admin hides VINs from them.
+  const visibility = useQuery({ queryKey: ['settings'], queryFn: settingsApi.get, enabled: isMechanic });
+  const prompt = !isMechanic
+    ? 'Госномер, VIN, телефон или ФИО'
+    : visibility.data?.mechanic_sees_vin === false
+      ? 'Госномер'
+      : 'Госномер или VIN';
   return (
     <>
       <ScreenHeader title="Поиск" />
